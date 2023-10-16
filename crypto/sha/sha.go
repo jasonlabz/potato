@@ -12,9 +12,7 @@ func SHA256HashCode(stringMessage string) string {
 	hash := sha256.New()             // sha-256加密
 	hash.Write(message)
 	bytes := hash.Sum(nil)
-	hashCode := hex.EncodeToString(bytes)
-	return hashCode
-
+	return hex.EncodeToString(bytes)
 }
 
 // SHA512HashCode SHA2512生成哈希值
@@ -23,6 +21,5 @@ func SHA512HashCode(stringMessage string) string {
 	hash := sha512.New()             // SHA-512加密
 	hash.Write(message)
 	bytes := hash.Sum(nil)
-	hashCode := hex.EncodeToString(bytes)
-	return hashCode
+	return hex.EncodeToString(bytes)
 }

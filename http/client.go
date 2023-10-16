@@ -23,9 +23,8 @@ const (
 var cli *Client
 
 func GetClient(ctx context.Context) *Client {
-	logger := log.GetLogger(ctx)
 	newClient := *cli
-	newClient.client.SetLogger(logger)
+	newClient.client.SetLogger(log.GetLogger(ctx))
 	return &newClient
 }
 

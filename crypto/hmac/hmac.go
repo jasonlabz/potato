@@ -75,7 +75,7 @@ func HmacSHA512(src string) string {
 	return crypto.HmacSHA512(src)
 }
 
-// HmacSha1 加密
-func HmacSha1(src string) string {
+// HmacSHA1 加密
+func HmacSHA1(src string) string {
 	return crypto.HmacSha1(src)
 }

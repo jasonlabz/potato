@@ -7,10 +7,6 @@ import (
 	"strings"
 )
 
-func CheckMD5(content, encrypted string) bool {
-	return strings.EqualFold(EncodeMD5(content), encrypted)
-}
-
 func EncodeMD5(data string) string {
 	h := md5.New()
 	h.Write([]byte(data))
@@ -21,6 +17,10 @@ func FileMD5(file io.Reader) string {
 	hash := md5.New()
 	_, _ = io.Copy(hash, file)
 	return hex.EncodeToString(hash.Sum(nil))
+}
+
+func CheckMD5(content, encrypted string) bool {
+	return strings.EqualFold(EncodeMD5(content), encrypted)
 }
 
 func CheckFileMD5(file io.Reader, encrypted string) bool {
