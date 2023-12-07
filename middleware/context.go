@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"potato/core/consts"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -17,7 +18,7 @@ func SetContext() gin.HandlerFunc {
 		}
 		userID := ctx.Request.Header.Get(consts.HeaderUserID)
 		authorization := ctx.Request.Header.Get(consts.HeaderAuthorization)
-		remote := ctx.RemoteIP()
+		remote := ctx.ClientIP()
 
 		ctx.Set(consts.ContextToken, authorization)
 		ctx.Set(consts.ContextUserID, userID)

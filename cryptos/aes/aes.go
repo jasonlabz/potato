@@ -79,6 +79,20 @@ func zeroUnPadding(origData []byte) []byte {
 	})
 }
 
+// pkcs7Padding 补码
+func pkcs7Padding(ciphertext []byte, blocksize int) []byte {
+	padding := blocksize - len(ciphertext)%blocksize
+	padtext := bytes.Repeat([]byte{byte(padding)}, padding)
+	return append(ciphertext, padtext...)
+}
+
+// pkcs7UnPadding 去码
+func pkcs7UnPadding(origData []byte) []byte {
+	length := len(origData)
+	unpadding := int(origData[length-1])
+	return origData[:(length - unpadding)]
+}
+
 func Encrypt(plainText string) (encryptText string, err error) {
 	return crypto.Encrypt(plainText)
 }

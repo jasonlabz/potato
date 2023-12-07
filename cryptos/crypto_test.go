@@ -2,13 +2,14 @@ package crypto
 
 import (
 	"fmt"
+	"log"
+	"testing"
+
 	"github.com/jasonlabz/potato/crypto/aes"
 	"github.com/jasonlabz/potato/crypto/base64"
 	"github.com/jasonlabz/potato/crypto/des"
 	"github.com/jasonlabz/potato/crypto/hmac"
 	"github.com/jasonlabz/potato/crypto/sha"
-	"log"
-	"testing"
 )
 
 func TestAES(t *testing.T) {

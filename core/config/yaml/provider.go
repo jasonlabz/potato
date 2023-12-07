@@ -1,8 +1,9 @@
 package yaml
 
 import (
-	"github.com/jasonlabz/potato/core/config"
 	"github.com/spf13/viper"
+
+	"github.com/jasonlabz/potato/core/config"
 )
 
 // ConfigProvider YAML configuration provider

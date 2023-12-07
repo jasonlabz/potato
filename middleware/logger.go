@@ -3,7 +3,6 @@ package middleware
 import (
 	"bytes"
 	"fmt"
-	"go.uber.org/zap"
 	"io"
 	"net"
 	"net/http"
@@ -13,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"go.uber.org/zap"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
