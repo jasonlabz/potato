@@ -2,12 +2,12 @@ package crypto
 
 import (
 	"fmt"
+	"github.com/jasonlabz/potato/crypto/aes"
+	"github.com/jasonlabz/potato/crypto/base64"
+	"github.com/jasonlabz/potato/crypto/des"
+	"github.com/jasonlabz/potato/crypto/hmac"
+	"github.com/jasonlabz/potato/crypto/sha"
 	"log"
-	"potato/crypto/aes"
-	"potato/crypto/base64"
-	"potato/crypto/des"
-	"potato/crypto/hmac"
-	"potato/crypto/sha"
 	"testing"
 )
 

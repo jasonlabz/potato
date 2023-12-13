@@ -3,14 +3,14 @@ package log
 import (
 	"log"
 	"os"
-	"potato/times"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
 
-	"potato/core/config/thirdconfig"
-	"potato/core/config/thirdconfig/yaml"
+	"github.com/jasonlabz/potato/core/config"
+	"github.com/jasonlabz/potato/core/config/yaml"
+	"github.com/jasonlabz/potato/times"
 )
 
 var DefaultZapConfigName = "default_zap_config"
@@ -46,12 +46,12 @@ func InitLogger() {
 	if err != nil {
 		if os.IsExist(err) {
 			provider := yaml.NewConfigProvider(DefaultZapConfigPath)
-			thirdconfig.AddProviders(DefaultZapConfigName, provider)
+			config.AddProviders(DefaultZapConfigName, provider)
 			configLoad = true
 		}
 	} else {
 		provider := yaml.NewConfigProvider(DefaultZapConfigPath)
-		thirdconfig.AddProviders(DefaultZapConfigName, provider)
+		config.AddProviders(DefaultZapConfigName, provider)
 		configLoad = true
 	}
 	if !configLoad {
@@ -59,12 +59,12 @@ func InitLogger() {
 		if err != nil {
 			if os.IsExist(err) {
 				provider := yaml.NewConfigProvider(DefaultZapConfigPathBak)
-				thirdconfig.AddProviders(DefaultZapConfigName, provider)
+				config.AddProviders(DefaultZapConfigName, provider)
 				configLoad = true
 			}
 		} else {
 			provider := yaml.NewConfigProvider(DefaultZapConfigPathBak)
-			thirdconfig.AddProviders(DefaultZapConfigName, provider)
+			config.AddProviders(DefaultZapConfigName, provider)
 			configLoad = true
 		}
 	}
@@ -88,7 +88,7 @@ func InitLogger() {
 	//error文件WriteSyncer
 	errorFileWriteSyncer := getErrorWriterSyncer()
 
-	writeFile := thirdconfig.GetBool(DefaultZapConfigName, "write_file")
+	writeFile := config.GetBool(DefaultZapConfigName, "write_file")
 	//生成core
 	//multiWriteSyncer := zapcore.NewMultiWriteSyncer(writerSyncer, zapcore.AddSync(os.Stdout)) //AddSync将io.Writer转换成WriteSyncer的类型
 	//同时输出到控制台 和 指定的日志文件中
@@ -134,34 +134,34 @@ func getEncoder() zapcore.Encoder {
 // core 三个参数之  日志输出路径
 func getInfoWriterSyncer() zapcore.WriteSyncer {
 	filename := func() string {
-		getString := thirdconfig.GetString(DefaultZapConfigName, "info.log_file_path")
+		getString := config.GetString(DefaultZapConfigName, "info.log_file_path")
 		if getString == "" {
 			return "./server_log/info.log"
 		}
 		return getString
 	}()
 	maxSize := func() int {
-		geInt := thirdconfig.GetInt(DefaultZapConfigName, "info.max_size")
+		geInt := config.GetInt(DefaultZapConfigName, "info.max_size")
 		if geInt == 0 {
 			return 10
 		}
 		return geInt
 	}()
 	maxAge := func() int {
-		geInt := thirdconfig.GetInt(DefaultZapConfigName, "info.max_age")
+		geInt := config.GetInt(DefaultZapConfigName, "info.max_age")
 		if geInt == 0 {
 			return 28
 		}
 		return geInt
 	}()
 	maxBackups := func() int {
-		geInt := thirdconfig.GetInt(DefaultZapConfigName, "info.max_backups")
+		geInt := config.GetInt(DefaultZapConfigName, "info.max_backups")
 		if geInt == 0 {
 			return 100
 		}
 		return geInt
 	}()
-	compress := thirdconfig.GetBool(DefaultZapConfigName, "info.compress")
+	compress := config.GetBool(DefaultZapConfigName, "info.compress")
 
 	//引入第三方库 Lumberjack 加入日志切割功能
 	infoLumberIO := &lumberjack.Logger{
@@ -176,34 +176,34 @@ func getInfoWriterSyncer() zapcore.WriteSyncer {
 
 func getErrorWriterSyncer() zapcore.WriteSyncer {
 	filename := func() string {
-		getString := thirdconfig.GetString(DefaultZapConfigName, "error.log_file_path")
+		getString := config.GetString(DefaultZapConfigName, "error.log_file_path")
 		if getString == "" {
 			return "./server_log/error.log"
 		}
 		return getString
 	}()
 	maxSize := func() int {
-		geInt := thirdconfig.GetInt(DefaultZapConfigName, "error.max_size")
+		geInt := config.GetInt(DefaultZapConfigName, "error.max_size")
 		if geInt == 0 {
 			return 10
 		}
 		return geInt
 	}()
 	maxAge := func() int {
-		geInt := thirdconfig.GetInt(DefaultZapConfigName, "error.max_age")
+		geInt := config.GetInt(DefaultZapConfigName, "error.max_age")
 		if geInt == 0 {
 			return 28
 		}
 		return geInt
 	}()
 	maxBackups := func() int {
-		geInt := thirdconfig.GetInt(DefaultZapConfigName, "error.max_backups")
+		geInt := config.GetInt(DefaultZapConfigName, "error.max_backups")
 		if geInt == 0 {
 			return 100
 		}
 		return geInt
 	}()
-	compress := thirdconfig.GetBool(DefaultZapConfigName, "error.compress")
+	compress := config.GetBool(DefaultZapConfigName, "error.compress")
 
 	//引入第三方库 Lumberjack 加入日志切割功能
 	lumberWriteSyncer := &lumberjack.Logger{

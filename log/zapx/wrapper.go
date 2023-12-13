@@ -3,9 +3,11 @@ package log
 import (
 	"context"
 	"fmt"
+
 	"go.uber.org/zap"
-	"potato/core/consts"
-	"potato/core/utils"
+
+	"github.com/jasonlabz/potato/core/consts"
+	"github.com/jasonlabz/potato/core/utils"
 )
 
 var logField = []string{consts.ContextTraceID, consts.ContextUserID, consts.ContextRemoteAddr}
@@ -16,7 +18,7 @@ type LoggerWrapper struct {
 	logger *zap.Logger
 }
 
-func ZapField(ctx context.Context, contextKey ...string) (fields []zap.Field) {
+func zapField(ctx context.Context, contextKey ...string) (fields []zap.Field) {
 	for _, key := range contextKey {
 		value := utils.GetString(ctx.Value(key))
 		if value == "" {
@@ -29,20 +31,15 @@ func ZapField(ctx context.Context, contextKey ...string) (fields []zap.Field) {
 
 func GetLogger(ctx context.Context) *LoggerWrapper {
 	return &LoggerWrapper{
-		logger: logger().With(ZapField(ctx, logField...)...),
+		logger: logger().With(zapField(ctx, logField...)...),
 	}
 }
 
 func GormLogger(ctx context.Context) *LoggerWrapper {
 	return &LoggerWrapper{
 		logger: logger().WithOptions(zap.AddCallerSkip(3)).
-			With(ZapField(ctx, logField...)...),
+			With(zapField(ctx, logField...)...),
 	}
-}
-
-func (l *LoggerWrapper) WithContext(ctx context.Context) *LoggerWrapper {
-	l.logger = l.logger.With(ZapField(ctx, logField...)...)
-	return l
 }
 
 func (l *LoggerWrapper) WithError(err error) *LoggerWrapper {

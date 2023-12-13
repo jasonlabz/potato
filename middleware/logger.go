@@ -9,15 +9,16 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"os"
-	"potato/core/consts"
-	"potato/core/utils"
-	log "potato/log/zapx"
 	"runtime/debug"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+
+	"github.com/jasonlabz/potato/core/consts"
+	"github.com/jasonlabz/potato/core/utils"
+	log "github.com/jasonlabz/potato/log/zapx"
 )
 
 const (
@@ -36,13 +37,13 @@ func (bl BodyLog) Write(b []byte) (int, error) {
 
 func LoggerMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		traceId := utils.GetString(c.Value(consts.ContextTraceID))
-		if traceId == "" {
-			traceId = strings.ReplaceAll(uuid.New().String(), consts.SignDash, consts.EmptyString)
-			c.Set(consts.ContextTraceID, traceId)
+		traceID := utils.GetString(c.Value(consts.ContextTraceID))
+		if traceID == "" {
+			traceID = strings.ReplaceAll(uuid.New().String(), consts.SignDash, consts.EmptyString)
+			c.Set(consts.ContextTraceID, traceID)
 		}
 		userIdStr := utils.GetString(c.Value(consts.ContextUserID))
-		c.Writer.Header().Set(consts.HeaderRequestID, traceId)
+		c.Writer.Header().Set(consts.HeaderRequestID, traceID)
 
 		var requestBodyBytes []byte
 		var requestBodyLogBytes []byte
@@ -67,9 +68,10 @@ func LoggerMiddleware() gin.HandlerFunc {
 		if raw != "" {
 			path = path + "?" + raw
 		}
+		logger := log.GetLogger(c)
 		start := time.Now() // Start timer
-		log.GetLogger(c).Info("[GIN] request",
-			zap.Any("trace_id", traceId),
+		logger.Info("[GIN] request",
+			zap.Any("trace_id", traceID),
 			zap.Any("user_id", userIdStr),
 			zap.Any("method", c.Request.Method),
 			zap.Any("user_agent", c.Request.UserAgent()),
@@ -79,9 +81,7 @@ func LoggerMiddleware() gin.HandlerFunc {
 
 		c.Next()
 
-		log.GetLogger(c).Info("[GIN] response",
-			zap.Any("trace_id", traceId),
-			zap.Any("user_id", userIdStr),
+		logger.Info("[GIN] response",
 			zap.Any("error_message", c.Errors.ByType(gin.ErrorTypePrivate).String()),
 			zap.Any("body", bodyLog.body.String()),
 			zap.Any("path", path),

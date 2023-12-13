@@ -1,4 +1,4 @@
-package thirdconfig
+package config
 
 import (
 	"fmt"

@@ -1,9 +1,8 @@
 package yaml
 
 import (
+	"github.com/jasonlabz/potato/core/config"
 	"github.com/spf13/viper"
-
-	"potato/core/config/thirdconfig"
 )
 
 // ConfigProvider YAML configuration provider
@@ -17,7 +16,7 @@ func (c *ConfigProvider) Get(key string) (val interface{}, err error) {
 	return val, nil
 }
 
-func NewConfigProvider(filePath string) thirdconfig.IProvider {
+func NewConfigProvider(filePath string) config.IProvider {
 	c := &ConfigProvider{
 		filePath: filePath,
 	}

@@ -1,4 +1,4 @@
-package thirdconfig
+package config
 
 import (
 	"github.com/spf13/cast"

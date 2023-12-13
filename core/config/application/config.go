@@ -1,4 +1,4 @@
-package serverconfig
+package application
 
 import (
 	"fmt"
@@ -85,27 +85,27 @@ type MongoConf struct {
 	MaxConnIdleTime int    `json:"max_conn_idle_time" yaml:"max_conn_idle_time"`
 }
 
-// WebServer 服务地址端口配置
-type WebServer struct {
+// Application 服务地址端口配置
+type Application struct {
 	Address string `json:"address" yaml:"address"`
 	Port    int    `json:"port" yaml:"port"`
 }
 
-type config struct {
-	Debug     bool            `json:"debug" yaml:"debug"`
-	Crypto    []*CryptoConfig `json:"crypto" yaml:"crypto"`
-	WebConfig *WebServer      `json:"web_config" yaml:"web_config"`
-	Kafka     *KafkaConfig    `json:"kafka" yaml:"kafka"`
-	Database  *Database       `json:"database" yaml:"database"`
-	Redis     *RedisConfig    `json:"redis" yaml:"redis"`
-	ES        *Elasticsearch  `json:"es" yaml:"es"`
-	Mongo     *MongoConf      `json:"mongo" yaml:"mongo"`
+type Config struct {
+	Debug       bool            `json:"debug" yaml:"debug"`
+	Crypto      []*CryptoConfig `json:"crypto" yaml:"crypto"`
+	Application *Application    `json:"application" yaml:"application"`
+	Kafka       *KafkaConfig    `json:"kafka" yaml:"kafka"`
+	Database    *Database       `json:"database" yaml:"database"`
+	Redis       *RedisConfig    `json:"redis" yaml:"redis"`
+	ES          *Elasticsearch  `json:"es" yaml:"es"`
+	Mongo       *MongoConf      `json:"mongo" yaml:"mongo"`
 }
 
-var serverConfig = new(config)
+var applicationConfig = new(Config)
 
-func GetConfig() *config {
-	return serverConfig
+func GetConfig() *Config {
+	return applicationConfig
 }
 
 func LoadConfigFromJson(configPath string) {
@@ -121,7 +121,7 @@ func LoadConfigFromJson(configPath string) {
 	//NewDecoder创建一个从file读取并解码json对象的*Decoder，解码器有自己的缓冲，并可能超前读取部分json数据。
 	decoder := decoder.NewStreamDecoder(file)
 	//Decode从输入流读取下一个json编码值并保存在v指向的值里
-	err := decoder.Decode(serverConfig)
+	err := decoder.Decode(applicationConfig)
 	if err != nil {
 		panic(err)
 	}
@@ -129,7 +129,7 @@ func LoadConfigFromJson(configPath string) {
 }
 
 func LoadConfigFromIni(configPath string) {
-	err := ini.MapTo(serverConfig, configPath)
+	err := ini.MapTo(applicationConfig, configPath)
 	if err != nil {
 		log.Println(err)
 		return
@@ -141,7 +141,7 @@ func LoadConfigFromYaml(configPath string) {
 	if err != nil {
 		panic(err)
 	}
-	err = yaml.Unmarshal(file, serverConfig)
+	err = yaml.Unmarshal(file, applicationConfig)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -149,7 +149,7 @@ func LoadConfigFromYaml(configPath string) {
 }
 
 func LoadConfigFromToml(configPath string) {
-	_, err := toml.DecodeFile(configPath, serverConfig)
+	_, err := toml.DecodeFile(configPath, applicationConfig)
 	if err != nil {
 		panic(err)
 	}
@@ -171,7 +171,7 @@ func ParseConfigByViper(configPath, configName, configType string) {
 		}
 	})
 	//直接反序列化为Struct
-	if err := v.Unmarshal(serverConfig); err != nil {
+	if err := v.Unmarshal(applicationConfig); err != nil {
 		log.Println(err)
 	}
 	return

@@ -7,7 +7,7 @@ import (
 const (
 	MilliTimeFormat string = "2006-01-02 15:04:05.000"
 	MicroTimeFormat string = "2006-01-02 15:04:05.000000"
-	NanoTimeFormat  string = "Jan _2 15:04:05.000000000"
+	NanoTimeFormat  string = "2006-01-02 15:04:05.000000000"
 	DateTimeFormat  string = "2006-01-02 15:04:05"
 	DateFormat      string = "2006-01-02"
 	TimeFormat      string = "15:04:05"
