@@ -18,5 +18,5 @@ var (
 	ErrFileType        = New(200101011, "file type error")
 	ErrFileExist       = New(200101012, "file already exists")
 	ErrNoPermission    = New(200101020, "no permission")
-	ErrParamsData      = New(200101021, "error parameter")
+	ErrInvalidParam    = New(200101021, "invalid parameter")
 )

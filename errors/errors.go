@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"strconv"
 	"sync"
 )
 
@@ -21,8 +20,8 @@ type Causer interface {
 	Cause() error
 }
 
-// Unwrapper interface for get previous error
-type Unwrapper interface {
+// UnWrapper interface for get previous error
+type UnWrapper interface {
 	// Unwrap returns previous error by call err.Unwrap().
 	// Otherwise, will returns nil.
 	Unwrap() error
@@ -31,7 +30,7 @@ type Unwrapper interface {
 // IError  error interface
 type IError interface {
 	Causer
-	Unwrapper
+	UnWrapper
 	Code() int
 	Message() string
 	WithMessage(msg string) IError
@@ -117,7 +116,10 @@ func (e *Error) Unwrap() error {
 }
 
 func (e *Error) Equal(err IError) bool {
-	return Equal(e, err)
+	if err == nil {
+		return false
+	}
+	return e.Code() == err.Code()
 }
 
 // Error get error string
@@ -130,15 +132,14 @@ func (e *Error) Error() string {
 // writeMsgTo write the error msg to a writer
 func (e *Error) writeMsgTo(w io.Writer) {
 	// current error
-	_, _ = w.Write([]byte(fmt.Sprintf("[%d]%s", e.code, e.message)))
+	_, _ = w.Write([]byte(fmt.Sprintf("%d -> %s", e.code, e.message)))
 	// with inner error
-	err := e.innerErr
-	if err == nil {
+	if e.innerErr == nil {
 		return
 	}
 	_, _ = w.Write([]byte("\n "))
-	_, _ = w.Write([]byte("Inner Error: "))
-	if ex, ok := err.(*Error); ok {
+	_, _ = w.Write([]byte("inner error: "))
+	if ex, ok := e.innerErr.(*Error); ok {
 		ex.writeMsgTo(w)
 	} else {
 		_, _ = io.WriteString(w, e.innerErr.Error())
@@ -155,33 +156,6 @@ func (e *Error) Cause() error {
 		return ex.Cause()
 	}
 	return e.innerErr
-}
-
-// Equal compare error code
-func Equal(a, b IError) bool {
-	if a == nil || b == nil {
-		return false
-	}
-	return a.Code() == b.Code()
-}
-
-// Cause from err to IError
-func Cause(err error) IError {
-	if err == nil || err.Error() == "" {
-		return New(0, "success")
-	}
-
-	e, ok := err.(*Error)
-	if ok {
-		return e
-	}
-
-	code, convErr := strconv.Atoi(err.Error())
-	if convErr != nil {
-		return New(500, "internal server error").WithErr(err)
-	}
-
-	return GetError(code)
 }
 
 // IsHTTPStatus err code is http status
