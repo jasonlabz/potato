@@ -1,9 +1,9 @@
 package consts
 
 const (
-	HeaderRequestID     = "X-RequestId"
+	HeaderRequestID     = "X-RequestID"
 	HeaderAuthorization = "X-Authorization"
-	HeaderUserID        = "X-UserId"
+	HeaderUserID        = "X-UserID"
 	HeaderRemote        = "X-Remote"
 
 	ContextTraceID    = "trace_id"

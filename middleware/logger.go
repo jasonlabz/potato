@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"go.uber.org/zap"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 
 	"github.com/jasonlabz/potato/core/consts"
 	"github.com/jasonlabz/potato/core/utils"
@@ -42,7 +42,6 @@ func LoggerMiddleware() gin.HandlerFunc {
 			traceID = strings.ReplaceAll(uuid.New().String(), consts.SignDash, consts.EmptyString)
 			c.Set(consts.ContextTraceID, traceID)
 		}
-		userIdStr := utils.GetString(c.Value(consts.ContextUserID))
 		c.Writer.Header().Set(consts.HeaderRequestID, traceID)
 
 		var requestBodyBytes []byte
@@ -71,8 +70,6 @@ func LoggerMiddleware() gin.HandlerFunc {
 		logger := log.GetLogger(c)
 		start := time.Now() // Start timer
 		logger.Info("[GIN] request",
-			zap.Any("trace_id", traceID),
-			zap.Any("user_id", userIdStr),
 			zap.Any("method", c.Request.Method),
 			zap.Any("user_agent", c.Request.UserAgent()),
 			zap.Any("request", string(requestBodyLogBytes)),

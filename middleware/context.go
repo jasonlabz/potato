@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"potato/core/consts"
 	"strings"
 
 	"github.com/gin-gonic/gin"

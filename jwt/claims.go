@@ -3,10 +3,10 @@ package jwt
 import (
 	"crypto/subtle"
 	"fmt"
-	"github.com/jasonlabz/potato/errors"
 	"time"
 
-	"github.com/jasonlabz/potato/times"
+	"github.com/jasonlabz/potato/core/times"
+	"github.com/jasonlabz/potato/errors"
 )
 
 // Claims For a type to be a Claims object, it must just have a Valid method that determines
