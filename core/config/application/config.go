@@ -2,6 +2,7 @@ package application
 
 import (
 	"fmt"
+	"github.com/jasonlabz/potato/core/utils"
 	"log"
 	"os"
 
@@ -175,4 +176,48 @@ func ParseConfigByViper(configPath, configName, configType string) {
 		log.Println(err)
 	}
 	return
+}
+
+func init() {
+	var DefaultApplicationYamlConfigPath = "./conf/application.yaml"
+	var BakApplicationYamlConfigPath = "./conf/app.yaml"
+	var DefaultApplicationIniConfigPath = "./conf/application.ini"
+	var BakApplicationIniConfigPath = "./conf/app.ini"
+	var DefaultApplicationTomlConfigPath = "./conf/application.toml"
+	var BakApplicationTomlConfigPath = "./conf/app.toml"
+	// 读取服务配置文件
+	var configLoad bool
+	if !configLoad && utils.IsExist(DefaultApplicationYamlConfigPath) {
+		LoadConfigFromYaml(DefaultApplicationYamlConfigPath)
+		configLoad = true
+	}
+
+	if !configLoad && utils.IsExist(BakApplicationYamlConfigPath) {
+		LoadConfigFromYaml(BakApplicationYamlConfigPath)
+		configLoad = true
+	}
+
+	if !configLoad && utils.IsExist(BakApplicationIniConfigPath) {
+		LoadConfigFromIni(BakApplicationIniConfigPath)
+		configLoad = true
+	}
+
+	if !configLoad && utils.IsExist(DefaultApplicationIniConfigPath) {
+		LoadConfigFromIni(DefaultApplicationIniConfigPath)
+		configLoad = true
+	}
+
+	if !configLoad && utils.IsExist(DefaultApplicationTomlConfigPath) {
+		LoadConfigFromToml(DefaultApplicationTomlConfigPath)
+		configLoad = true
+	}
+
+	if !configLoad && utils.IsExist(BakApplicationTomlConfigPath) {
+		LoadConfigFromToml(BakApplicationTomlConfigPath)
+		configLoad = true
+	}
+
+	if !configLoad {
+		log.Printf("-- There is no application config.")
+	}
 }
