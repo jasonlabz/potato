@@ -14,10 +14,8 @@ const (
 )
 
 func init() {
-	Loc, _ = time.LoadLocation("Asia/Shanghai")
+	time.Local, _ = time.LoadLocation("Asia/Shanghai")
 }
-
-var Loc *time.Location
 
 func Now() time.Time {
 	return time.Now().In(time.Local)
@@ -44,7 +42,7 @@ func CurrentTime() string {
 }
 
 func ParseTime(timeStr string) (time.Time, error) {
-	tm, err := time.ParseInLocation(DateFormat, timeStr, Loc)
+	tm, err := time.ParseInLocation(DateFormat, timeStr, time.Local)
 	return tm, err
 }
 

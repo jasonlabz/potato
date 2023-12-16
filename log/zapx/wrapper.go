@@ -3,6 +3,8 @@ package log
 import (
 	"context"
 	"fmt"
+	"github.com/google/uuid"
+	"strings"
 
 	"go.uber.org/zap"
 
@@ -12,15 +14,16 @@ import (
 
 var logField = []string{consts.ContextTraceID, consts.ContextUserID, consts.ContextRemoteAddr}
 
-var defaultLoggerWrapper *LoggerWrapper
-
-type LoggerWrapper struct {
+type loggerWrapper struct {
 	logger *zap.Logger
 }
 
 func zapField(ctx context.Context, contextKey ...string) (fields []zap.Field) {
 	for _, key := range contextKey {
 		value := utils.GetString(ctx.Value(key))
+		if value == "" && key == consts.ContextTraceID {
+			value = strings.ReplaceAll(uuid.New().String(), consts.SignDash, consts.EmptyString)
+		}
 		if value == "" {
 			continue
 		}
@@ -29,82 +32,82 @@ func zapField(ctx context.Context, contextKey ...string) (fields []zap.Field) {
 	return
 }
 
-func GetLogger(ctx context.Context) *LoggerWrapper {
-	return &LoggerWrapper{
+func GetLogger(ctx context.Context) *loggerWrapper {
+	return &loggerWrapper{
 		logger: logger().With(zapField(ctx, logField...)...),
 	}
 }
 
-func GormLogger(ctx context.Context) *LoggerWrapper {
-	return &LoggerWrapper{
+func GormLogger(ctx context.Context) *loggerWrapper {
+	return &loggerWrapper{
 		logger: logger().WithOptions(zap.AddCallerSkip(3)).
 			With(zapField(ctx, logField...)...),
 	}
 }
 
-func (l *LoggerWrapper) WithError(err error) *LoggerWrapper {
+func (l *loggerWrapper) WithError(err error) *loggerWrapper {
 	l.logger = l.logger.With(zap.Error(err))
 	return l
 }
 
-func (l *LoggerWrapper) WithOption(opt zap.Option) *LoggerWrapper {
+func (l *loggerWrapper) WithOption(opt zap.Option) *loggerWrapper {
 	l.logger = l.logger.WithOptions(opt)
 	return l
 }
 
-func (l *LoggerWrapper) WithField(fields ...zap.Field) *LoggerWrapper {
+func (l *loggerWrapper) WithField(fields ...zap.Field) *loggerWrapper {
 	l.logger = l.logger.With(fields...)
 	return l
 }
 
-func (l *LoggerWrapper) Debug(msg string, fields ...zap.Field) {
+func (l *loggerWrapper) Debug(msg string, fields ...zap.Field) {
 	l.logger.Debug(msg, fields...)
 }
 
-func (l *LoggerWrapper) Debugf(msg string, args ...any) {
+func (l *loggerWrapper) Debugf(msg string, args ...any) {
 	l.logger.Debug(fmt.Sprintf(msg, args...))
 }
 
-func (l *LoggerWrapper) Info(msg string, fields ...zap.Field) {
+func (l *loggerWrapper) Info(msg string, fields ...zap.Field) {
 	l.logger.Info(msg, fields...)
 }
 
-func (l *LoggerWrapper) Infof(msg string, args ...any) {
+func (l *loggerWrapper) Infof(msg string, args ...any) {
 	l.logger.Info(fmt.Sprintf(msg, args...))
 }
 
-func (l *LoggerWrapper) Warn(msg string, fields ...zap.Field) {
+func (l *loggerWrapper) Warn(msg string, fields ...zap.Field) {
 	l.logger.Warn(msg, fields...)
 }
 
-func (l *LoggerWrapper) Warnf(msg string, args ...any) {
+func (l *loggerWrapper) Warnf(msg string, args ...any) {
 	l.logger.Warn(fmt.Sprintf(msg, args...))
 }
 
-func (l *LoggerWrapper) Error(msg string, fields ...zap.Field) {
+func (l *loggerWrapper) Error(msg string, fields ...zap.Field) {
 	l.logger.Error(msg, fields...)
 }
 
-func (l *LoggerWrapper) Errorf(msg string, args ...any) {
+func (l *loggerWrapper) Errorf(msg string, args ...any) {
 	l.logger.Error(fmt.Sprintf(msg, args...))
 }
 
-func (l *LoggerWrapper) Panic(msg string, fields ...zap.Field) {
+func (l *loggerWrapper) Panic(msg string, fields ...zap.Field) {
 	l.logger.Panic(msg, fields...)
 }
 
-func (l *LoggerWrapper) Panicf(msg string, args ...any) {
+func (l *loggerWrapper) Panicf(msg string, args ...any) {
 	l.logger.Panic(fmt.Sprintf(msg, args...))
 }
 
-func (l *LoggerWrapper) Fatal(msg string, fields ...zap.Field) {
+func (l *loggerWrapper) Fatal(msg string, fields ...zap.Field) {
 	l.logger.Fatal(msg, fields...)
 }
 
-func (l *LoggerWrapper) Fatalf(msg string, args ...any) {
+func (l *loggerWrapper) Fatalf(msg string, args ...any) {
 	l.logger.Fatal(fmt.Sprintf(msg, args...))
 }
 
-func (l *LoggerWrapper) Sync() {
+func (l *loggerWrapper) Sync() {
 	_ = l.logger.Sync()
 }

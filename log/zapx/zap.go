@@ -141,34 +141,34 @@ func getEncoder() zapcore.Encoder {
 // core 三个参数之  日志输出路径
 func getLowLevelWriterSyncer() zapcore.WriteSyncer {
 	filename := func() string {
-		getString := config.GetString(DefaultZapConfigName, "low_level_conf.log_file_path")
+		getString := config.GetString(DefaultZapConfigName, "log_file_conf.log_file_path")
 		if getString == "" {
 			return "./log/server.log"
 		}
 		return getString
 	}()
 	maxSize := func() int {
-		geInt := config.GetInt(DefaultZapConfigName, "low_level_conf.max_size")
+		geInt := config.GetInt(DefaultZapConfigName, "log_file_conf.max_size")
 		if geInt == 0 {
 			return 300
 		}
 		return geInt
 	}()
 	maxAge := func() int {
-		geInt := config.GetInt(DefaultZapConfigName, "low_level_conf.max_age")
+		geInt := config.GetInt(DefaultZapConfigName, "log_file_conf.max_age")
 		if geInt == 0 {
 			return 28
 		}
 		return geInt
 	}()
 	maxBackups := func() int {
-		geInt := config.GetInt(DefaultZapConfigName, "low_level_conf.max_backups")
+		geInt := config.GetInt(DefaultZapConfigName, "log_file_conf.max_backups")
 		if geInt == 0 {
 			return 20
 		}
 		return geInt
 	}()
-	compress := config.GetBool(DefaultZapConfigName, "low_level_conf.compress")
+	compress := config.GetBool(DefaultZapConfigName, "log_file_conf.compress")
 
 	//引入第三方库 Lumberjack 加入日志切割功能
 	infoLumberIO := &lumberjack.Logger{
@@ -183,34 +183,36 @@ func getLowLevelWriterSyncer() zapcore.WriteSyncer {
 
 func getHighLevelWriterSyncer() zapcore.WriteSyncer {
 	filename := func() string {
-		getString := config.GetString(DefaultZapConfigName, "high_level_conf.log_file_path")
+		getString := config.GetString(DefaultZapConfigName, "log_file_conf.log_file_path")
 		if getString == "" {
-			return "./log/server.wf.log"
+			getString = "./log/server.wf.log"
+		} else {
+			getString += ".error"
 		}
 		return getString
 	}()
 	maxSize := func() int {
-		geInt := config.GetInt(DefaultZapConfigName, "high_level_conf.max_size")
+		geInt := config.GetInt(DefaultZapConfigName, "log_file_conf.max_size")
 		if geInt == 0 {
 			return 300
 		}
 		return geInt
 	}()
 	maxAge := func() int {
-		geInt := config.GetInt(DefaultZapConfigName, "high_level_conf.max_age")
+		geInt := config.GetInt(DefaultZapConfigName, "log_file_conf.max_age")
 		if geInt == 0 {
 			return 28
 		}
 		return geInt
 	}()
 	maxBackups := func() int {
-		geInt := config.GetInt(DefaultZapConfigName, "high_level_conf.max_backups")
+		geInt := config.GetInt(DefaultZapConfigName, "log_file_conf.max_backups")
 		if geInt == 0 {
 			return 20
 		}
 		return geInt
 	}()
-	compress := config.GetBool(DefaultZapConfigName, "high_level_conf.compress")
+	compress := config.GetBool(DefaultZapConfigName, "log_file_conf.compress")
 
 	//引入第三方库 Lumberjack 加入日志切割功能
 	lumberWriteSyncer := &lumberjack.Logger{

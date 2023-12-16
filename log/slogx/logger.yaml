@@ -1,4 +1,5 @@
 write_file: true
+json_log: true
 log_level: error|warn|info|debug
 log_file_conf:
   log_file_path: ./log/server.log
