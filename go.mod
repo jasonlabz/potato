@@ -11,6 +11,8 @@ require (
 	github.com/go-resty/resty/v2 v2.9.1
 	github.com/google/uuid v1.3.1
 	github.com/panjf2000/ants/v2 v2.9.0
+	github.com/patrickmn/go-cache v2.1.0+incompatible
+	github.com/rogpeppe/go-internal v1.9.0
 	github.com/spf13/cast v1.5.1
 	github.com/spf13/viper v1.17.0
 	go.uber.org/zap v1.26.0
