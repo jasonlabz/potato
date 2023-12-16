@@ -1,0 +1,15 @@
+write_file: true
+log_level: error|warn|info|debug
+low_level_conf:
+  log_file_path: ./log/server.log
+  max_size: 10
+  max_age: 28
+  max_backups: 100
+  compress: false
+
+high_level_conf:
+  log_file_path: ./log/server.wf.log
+  max_size: 10
+  max_age: 28
+  max_backups: 100
+  compress: false
