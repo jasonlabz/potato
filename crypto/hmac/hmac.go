@@ -14,10 +14,10 @@ var DefaultHmacKey = "wVPDRAZsOEKZu4s4"
 var crypto *CryptoHmac
 
 func init() {
-	InitHmacCrypto(NewHmacCrypto([]byte(DefaultHmacKey)))
+	crypto = NewHmacCrypto([]byte(DefaultHmacKey))
 }
 
-func InitHmacCrypto(aesCrypto *CryptoHmac) {
+func SetHmacCrypto(aesCrypto *CryptoHmac) {
 	crypto = aesCrypto
 }
 

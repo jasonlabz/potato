@@ -12,10 +12,10 @@ var DefaultDESKey = "j2nyYuA="
 var crypto *CryptoDES
 
 func init() {
-	InitDESCrypto(NewDESCrypto([]byte(DefaultDESKey)))
+	crypto = NewDESCrypto([]byte(DefaultDESKey))
 }
 
-func InitDESCrypto(desCrypto *CryptoDES) {
+func SetDESCrypto(desCrypto *CryptoDES) {
 	crypto = desCrypto
 }
 func NewDESCrypto(key []byte) *CryptoDES {

@@ -21,7 +21,7 @@ const (
 	AlgorithmSign    = crypto.SHA256
 )
 
-func InitRSACrypto(cryptoRSA *CryptoRSA) {
+func SetRSACrypto(cryptoRSA *CryptoRSA) {
 	rsaCrypto = cryptoRSA
 }
 

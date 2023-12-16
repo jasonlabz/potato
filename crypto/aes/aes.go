@@ -12,10 +12,10 @@ var DefaultAESKey = "wVPDRAZsOEKZu4s4"
 var crypto *CryptoAES
 
 func init() {
-	InitAESCrypto(NewAESCrypto([]byte(DefaultAESKey)))
+	crypto = NewAESCrypto([]byte(DefaultAESKey))
 }
 
-func InitAESCrypto(aesCrypto *CryptoAES) {
+func SetAESCrypto(aesCrypto *CryptoAES) {
 	crypto = aesCrypto
 }
 
