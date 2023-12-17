@@ -3,12 +3,13 @@ package gocache
 import (
 	"context"
 	"errors"
+	"fmt"
+	"github.com/jasonlabz/potato/log"
 	"reflect"
 	"time"
 
 	"github.com/bytedance/sonic"
 	"github.com/jasonlabz/potato/core/utils"
-	log "github.com/jasonlabz/potato/log/zapx"
 	"github.com/patrickmn/go-cache"
 )
 
@@ -35,7 +36,7 @@ func Set(ctx context.Context, k string, v interface{}, expiration time.Duration)
 	}
 	c.Set(k, v, expiration)
 	go func() {
-		log.GetLogger(ctx).Infof("[Cache] Set done, key:\"%s\", val:%+v\n", k, func() string {
+		log.GetCurrentGormLogger(ctx).Info(fmt.Sprintf("[Cache] Set done, key:\"%s\", val:%+v\n", k, func() string {
 			bytes, err := sonic.Marshal(v)
 			if err != nil {
 				return ""
@@ -45,7 +46,7 @@ func Set(ctx context.Context, k string, v interface{}, expiration time.Duration)
 				msg = msg[:1000] + "...[more than 1000 character.]"
 			}
 			return msg
-		}())
+		}()))
 	}()
 	return nil
 }
@@ -57,7 +58,7 @@ func Replace(ctx context.Context, k string, v interface{}, expiration time.Durat
 
 	_ = c.Replace(k, v, expiration)
 	go func() {
-		log.GetLogger(ctx).Infof("[Cache] replace done, key:\"%s\", val:%+v\n", k, func() string {
+		log.GetCurrentGormLogger(ctx).Info(fmt.Sprintf("[Cache] replace done, key:\"%s\", val:%+v\n", k, func() string {
 			bytes, err := sonic.Marshal(v)
 			if err != nil {
 				return ""
@@ -67,7 +68,7 @@ func Replace(ctx context.Context, k string, v interface{}, expiration time.Durat
 				msg = msg[:1000] + "...[more than 1000 character.]"
 			}
 			return msg
-		}())
+		}()))
 	}()
 	return nil
 }
@@ -81,7 +82,7 @@ func Get(ctx context.Context, k string, dest interface{}) (bool, error) {
 		return false, nil
 	}
 	go func() {
-		log.GetLogger(ctx).Infof("[Cache] Get done, key:\"%s\", val:%+v\n", k, func() string {
+		log.GetCurrentGormLogger(ctx).Info(fmt.Sprintf("[Cache] Get done, key:\"%s\", val:%+v\n", k, func() string {
 			bytes, err := sonic.Marshal(v)
 			if err != nil {
 				return ""
@@ -91,7 +92,7 @@ func Get(ctx context.Context, k string, dest interface{}) (bool, error) {
 				msg = msg[:1000] + "...[more than 1000 character.]"
 			}
 			return msg
-		}())
+		}()))
 	}()
 	err := utils.CopyStruct(v, dest)
 	if err != nil {
@@ -105,13 +106,13 @@ func IsExist(ctx context.Context, k string) bool {
 		return false
 	}
 	_, ok := c.Get(k)
-	log.GetLogger(ctx).Infof("[Cache] IsExist, key:\"%v\": \"%v\"", k, ok)
+	log.GetCurrentGormLogger(ctx).Info(fmt.Sprintf("[Cache] IsExist, key:\"%v\": \"%v\"", k, ok))
 	return ok
 }
 
 func Del(ctx context.Context, k string) {
 	c.Delete(k)
-	log.GetLogger(ctx).Infof("[Cache] Del done, key:\"%s\"\n", k)
+	log.GetCurrentGormLogger(ctx).Info(fmt.Sprintf("[Cache] Del done, key:\"%s\"\n", k))
 }
 
 func GetOrSet(ctx context.Context, k string, dest interface{}, expiration time.Duration, callback func() (interface{}, error)) error {

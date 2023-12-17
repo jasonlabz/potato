@@ -1,4 +1,4 @@
-package log
+package zapx
 
 import (
 	"context"
@@ -55,53 +55,53 @@ func (l *loggerWrapper) WithOption(opt zap.Option) *loggerWrapper {
 	return l
 }
 
-func (l *loggerWrapper) WithField(fields ...zap.Field) *loggerWrapper {
-	l.logger = l.logger.With(fields...)
+func (l *loggerWrapper) WithField(fields ...any) *loggerWrapper {
+	l.logger = l.logger.With(l.checkFields(fields)...)
 	return l
 }
 
-func (l *loggerWrapper) Debug(msg string, fields ...zap.Field) {
-	l.logger.Debug(msg, fields...)
+func (l *loggerWrapper) Debug(msg string, fields ...any) {
+	l.logger.Debug(msg, l.checkFields(fields)...)
 }
 
 func (l *loggerWrapper) Debugf(msg string, args ...any) {
 	l.logger.Debug(fmt.Sprintf(msg, args...))
 }
 
-func (l *loggerWrapper) Info(msg string, fields ...zap.Field) {
-	l.logger.Info(msg, fields...)
+func (l *loggerWrapper) Info(msg string, fields ...any) {
+	l.logger.Info(msg, l.checkFields(fields)...)
 }
 
 func (l *loggerWrapper) Infof(msg string, args ...any) {
 	l.logger.Info(fmt.Sprintf(msg, args...))
 }
 
-func (l *loggerWrapper) Warn(msg string, fields ...zap.Field) {
-	l.logger.Warn(msg, fields...)
+func (l *loggerWrapper) Warn(msg string, fields ...any) {
+	l.logger.Warn(msg, l.checkFields(fields)...)
 }
 
 func (l *loggerWrapper) Warnf(msg string, args ...any) {
 	l.logger.Warn(fmt.Sprintf(msg, args...))
 }
 
-func (l *loggerWrapper) Error(msg string, fields ...zap.Field) {
-	l.logger.Error(msg, fields...)
+func (l *loggerWrapper) Error(msg string, fields ...any) {
+	l.logger.Error(msg, l.checkFields(fields)...)
 }
 
 func (l *loggerWrapper) Errorf(msg string, args ...any) {
 	l.logger.Error(fmt.Sprintf(msg, args...))
 }
 
-func (l *loggerWrapper) Panic(msg string, fields ...zap.Field) {
-	l.logger.Panic(msg, fields...)
+func (l *loggerWrapper) Panic(msg string, fields ...any) {
+	l.logger.Panic(msg, l.checkFields(fields)...)
 }
 
 func (l *loggerWrapper) Panicf(msg string, args ...any) {
 	l.logger.Panic(fmt.Sprintf(msg, args...))
 }
 
-func (l *loggerWrapper) Fatal(msg string, fields ...zap.Field) {
-	l.logger.Fatal(msg, fields...)
+func (l *loggerWrapper) Fatal(msg string, fields ...any) {
+	l.logger.Fatal(msg, l.checkFields(fields)...)
 }
 
 func (l *loggerWrapper) Fatalf(msg string, args ...any) {
@@ -110,4 +110,13 @@ func (l *loggerWrapper) Fatalf(msg string, args ...any) {
 
 func (l *loggerWrapper) Sync() {
 	_ = l.logger.Sync()
+}
+
+func (l *loggerWrapper) checkFields(fields ...any) (checked []zap.Field) {
+	for _, field := range fields {
+		if f, ok := field.(zap.Field); ok {
+			checked = append(checked, f)
+		}
+	}
+	return
 }

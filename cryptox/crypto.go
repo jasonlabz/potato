@@ -1,4 +1,4 @@
-package crypto
+package cryptox
 
 type CryptoType int
 

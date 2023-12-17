@@ -5,7 +5,7 @@ import (
 
 	"github.com/panjf2000/ants/v2"
 
-	log "github.com/jasonlabz/potato/log/zapx"
+	"github.com/jasonlabz/potato/log"
 )
 
 var poolSize = 500
@@ -27,6 +27,6 @@ func GetFixedPool(size int) (pool *ants.Pool, err error) {
 func Submit(ctx context.Context, task func()) {
 	err := goPool.Submit(task)
 	if err != nil {
-		log.GetLogger(ctx).Error(err.Error())
+		log.GetCurrentLogger(ctx).Error(err.Error())
 	}
 }

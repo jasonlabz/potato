@@ -1,4 +1,4 @@
-package log
+package zapx
 
 import (
 	"log"
@@ -64,8 +64,10 @@ func InitLogger(filePath string) {
 	}
 
 	if !configLoad {
-		log.Printf("log init by default config")
+		log.Printf("zapx log init by default config")
 	}
+	// 设置当前初始化日志zap，方便gorm等其他组件使用zap打印日志
+	//plog.SetCurrentLogger(plog.LoggerTypeZap)
 	//获取编码器
 	encoder := getEncoder()
 	levelConfig := config.GetString(DefaultZapConfigName, "log_level")

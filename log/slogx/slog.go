@@ -56,6 +56,8 @@ func InitLogger(filePath string) {
 	if !configLoad {
 		log.Printf("slogx init by default config")
 	}
+	// 设置当前初始化日志zap，方便gorm等其他组件使用zap打印日志
+	//plog.SetCurrentLogger(plog.LoggerTypeSlog)
 
 	levelConfig := config.GetString(DefaultSlogConfigName, "log_level")
 	switch levelConfig {

@@ -3,6 +3,7 @@ package middleware
 import (
 	"bytes"
 	"fmt"
+	"github.com/jasonlabz/potato/log"
 	"io"
 	"net"
 	"net/http"
@@ -18,7 +19,6 @@ import (
 
 	"github.com/jasonlabz/potato/core/consts"
 	"github.com/jasonlabz/potato/core/utils"
-	log "github.com/jasonlabz/potato/log/zapx"
 )
 
 const (
@@ -67,8 +67,9 @@ func LoggerMiddleware() gin.HandlerFunc {
 		if raw != "" {
 			path = path + "?" + raw
 		}
-		logger := log.GetLogger(c)
+		logger := log.GetCurrentGormLogger(c)
 		start := time.Now() // Start timer
+
 		logger.Info("[GIN] request",
 			zap.Any("method", c.Request.Method),
 			zap.Any("user_agent", c.Request.UserAgent()),
@@ -90,7 +91,7 @@ func LoggerMiddleware() gin.HandlerFunc {
 // RecoveryMiddleware recover项目可能出现的panic，并使用zap记录相关日志
 func RecoveryMiddleware(stack bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		logger := log.GetLogger(c)
+		logger := log.GetCurrentGormLogger(c)
 		defer func() {
 			if err := recover(); err != nil {
 				// Check for a broken connection, as it is not really a

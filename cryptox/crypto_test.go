@@ -1,15 +1,15 @@
-package crypto
+package cryptox
 
 import (
 	"fmt"
 	"log"
 	"testing"
 
-	"github.com/jasonlabz/potato/crypto/aes"
-	"github.com/jasonlabz/potato/crypto/base64"
-	"github.com/jasonlabz/potato/crypto/des"
-	"github.com/jasonlabz/potato/crypto/hmac"
-	"github.com/jasonlabz/potato/crypto/sha"
+	"github.com/jasonlabz/potato/cryptox/aes"
+	"github.com/jasonlabz/potato/cryptox/base64"
+	"github.com/jasonlabz/potato/cryptox/des"
+	"github.com/jasonlabz/potato/cryptox/hmac"
+	"github.com/jasonlabz/potato/cryptox/sha"
 )
 
 func TestAES(t *testing.T) {

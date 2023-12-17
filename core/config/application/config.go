@@ -2,7 +2,6 @@ package application
 
 import (
 	"fmt"
-	"github.com/jasonlabz/potato/core/utils"
 	"log"
 	"os"
 
@@ -12,6 +11,8 @@ import (
 	"github.com/go-ini/ini"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
+
+	"github.com/jasonlabz/potato/core/utils"
 )
 
 type CryptoType string
@@ -94,7 +95,7 @@ type Application struct {
 
 type Config struct {
 	Debug       bool            `json:"debug" yaml:"debug"`
-	Crypto      []*CryptoConfig `json:"crypto" yaml:"crypto"`
+	Crypto      []*CryptoConfig `json:"cryptox" yaml:"cryptox"`
 	Application *Application    `json:"application" yaml:"application"`
 	Kafka       *KafkaConfig    `json:"kafka" yaml:"kafka"`
 	Database    *Database       `json:"database" yaml:"database"`

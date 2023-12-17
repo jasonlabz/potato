@@ -17,8 +17,8 @@ func init() {
 	crypto = NewHmacCrypto([]byte(DefaultHmacKey))
 }
 
-func SetHmacCrypto(aesCrypto *CryptoHmac) {
-	crypto = aesCrypto
+func SetHmacCrypto(hmacCrypto *CryptoHmac) {
+	crypto = hmacCrypto
 }
 
 // NewHmacCrypto key随意设置
