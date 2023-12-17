@@ -115,11 +115,26 @@ func (l *loggerWrapper) Sync() {
 	_ = l.logger.Sync()
 }
 
-func (l *loggerWrapper) checkFields(fields ...any) (checked []zap.Field) {
-	for _, field := range fields {
-		if f, ok := field.(zap.Field); ok {
-			checked = append(checked, f)
+func (l *loggerWrapper) checkFields(fields []any) (checked []zap.Field) {
+	if len(fields) == 0 {
+		return
+	}
+	_, isZapField := fields[0].(zap.Field)
+	if isZapField {
+		for _, field := range fields {
+			if f, ok := field.(zap.Field); ok {
+				checked = append(checked, f)
+			}
+		}
+	} else {
+		for i := 0; i < len(fields)-1; {
+			checked = append(checked, zap.Any(utils.GetString(fields[i]), utils.GetString(fields[i+1])))
+			if i == len(fields)-3 {
+				checked = append(checked, zap.Any("remained_field", utils.GetString(fields[i+2])))
+			}
+			i += 2
 		}
 	}
+
 	return
 }

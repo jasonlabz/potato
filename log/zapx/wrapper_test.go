@@ -1,7 +1,10 @@
 package zapx
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestName(t *testing.T) {
-	logger().Error("")
+	GetLogger(context.Background()).Error("ttt", "sadas", "sdasd", "time")
 }
