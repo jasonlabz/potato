@@ -2,9 +2,7 @@ package zapx
 
 import (
 	"context"
-	"strings"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/jasonlabz/potato/core/consts"
@@ -20,9 +18,9 @@ type loggerWrapper struct {
 func zapField(ctx context.Context, contextKey ...string) (fields []zap.Field) {
 	for _, key := range contextKey {
 		value := utils.GetString(ctx.Value(key))
-		if value == "" && key == consts.ContextTraceID {
-			value = strings.ReplaceAll(uuid.New().String(), consts.SignDash, consts.EmptyString)
-		}
+		//if value == "" && key == consts.ContextTraceID {
+		//	value = strings.ReplaceAll(uuid.New().String(), consts.SignDash, consts.EmptyString)
+		//}
 		if value == "" {
 			continue
 		}
