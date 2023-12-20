@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -22,9 +23,17 @@ type BodyLog struct {
 	body *bytes.Buffer
 }
 
+func (bl BodyLog) Header() http.Header {
+	return bl.ResponseWriter.Header()
+}
+
 func (bl BodyLog) Write(b []byte) (int, error) {
 	bl.body.Write(b)
 	return bl.ResponseWriter.Write(b)
+}
+
+func (bl BodyLog) WriteHeader(statusCode int) {
+	bl.ResponseWriter.WriteHeader(statusCode)
 }
 
 func RequestMiddleware() gin.HandlerFunc {
@@ -47,11 +56,6 @@ func RequestMiddleware() gin.HandlerFunc {
 		if maxLen > requestBodyMaxLen {
 			maxLen = requestBodyMaxLen
 		}
-		path := c.Request.URL.Path
-		raw := c.Request.URL.RawQuery
-		if raw != "" {
-			path = path + "?" + raw
-		}
 		requestBodyLogBytes = make([]byte, maxLen)
 		copy(requestBodyLogBytes, requestBodyBytes)
 		if maxLen < len(requestBodyBytes) {
@@ -66,14 +70,14 @@ func RequestMiddleware() gin.HandlerFunc {
 			"agent", c.Request.UserAgent(),
 			"body", string(requestBodyLogBytes),
 			"client_ip", c.ClientIP(),
-			"path", path)
+			"path", c.Request.URL.RawPath)
 
 		c.Next()
 
 		logger.Info("[GIN] response",
 			"error_message", c.Errors.ByType(gin.ErrorTypePrivate).String(),
 			"body", bodyLog.body.String(),
-			"path", path,
+			"path", c.Request.URL.RawPath,
 			"status_code", c.Writer.Status(),
 			"cost", fmt.Sprintf("%dms", time.Now().Sub(start).Milliseconds()))
 	}
