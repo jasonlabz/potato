@@ -3,7 +3,6 @@ package middleware
 import (
 	"bytes"
 	"fmt"
-	"github.com/jasonlabz/potato/log"
 	"io"
 	"net"
 	"net/http"
@@ -14,11 +13,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
-	"go.uber.org/zap"
 
 	"github.com/jasonlabz/potato/core/consts"
 	"github.com/jasonlabz/potato/core/utils"
+	"github.com/jasonlabz/potato/log"
 )
 
 const (
@@ -38,17 +36,16 @@ func (bl BodyLog) Write(b []byte) (int, error) {
 func LoggerMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		traceID := utils.GetString(c.Value(consts.ContextTraceID))
-		if traceID == "" {
-			traceID = strings.ReplaceAll(uuid.New().String(), consts.SignDash, consts.EmptyString)
-			c.Set(consts.ContextTraceID, traceID)
+		if traceID != "" {
+			c.Writer.Header().Set(consts.HeaderRequestID, traceID)
 		}
-		c.Writer.Header().Set(consts.HeaderRequestID, traceID)
 
 		var requestBodyBytes []byte
 		var requestBodyLogBytes []byte
 		if c.Request.Body != nil {
 			requestBodyBytes, _ = io.ReadAll(c.Request.Body)
 		}
+		c.Request.Body = io.NopCloser(bytes.NewBuffer(requestBodyBytes))
 		bodyLog := &BodyLog{body: bytes.NewBufferString(""), ResponseWriter: c.Writer}
 		c.Writer = bodyLog
 
@@ -62,29 +59,24 @@ func LoggerMiddleware() gin.HandlerFunc {
 			requestBodyLogBytes = append(requestBodyLogBytes, []byte("......")...)
 		}
 
-		path := c.Request.URL.Path
-		raw := c.Request.URL.RawQuery
-		if raw != "" {
-			path = path + "?" + raw
-		}
 		logger := log.GetCurrentGormLogger(c)
 		start := time.Now() // Start timer
 
 		logger.Info("[GIN] request",
-			zap.Any("method", c.Request.Method),
-			zap.Any("user_agent", c.Request.UserAgent()),
-			zap.Any("request", string(requestBodyLogBytes)),
-			zap.Any("client_ip", c.ClientIP()),
-			zap.Any("path", path))
+			"method", c.Request.Method,
+			"agent", c.Request.UserAgent(),
+			"body", string(requestBodyLogBytes),
+			"client_ip", c.ClientIP(),
+			"path", c.Request.URL.RawPath)
 
 		c.Next()
 
 		logger.Info("[GIN] response",
-			zap.Any("error_message", c.Errors.ByType(gin.ErrorTypePrivate).String()),
-			zap.Any("body", bodyLog.body.String()),
-			zap.Any("path", path),
-			zap.Int("status_code", c.Writer.Status()),
-			zap.Any("cost", fmt.Sprintf("%dms", time.Now().Sub(start).Milliseconds())))
+			"error_message", c.Errors.ByType(gin.ErrorTypePrivate).String(),
+			"body", bodyLog.body.String(),
+			"path", c.Request.URL.RawPath,
+			"status_code", c.Writer.Status(),
+			"cost", fmt.Sprintf("%dms", time.Now().Sub(start).Milliseconds()))
 	}
 }
 
@@ -109,9 +101,8 @@ func RecoveryMiddleware(stack bool) gin.HandlerFunc {
 				httpRequest, _ := httputil.DumpRequest(c.Request, false)
 				if brokenPipe {
 					logger.Error(c.Request.URL.Path,
-						zap.Any("error", err),
-						zap.String("request", string(httpRequest)),
-					)
+						"error", err,
+						"request", string(httpRequest))
 					// If the connection is dead, we can't write a status to it.
 					c.Error(err.(error)) // nolint: err check
 					c.Abort()
@@ -120,15 +111,13 @@ func RecoveryMiddleware(stack bool) gin.HandlerFunc {
 
 				if stack {
 					logger.Error("[Recovery from panic]",
-						zap.Any("error", err),
-						zap.String("request", string(httpRequest)),
-						zap.String("stack", string(debug.Stack())),
-					)
+						"error", err,
+						"request", string(httpRequest),
+						"stack", string(debug.Stack()))
 				} else {
 					logger.Error("[Recovery from panic]",
-						zap.Any("error", err),
-						zap.String("request", string(httpRequest)),
-					)
+						"error", err,
+						"request", string(httpRequest))
 				}
 				c.AbortWithStatus(http.StatusInternalServerError)
 			}
