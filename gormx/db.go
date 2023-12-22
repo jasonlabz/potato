@@ -29,10 +29,10 @@ func init() {
 	dbMap = &sync.Map{}
 	dbLogger = NewLogger(
 		&gormLogger.Config{
-			SlowThreshold:             time.Second,     // Slow SQL threshold
-			LogLevel:                  gormLogger.Info, // Log level
-			IgnoreRecordNotFoundError: false,           // Ignore ErrRecordNotFound error for logger
-			Colorful:                  false,           // Disable color
+			SlowThreshold:             time.Second,       // Slow SQL threshold
+			LogLevel:                  gormLogger.Silent, // Log level
+			IgnoreRecordNotFoundError: false,             // Ignore ErrRecordNotFound error for logger
+			Colorful:                  false,             // Disable color
 		},
 	)
 }

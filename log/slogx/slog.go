@@ -21,22 +21,68 @@ var (
 )
 
 func init() {
-	InitLogger(DefaultSlogConfigPath)
+	InitLogger()
+}
+
+type Options struct {
+	configPath string   // 日志配置文件
+	keyList    []string // 自定义context中需要打印的Field字段
+	Level      string   //日志级别
+}
+type Option func(o *Options)
+
+func NewOptions(opts ...Option) *Options {
+	options := &Options{}
+	for _, opt := range opts {
+		opt(options)
+	}
+	return options
+}
+
+func WithLevel(level string) Option {
+	return func(o *Options) {
+		o.Level = level
+	}
+}
+
+func WithField(key string) Option {
+	return func(o *Options) {
+		o.keyList = append(o.keyList, key)
+	}
+}
+
+func WithFields(keys ...string) Option {
+	return func(o *Options) {
+		o.keyList = append(o.keyList, keys...)
+	}
+}
+
+func WithConfigPath(path string) Option {
+	return func(o *Options) {
+		o.configPath = path
+	}
 }
 
 func logger() *slog.Logger {
 	if slogLogger != nil {
 		return slogLogger
 	}
-	InitLogger(DefaultSlogConfigPath)
+	InitLogger()
 	return slogLogger
 }
 
-func InitLogger(filePath string) {
+func InitLogger(opts ...Option) {
+	options := &Options{}
+	for _, opt := range opts {
+		opt(options)
+	}
+	// 自定义context中待打印的字段
+	logField = append(logField, options.keyList...)
+
 	// 读取Slog配置文件
 	var configLoad bool
-	if !configLoad && utils.IsExist(filePath) {
-		provider := yaml.NewConfigProvider(filePath)
+	if !configLoad && options.configPath != "" && utils.IsExist(options.configPath) {
+		provider := yaml.NewConfigProvider(options.configPath)
 		config.AddProviders(DefaultSlogConfigName, provider)
 		configLoad = true
 	}
@@ -60,6 +106,11 @@ func InitLogger(filePath string) {
 	//plog.SetCurrentLogger(plog.LoggerTypeSlog)
 
 	levelConfig := config.GetString(DefaultSlogConfigName, "log_level")
+
+	// 优先程序配置
+	if options.Level != "" {
+		levelConfig = levelConfig
+	}
 	switch levelConfig {
 	case "info":
 		logLevel = slog.LevelInfo

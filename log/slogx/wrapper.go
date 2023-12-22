@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 
@@ -12,6 +13,9 @@ import (
 )
 
 var logField = []string{consts.ContextTraceID, consts.ContextUserID, consts.ContextRemoteAddr}
+
+var defaultLogger *slog.Logger
+var once sync.Once
 
 func slogField(ctx context.Context, contextKey ...string) (fields []any) {
 	for _, key := range contextKey {
@@ -25,6 +29,15 @@ func slogField(ctx context.Context, contextKey ...string) (fields []any) {
 		fields = append(fields, slog.String(key, value))
 	}
 	return
+}
+
+func DefaultLogger() *slog.Logger {
+	if defaultLogger == nil {
+		once.Do(func() {
+			defaultLogger = logger()
+		})
+	}
+	return defaultLogger
 }
 
 func GetLogger(ctx context.Context) *slog.Logger {

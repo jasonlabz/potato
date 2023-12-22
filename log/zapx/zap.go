@@ -22,15 +22,54 @@ var (
 	zapSugaredLogger        *zap.SugaredLogger
 )
 
+type Options struct {
+	configPath string   // 日志配置文件
+	keyList    []string // 自定义context中需要打印的Field字段
+	Level      string   //日志级别
+}
+type Option func(o *Options)
+
+func NewOptions(opts ...Option) *Options {
+	options := &Options{}
+	for _, opt := range opts {
+		opt(options)
+	}
+	return options
+}
+
+func WithLevel(level string) Option {
+	return func(o *Options) {
+		o.Level = level
+	}
+}
+
+func WithField(key string) Option {
+	return func(o *Options) {
+		o.keyList = append(o.keyList, key)
+	}
+}
+
+func WithFields(keys ...string) Option {
+	return func(o *Options) {
+		o.keyList = append(o.keyList, keys...)
+	}
+}
+
+func WithConfigPath(path string) Option {
+	return func(o *Options) {
+		o.configPath = path
+	}
+}
+
 func init() {
-	InitLogger(DefaultZapConfigPath)
+	InitLogger()
 }
 
 func logger() *zap.Logger {
 	if zapLogger != nil {
 		return zapLogger
 	}
-	InitLogger(DefaultZapConfigPath)
+	InitLogger()
 	return zapLogger
 }
 
@@ -38,15 +77,22 @@ func sugaredLogger() *zap.SugaredLogger {
 	if zapSugaredLogger != nil {
 		return zapSugaredLogger
 	}
-	InitLogger(DefaultZapConfigPath)
+	InitLogger()
 	return zapSugaredLogger
 }
 
-func InitLogger(filePath string) {
+func InitLogger(opts ...Option) {
+	options := &Options{}
+	for _, opt := range opts {
+		opt(options)
+	}
+	// 自定义context中待打印的字段
+	logField = append(logField, options.keyList...)
+
 	// 读取zap配置文件
 	var configLoad bool
-	if !configLoad && utils.IsExist(filePath) {
-		provider := yaml.NewConfigProvider(filePath)
+	if !configLoad && options.configPath != "" && utils.IsExist(options.configPath) {
+		provider := yaml.NewConfigProvider(options.configPath)
 		config.AddProviders(DefaultZapConfigName, provider)
 		configLoad = true
 	}
@@ -71,6 +117,10 @@ func InitLogger(filePath string) {
 	//获取编码器
 	encoder := getEncoder()
 	levelConfig := config.GetString(DefaultZapConfigName, "log_level")
+	// 优先程序配置
+	if options.Level != "" {
+		levelConfig = levelConfig
+	}
 	var loglevel zapcore.Level
 	switch levelConfig {
 	case "info":
@@ -187,9 +237,9 @@ func getHighLevelWriterSyncer() zapcore.WriteSyncer {
 	filename := func() string {
 		getString := config.GetString(DefaultZapConfigName, "log_file_conf.log_file_path")
 		if getString == "" {
-			getString = "./log/server.wf.log"
+			getString = "./log/server.log.wf"
 		} else {
-			getString += ".error"
+			getString += ".wf"
 		}
 		return getString
 	}()

@@ -2,8 +2,8 @@ package zapx
 
 import (
 	"context"
-
 	"go.uber.org/zap"
+	"sync"
 
 	"github.com/jasonlabz/potato/core/consts"
 	"github.com/jasonlabz/potato/core/utils"
@@ -15,12 +15,12 @@ type loggerWrapper struct {
 	logger *zap.Logger
 }
 
+var defaultLogger *loggerWrapper
+var once sync.Once
+
 func zapField(ctx context.Context, contextKey ...string) (fields []zap.Field) {
 	for _, key := range contextKey {
 		value := utils.GetString(ctx.Value(key))
-		//if value == "" && key == consts.ContextTraceID {
-		//	value = strings.ReplaceAll(uuid.New().String(), consts.SignDash, consts.EmptyString)
-		//}
 		if value == "" {
 			continue
 		}
@@ -29,32 +29,15 @@ func zapField(ctx context.Context, contextKey ...string) (fields []zap.Field) {
 	return
 }
 
-func Any(key string, val any) zap.Field {
-	return zap.Any(key, val)
-}
-
-func String(key, val string) zap.Field {
-	return zap.String(key, val)
-}
-
-func Int64(key string, val int64) zap.Field {
-	return zap.Int64(key, val)
-}
-
-func Int32(key string, val int32) zap.Field {
-	return zap.Int32(key, val)
-}
-
-func Int(key string, val int) zap.Field {
-	return zap.Int(key, val)
-}
-
-func Float64(key string, val float64) zap.Field {
-	return zap.Float64(key, val)
-}
-
-func Float32(key string, val float32) zap.Field {
-	return zap.Float32(key, val)
+func DefaultLogger() *loggerWrapper {
+	if defaultLogger == nil {
+		once.Do(func() {
+			defaultLogger = &loggerWrapper{
+				logger: logger(),
+			}
+		})
+	}
+	return defaultLogger
 }
 
 func GetLogger(ctx context.Context) *loggerWrapper {
@@ -135,4 +118,32 @@ func (l *loggerWrapper) checkFields(fields []any) (checked []zap.Field) {
 	}
 
 	return
+}
+
+func Any(key string, val any) zap.Field {
+	return zap.Any(key, val)
+}
+
+func String(key, val string) zap.Field {
+	return zap.String(key, val)
+}
+
+func Int64(key string, val int64) zap.Field {
+	return zap.Int64(key, val)
+}
+
+func Int32(key string, val int32) zap.Field {
+	return zap.Int32(key, val)
+}
+
+func Int(key string, val int) zap.Field {
+	return zap.Int(key, val)
+}
+
+func Float64(key string, val float64) zap.Field {
+	return zap.Float64(key, val)
+}
+
+func Float32(key string, val float32) zap.Field {
+	return zap.Float32(key, val)
 }

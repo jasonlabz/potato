@@ -6,29 +6,27 @@ import (
 	"fmt"
 	"time"
 
-	gormLogger "gorm.io/gorm/logger"
-	"gorm.io/gorm/utils"
-
 	"github.com/jasonlabz/potato/log"
+	gormLogger "gorm.io/gorm/logger"
 )
 
 var (
-	infoStr      = "[DB] %s\n[info] "
-	warnStr      = "[DB] %s\n[warn] "
-	errStr       = "[DB] %s\n[error] "
-	traceStr     = "[DB] %s\n[%.3fms] [rows:%v] %s"
-	traceWarnStr = "[DB] %s %s\n[%.3fms] [rows:%v] %s"
-	traceErrStr  = "[DB] %s %s\n[%.3fms] [rows:%v] %s"
+	infoStr      = "[DB] [info] "
+	warnStr      = "[DB] [warn] "
+	errStr       = "[DB] [error] "
+	traceStr     = "[DB] [%.3fms] [rows:%v] %s"
+	traceWarnStr = "[DB] %s [%.3fms] [rows:%v] %s"
+	traceErrStr  = "[DB] %s [%.3fms] [rows:%v] %s"
 )
 
 func NewLogger(config *gormLogger.Config) gormLogger.Interface {
 	if config.Colorful {
-		infoStr = gormLogger.Green + "%s\n" + gormLogger.Reset + gormLogger.Green + "[info] " + gormLogger.Reset
-		warnStr = gormLogger.BlueBold + "%s\n" + gormLogger.Reset + gormLogger.Magenta + "[warn] " + gormLogger.Reset
-		errStr = gormLogger.Magenta + "%s\n" + gormLogger.Reset + gormLogger.Red + "[error] " + gormLogger.Reset
-		traceStr = gormLogger.Green + "%s\n" + gormLogger.Reset + gormLogger.Yellow + "[%.3fms] " + gormLogger.BlueBold + "[rows:%v]" + gormLogger.Reset + " %s"
-		traceWarnStr = gormLogger.Green + "%s " + gormLogger.Yellow + "%s\n" + gormLogger.Reset + gormLogger.RedBold + "[%.3fms] " + gormLogger.Yellow + "[rows:%v]" + gormLogger.Magenta + " %s" + gormLogger.Reset
-		traceErrStr = gormLogger.RedBold + "%s " + gormLogger.MagentaBold + "%s\n" + gormLogger.Reset + gormLogger.Yellow + "[%.3fms] " + gormLogger.BlueBold + "[rows:%v]" + gormLogger.Reset + " %s"
+		infoStr = "[DB] " + gormLogger.Green + "[info] " + gormLogger.Reset
+		warnStr = "[DB] " + gormLogger.Magenta + "[warn] " + gormLogger.Reset
+		errStr = "[DB] " + gormLogger.Red + "[error] " + gormLogger.Reset
+		traceStr = "[DB] " + gormLogger.Yellow + "[%.3fms] " + gormLogger.BlueBold + "[rows:%v]" + gormLogger.Reset + " %s"
+		traceWarnStr = "[DB] " + gormLogger.Yellow + "%s\n" + gormLogger.Reset + gormLogger.RedBold + "[%.3fms] " + gormLogger.Yellow + "[rows:%v]" + gormLogger.Magenta + " %s" + gormLogger.Reset
+		traceErrStr = "[DB] " + gormLogger.MagentaBold + "%s\n" + gormLogger.Reset + gormLogger.Yellow + "[%.3fms] " + gormLogger.BlueBold + "[rows:%v]" + gormLogger.Reset + " %s"
 	}
 	return &logger{
 		Config:          config,
@@ -58,21 +56,21 @@ func (l *logger) LogMode(level gormLogger.LogLevel) gormLogger.Interface {
 // Info print info
 func (l *logger) Info(ctx context.Context, msg string, data ...interface{}) {
 	if l.LogLevel >= gormLogger.Info {
-		log.GetCurrentGormLogger(ctx).Info(fmt.Sprintf(l.infoLogMsg+msg, append([]interface{}{utils.FileWithLineNum()}, data...)...))
+		log.GetCurrentGormLogger(ctx).Info(fmt.Sprintf(l.infoLogMsg+msg, append([]interface{}{}, data...)...))
 	}
 }
 
 // Warn print warn messages
 func (l *logger) Warn(ctx context.Context, msg string, data ...interface{}) {
 	if l.LogLevel >= gormLogger.Warn {
-		log.GetCurrentGormLogger(ctx).Warn(fmt.Sprintf(l.warnLogMsg+msg, append([]interface{}{utils.FileWithLineNum()}, data...)...))
+		log.GetCurrentGormLogger(ctx).Warn(fmt.Sprintf(l.warnLogMsg+msg, append([]interface{}{}, data...)...))
 	}
 }
 
 // Error print error messages
 func (l *logger) Error(ctx context.Context, msg string, data ...interface{}) {
 	if l.LogLevel >= gormLogger.Error {
-		log.GetCurrentGormLogger(ctx).Error(fmt.Sprintf(l.errLogMsg+msg, append([]interface{}{utils.FileWithLineNum()}, data...)...))
+		log.GetCurrentGormLogger(ctx).Error(fmt.Sprintf(l.errLogMsg+msg, append([]interface{}{}, data...)...))
 	}
 }
 
@@ -86,24 +84,24 @@ func (l *logger) Trace(ctx context.Context, begin time.Time, fc func() (string, 
 	case err != nil && l.LogLevel >= gormLogger.Error && (!errors.Is(err, gormLogger.ErrRecordNotFound) || !l.IgnoreRecordNotFoundError):
 		sql, rows := fc()
 		if rows == -1 {
-			log.GetCurrentGormLogger(ctx).Error(fmt.Sprintf(l.traceErrLogMsg, utils.FileWithLineNum(), err, float64(elapsed.Nanoseconds())/1e6, int64(-1), sql))
+			log.GetCurrentGormLogger(ctx).Error(fmt.Sprintf(l.traceErrLogMsg, err, float64(elapsed.Nanoseconds())/1e6, int64(-1), sql))
 		} else {
-			log.GetCurrentGormLogger(ctx).Error(fmt.Sprintf(l.traceErrLogMsg, utils.FileWithLineNum(), err, float64(elapsed.Nanoseconds())/1e6, rows, sql))
+			log.GetCurrentGormLogger(ctx).Error(fmt.Sprintf(l.traceErrLogMsg, err, float64(elapsed.Nanoseconds())/1e6, rows, sql))
 		}
 	case elapsed > l.SlowThreshold && l.SlowThreshold != 0 && l.LogLevel >= gormLogger.Warn:
 		sql, rows := fc()
 		slowLog := fmt.Sprintf("SLOW SQL >= %v", l.SlowThreshold)
 		if rows == -1 {
-			log.GetCurrentGormLogger(ctx).Warn(fmt.Sprintf(l.traceWarnLogMsg, utils.FileWithLineNum(), slowLog, float64(elapsed.Nanoseconds())/1e6, int64(-1), sql))
+			log.GetCurrentGormLogger(ctx).Warn(fmt.Sprintf(l.traceWarnLogMsg, slowLog, float64(elapsed.Nanoseconds())/1e6, int64(-1), sql))
 		} else {
-			log.GetCurrentGormLogger(ctx).Warn(fmt.Sprintf(l.traceWarnLogMsg, utils.FileWithLineNum(), slowLog, float64(elapsed.Nanoseconds())/1e6, rows, sql))
+			log.GetCurrentGormLogger(ctx).Warn(fmt.Sprintf(l.traceWarnLogMsg, slowLog, float64(elapsed.Nanoseconds())/1e6, rows, sql))
 		}
 	case l.LogLevel == gormLogger.Info:
 		sql, rows := fc()
 		if rows == -1 {
-			log.GetCurrentGormLogger(ctx).Info(fmt.Sprintf(l.traceLogMsg, utils.FileWithLineNum(), float64(elapsed.Nanoseconds())/1e6, int64(-1), sql))
+			log.GetCurrentGormLogger(ctx).Info(fmt.Sprintf(l.traceLogMsg, float64(elapsed.Nanoseconds())/1e6, int64(-1), sql))
 		} else {
-			log.GetCurrentGormLogger(ctx).Info(fmt.Sprintf(l.traceLogMsg, utils.FileWithLineNum(), float64(elapsed.Nanoseconds())/1e6, rows, sql))
+			log.GetCurrentGormLogger(ctx).Info(fmt.Sprintf(l.traceLogMsg, float64(elapsed.Nanoseconds())/1e6, rows, sql))
 		}
 	}
 }
