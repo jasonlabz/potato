@@ -14,23 +14,23 @@ type Options struct {
 	customFieldMap map[string]func(ctx *gin.Context) string
 }
 
-type Option func(options Options)
+type Option func(options *Options)
 
 func WithHeaderField(headerMap map[string]string) Option {
-	return func(options Options) {
+	return func(options *Options) {
 		options.headerMap = headerMap
 	}
 }
 
 func WithCustomField(customFieldMap map[string]func(ctx *gin.Context) string) Option {
-	return func(options Options) {
+	return func(options *Options) {
 		options.customFieldMap = customFieldMap
 	}
 }
 
 func SetContext(opts ...Option) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		var options = Options{}
+		var options = &Options{}
 		for _, opt := range opts {
 			opt(options)
 		}
