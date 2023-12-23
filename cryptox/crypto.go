@@ -3,8 +3,8 @@ package cryptox
 type CryptoType int
 
 const (
-	CryptoTypeAES = iota
-	CryptoTypeDES
-	CryptoTypeRSA
-	CryptoTypeHMAC
+	CryptoTypeAES  = "aes"
+	CryptoTypeDES  = "des"
+	CryptoTypeRSA  = "rsa"
+	CryptoTypeHMAC = "hmac"
 )

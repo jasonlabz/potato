@@ -1,12 +1,13 @@
 package utils
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
+	"math/rand"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -72,22 +73,6 @@ func CopyStruct(src, dst interface{}) error {
 		err = sonic.Unmarshal(tmp, dst)
 		return err
 	}
-}
-
-// ReflectCopy 利用reflect进行深拷贝
-func ReflectCopy(src, dst interface{}) error {
-	srcVal := reflect.ValueOf(src).Elem()
-	dstVal := reflect.ValueOf(dst).Elem()
-	for i := 0; i < srcVal.NumField(); i++ {
-		val := srcVal.Field(i)
-		name := srcVal.Type().Field(i).Name
-		dstValue := dstVal.FieldByName(name)
-		if dstValue.IsValid() == false {
-			return errors.New("field cannot find")
-		}
-		dstValue.Set(val)
-	}
-	return nil
 }
 
 // IsExist 判断所给路径文件/文件夹是否存在
@@ -190,4 +175,65 @@ func WalkDir(dirPth, suffix string) (files []string, err error) {
 	})
 
 	return files, err
+}
+
+// RandLow 随机字符串，包含 1~9 和 a~z - [i,l,o]
+func RandLow(n int) []byte {
+	r := rand.New(rand.NewSource(time.Now().Unix()))
+
+	if n <= 0 {
+		return []byte{}
+	}
+	b := make([]byte, n)
+	arc := uint8(0)
+	if _, err := r.Read(b[:]); err != nil {
+		return []byte{}
+	}
+	for i, x := range b {
+		arc = x & 31
+		b[i] = letters[arc]
+	}
+	return b
+}
+
+// RandUp 随机字符串，包含 英文字母和数字附加=_两个符号
+func RandUp(n int) []byte {
+	r := rand.New(rand.NewSource(time.Now().Unix()))
+
+	if n <= 0 {
+		return []byte{}
+	}
+	b := make([]byte, n)
+	arc := uint8(0)
+	if _, err := r.Read(b[:]); err != nil {
+		return []byte{}
+	}
+	for i, x := range b {
+		arc = x & 63
+		b[i] = longLetters[arc]
+	}
+	return b
+}
+
+// RandHex 生成16进制格式的随机字符串
+func RandHex(n int) []byte {
+	r := rand.New(rand.NewSource(time.Now().Unix()))
+
+	if n <= 0 {
+		return []byte{}
+	}
+	var need int
+	if n&1 == 0 { // even
+		need = n
+	} else { // odd
+		need = n + 1
+	}
+	size := need / 2
+	dst := make([]byte, need)
+	src := dst[size:]
+	if _, err := r.Read(src[:]); err != nil {
+		return []byte{}
+	}
+	hex.Encode(dst, src)
+	return dst[:n]
 }
