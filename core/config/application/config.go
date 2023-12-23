@@ -1,7 +1,6 @@
 package application
 
 import (
-	"fmt"
 	"log"
 	"os"
 
@@ -133,8 +132,7 @@ func LoadConfigFromJson(configPath string) {
 func LoadConfigFromIni(configPath string) {
 	err := ini.MapTo(applicationConfig, configPath)
 	if err != nil {
-		log.Println(err)
-		return
+		panic(err)
 	}
 }
 
@@ -145,8 +143,7 @@ func LoadConfigFromYaml(configPath string) {
 	}
 	err = yaml.Unmarshal(file, applicationConfig)
 	if err != nil {
-		fmt.Println(err)
-		return
+		panic(err)
 	}
 }
 
@@ -174,7 +171,7 @@ func ParseConfigByViper(configPath, configName, configType string) {
 	})
 	//直接反序列化为Struct
 	if err := v.Unmarshal(applicationConfig); err != nil {
-		log.Println(err)
+		panic(err)
 	}
 	return
 }

@@ -16,7 +16,7 @@ import (
 
 var (
 	DefaultZapConfigName    = "default_zap_config"
-	DefaultZapConfigPath    = "./conf/log/logger.yaml"
+	DefaultZapConfigPath    = "./conf/application.yaml"
 	DefaultZapConfigPathBak = "./conf/logger.yaml"
 	zapLogger               *zap.Logger
 	zapSugaredLogger        *zap.SugaredLogger
@@ -112,11 +112,9 @@ func InitLogger(opts ...Option) {
 	if !configLoad {
 		log.Printf("zapx log init by default config")
 	}
-	// 设置当前初始化日志zap，方便gorm等其他组件使用zap打印日志
-	//plog.SetCurrentLogger(plog.LoggerTypeZap)
-	//获取编码器
-	encoder := getEncoder()
-	levelConfig := config.GetString(DefaultZapConfigName, "log_level")
+
+	levelConfig := config.GetString(DefaultZapConfigName, "log.log_level")
+	jsonLog := config.GetBool(DefaultZapConfigName, "log.json_log")
 	// 优先程序配置
 	if options.Level != "" {
 		levelConfig = levelConfig
@@ -147,10 +145,13 @@ func InitLogger(opts ...Option) {
 	//highLevel文件WriteSyncer
 	highLevelFileWriteSyncer := getHighLevelWriterSyncer()
 
-	writeFile := config.GetBool(DefaultZapConfigName, "write_file")
-	//生成core
-	//multiWriteSyncer := zapcore.NewMultiWriteSyncer(writerSyncer, zapcore.AddSync(os.Stdout)) //AddSync将io.Writer转换成WriteSyncer的类型
-	//同时输出到控制台 和 指定的日志文件中
+	writeFile := config.GetBool(DefaultZapConfigName, "log.write_file")
+
+	// 获取编码器
+	encoder := getEncoder(jsonLog)
+	// 生成core
+	// 同时输出到控制台 和 指定的日志文件中
+	// AddSync将io.Writer转换成WriteSyncer的类型
 	lowLevelFileCore := zapcore.NewCore(encoder, func() zapcore.WriteSyncer {
 		if writeFile {
 			return zapcore.NewMultiWriteSyncer(lowLevelFileWriteSyncer, zapcore.AddSync(os.Stdout))
@@ -177,7 +178,7 @@ func InitLogger(opts ...Option) {
 }
 
 // core 三个参数之  Encoder 获取编码器
-func getEncoder() zapcore.Encoder {
+func getEncoder(jsonLog bool) zapcore.Encoder {
 	//自定义编码配置
 	encoderConfig := zap.NewProductionEncoderConfig()
 	//encoderConfig := zap.NewDevelopmentEncoderConfig()
@@ -186,41 +187,43 @@ func getEncoder() zapcore.Encoder {
 	//encoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder //按级别显示不同颜色，不需要的话取值zapcore.CapitalLevelEncoder就可以了
 	encoderConfig.EncodeCaller = zapcore.ShortCallerEncoder //显示完整文件路径
 	encoderConfig.EncodeDuration = zapcore.SecondsDurationEncoder
+	if jsonLog {
+		return zapcore.NewJSONEncoder(encoderConfig) // json 格式打印日志
+	}
 	return zapcore.NewConsoleEncoder(encoderConfig) // console 格式打印日志
-	//return zapcore.NewJSONEncoder(encoderConfig)     // json 格式打印日志
 }
 
 // core 三个参数之  日志输出路径
 func getLowLevelWriterSyncer() zapcore.WriteSyncer {
 	filename := func() string {
-		getString := config.GetString(DefaultZapConfigName, "log_file_conf.log_file_path")
+		getString := config.GetString(DefaultZapConfigName, "log.log_file_conf.log_file_path")
 		if getString == "" {
 			return "./log/server.log"
 		}
 		return getString
 	}()
 	maxSize := func() int {
-		geInt := config.GetInt(DefaultZapConfigName, "log_file_conf.max_size")
+		geInt := config.GetInt(DefaultZapConfigName, "log.log_file_conf.max_size")
 		if geInt == 0 {
 			return 300
 		}
 		return geInt
 	}()
 	maxAge := func() int {
-		geInt := config.GetInt(DefaultZapConfigName, "log_file_conf.max_age")
+		geInt := config.GetInt(DefaultZapConfigName, "log.log_file_conf.max_age")
 		if geInt == 0 {
 			return 28
 		}
 		return geInt
 	}()
 	maxBackups := func() int {
-		geInt := config.GetInt(DefaultZapConfigName, "log_file_conf.max_backups")
+		geInt := config.GetInt(DefaultZapConfigName, "log.log_file_conf.max_backups")
 		if geInt == 0 {
 			return 20
 		}
 		return geInt
 	}()
-	compress := config.GetBool(DefaultZapConfigName, "log_file_conf.compress")
+	compress := config.GetBool(DefaultZapConfigName, "log.log_file_conf.compress")
 
 	//引入第三方库 Lumberjack 加入日志切割功能
 	infoLumberIO := &lumberjack.Logger{
@@ -235,7 +238,7 @@ func getLowLevelWriterSyncer() zapcore.WriteSyncer {
 
 func getHighLevelWriterSyncer() zapcore.WriteSyncer {
 	filename := func() string {
-		getString := config.GetString(DefaultZapConfigName, "log_file_conf.log_file_path")
+		getString := config.GetString(DefaultZapConfigName, "log.log_file_conf.log_file_path")
 		if getString == "" {
 			getString = "./log/server.log.wf"
 		} else {
@@ -244,27 +247,27 @@ func getHighLevelWriterSyncer() zapcore.WriteSyncer {
 		return getString
 	}()
 	maxSize := func() int {
-		geInt := config.GetInt(DefaultZapConfigName, "log_file_conf.max_size")
+		geInt := config.GetInt(DefaultZapConfigName, "log.log_file_conf.max_size")
 		if geInt == 0 {
 			return 300
 		}
 		return geInt
 	}()
 	maxAge := func() int {
-		geInt := config.GetInt(DefaultZapConfigName, "log_file_conf.max_age")
+		geInt := config.GetInt(DefaultZapConfigName, "log.log_file_conf.max_age")
 		if geInt == 0 {
 			return 28
 		}
 		return geInt
 	}()
 	maxBackups := func() int {
-		geInt := config.GetInt(DefaultZapConfigName, "log_file_conf.max_backups")
+		geInt := config.GetInt(DefaultZapConfigName, "log.log_file_conf.max_backups")
 		if geInt == 0 {
 			return 20
 		}
 		return geInt
 	}()
-	compress := config.GetBool(DefaultZapConfigName, "log_file_conf.compress")
+	compress := config.GetBool(DefaultZapConfigName, "log.log_file_conf.compress")
 
 	//引入第三方库 Lumberjack 加入日志切割功能
 	lumberWriteSyncer := &lumberjack.Logger{

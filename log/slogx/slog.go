@@ -105,11 +105,11 @@ func InitLogger(opts ...Option) {
 	// 设置当前初始化日志zap，方便gorm等其他组件使用zap打印日志
 	//plog.SetCurrentLogger(plog.LoggerTypeSlog)
 
-	levelConfig := config.GetString(DefaultSlogConfigName, "log_level")
+	levelConfig := config.GetString(DefaultSlogConfigName, "log.log_level")
 
 	// 优先程序配置
 	if options.Level != "" {
-		levelConfig = levelConfig
+		levelConfig = options.Level
 	}
 	switch levelConfig {
 	case "info":
@@ -126,10 +126,11 @@ func InitLogger(opts ...Option) {
 	//lowLevel文件WriteSyncer
 	lowLevelFileWriteSyncer := getLowLevelWriterSyncer()
 
-	writeFile := config.GetBool(DefaultSlogConfigName, "write_file")
-	jsonLog := config.GetBool(DefaultSlogConfigName, "json_log")
+	writeFile := config.GetBool(DefaultSlogConfigName, "log.write_file")
+	jsonLog := config.GetBool(DefaultSlogConfigName, "log.json_log")
 	var handler slog.Handler
 	if jsonLog {
+		slog.Default()
 		handler = slog.NewJSONHandler(func() zapcore.WriteSyncer {
 			if writeFile {
 				return zapcore.NewMultiWriteSyncer(lowLevelFileWriteSyncer, zapcore.AddSync(os.Stdout))
@@ -159,34 +160,34 @@ func InitLogger(opts ...Option) {
 // core 三个参数之  日志输出路径
 func getLowLevelWriterSyncer() zapcore.WriteSyncer {
 	filename := func() string {
-		getString := config.GetString(DefaultSlogConfigName, "log_file_conf.log_file_path")
+		getString := config.GetString(DefaultSlogConfigName, "log.log_file_conf.log_file_path")
 		if getString == "" {
 			getString = "./log/server.log"
 		}
 		return getString
 	}()
 	maxSize := func() int {
-		geInt := config.GetInt(DefaultSlogConfigName, "log_file_conf.max_size")
+		geInt := config.GetInt(DefaultSlogConfigName, "log.log_file_conf.max_size")
 		if geInt == 0 {
 			return 300
 		}
 		return geInt
 	}()
 	maxAge := func() int {
-		geInt := config.GetInt(DefaultSlogConfigName, "log_file_conf.max_age")
+		geInt := config.GetInt(DefaultSlogConfigName, "log.log_file_conf.max_age")
 		if geInt == 0 {
 			return 28
 		}
 		return geInt
 	}()
 	maxBackups := func() int {
-		geInt := config.GetInt(DefaultSlogConfigName, "log_file_conf.max_backups")
+		geInt := config.GetInt(DefaultSlogConfigName, "log.log_file_conf.max_backups")
 		if geInt == 0 {
 			return 20
 		}
 		return geInt
 	}()
-	compress := config.GetBool(DefaultSlogConfigName, "log_file_conf.compress")
+	compress := config.GetBool(DefaultSlogConfigName, "log.log_file_conf.compress")
 
 	//引入第三方库 Lumberjack 加入日志切割功能
 	infoLumberIO := &lumberjack.Logger{
