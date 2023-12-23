@@ -7,14 +7,15 @@ import (
 	"encoding/hex"
 )
 
-// DefaultAESKey aes默认秘钥，建议使用配置文件方式
-var DefaultAESKey = "wVPDRAZsOEKZu4s4"
+// defaultAESKey aes默认秘钥，建议使用配置文件方式
+var defaultAESKey = "wVPDRAZsOEKZu4s4"
 var crypto *CryptoAES
 
 func init() {
-	crypto = NewAESCrypto([]byte(DefaultAESKey))
+	crypto = NewAESCrypto([]byte(defaultAESKey))
 }
 
+// SetAESCrypto 根据新的秘钥赋值
 func SetAESCrypto(aesCrypto *CryptoAES) {
 	crypto = aesCrypto
 }

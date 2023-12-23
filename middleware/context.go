@@ -9,8 +9,45 @@ import (
 	"github.com/jasonlabz/potato/core/consts"
 )
 
-func SetContext() gin.HandlerFunc {
+type Options struct {
+	headerMap      map[string]string
+	customFieldMap map[string]func(ctx *gin.Context) string
+}
+
+type Option func(options Options)
+
+func WithHeaderField(headerMap map[string]string) Option {
+	return func(options Options) {
+		options.headerMap = headerMap
+	}
+}
+
+func WithCustomField(customFieldMap map[string]func(ctx *gin.Context) string) Option {
+	return func(options Options) {
+		options.customFieldMap = customFieldMap
+	}
+}
+
+func SetContext(opts ...Option) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
+		var options = Options{}
+		for _, opt := range opts {
+			opt(options)
+		}
+
+		for headerKey, contextKey := range options.headerMap {
+			if headerKey == "" || contextKey == "" {
+				continue
+			}
+			value := ctx.Request.Header.Get(headerKey)
+			ctx.Set(contextKey, value)
+		}
+
+		for contextKey, handler := range options.customFieldMap {
+			value := handler(ctx)
+			ctx.Set(contextKey, value)
+		}
+
 		traceID := ctx.Request.Header.Get(consts.HeaderRequestID)
 		if traceID == "" {
 			traceID = strings.ReplaceAll(uuid.New().String(), consts.SignDash, consts.EmptyString)

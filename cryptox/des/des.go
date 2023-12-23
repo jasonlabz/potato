@@ -7,14 +7,15 @@ import (
 	"encoding/hex"
 )
 
-// DefaultDESKey des默认秘钥，建议使用配置文件方式
-var DefaultDESKey = "j2nyYuA="
+// defaultDESKey des默认秘钥，建议使用配置文件方式
+var defaultDESKey = "j2nyYuA="
 var crypto *CryptoDES
 
 func init() {
-	crypto = NewDESCrypto([]byte(DefaultDESKey))
+	crypto = NewDESCrypto([]byte(defaultDESKey))
 }
 
+// SetDESCrypto 根据新的秘钥赋值
 func SetDESCrypto(desCrypto *CryptoDES) {
 	crypto = desCrypto
 }
