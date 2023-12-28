@@ -2,8 +2,10 @@ package zapx
 
 import (
 	"context"
-	"go.uber.org/zap"
+	"fmt"
 	"sync"
+
+	"go.uber.org/zap"
 
 	"github.com/jasonlabz/potato/core/consts"
 	"github.com/jasonlabz/potato/core/utils"
@@ -76,20 +78,40 @@ func (l *loggerWrapper) Info(msg string, fields ...any) {
 	l.logger.Info(msg, l.checkFields(fields)...)
 }
 
+func (l *loggerWrapper) Infof(msg string, args ...any) {
+	l.logger.Info(fmt.Sprintf(msg, args...))
+}
+
 func (l *loggerWrapper) Warn(msg string, fields ...any) {
 	l.logger.Warn(msg, l.checkFields(fields)...)
+}
+
+func (l *loggerWrapper) Warnf(msg string, args ...any) {
+	l.logger.Warn(fmt.Sprintf(msg, args...))
 }
 
 func (l *loggerWrapper) Error(msg string, fields ...any) {
 	l.logger.Error(msg, l.checkFields(fields)...)
 }
 
+func (l *loggerWrapper) Errorf(msg string, args ...any) {
+	l.logger.Error(fmt.Sprintf(msg, args...))
+}
+
 func (l *loggerWrapper) Panic(msg string, fields ...any) {
 	l.logger.Panic(msg, l.checkFields(fields)...)
 }
 
+func (l *loggerWrapper) Panicf(msg string, args ...any) {
+	l.logger.Panic(fmt.Sprintf(msg, args...))
+}
+
 func (l *loggerWrapper) Fatal(msg string, fields ...any) {
 	l.logger.Fatal(msg, l.checkFields(fields)...)
+}
+
+func (l *loggerWrapper) Fatalf(msg string, args ...any) {
+	l.logger.Fatal(fmt.Sprintf(msg, args...))
 }
 
 func (l *loggerWrapper) Sync() {

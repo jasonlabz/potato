@@ -6,7 +6,7 @@ import (
 	"github.com/jasonlabz/potato/log/zapx"
 )
 
-type potatoLogger interface {
+type PotatoLogger interface {
 	Info(string, ...any)
 	Warn(string, ...any)
 	Error(string, ...any)
@@ -27,7 +27,7 @@ func SetCurrentLogger(loggerType LoggerType) {
 	currentLogger = loggerType
 }
 
-func GetCurrentLogger(ctx context.Context) potatoLogger {
+func GetCurrentLogger(ctx context.Context) PotatoLogger {
 	switch currentLogger {
 	case LoggerTypeZap:
 		return zapx.GetLogger(ctx)
@@ -38,7 +38,7 @@ func GetCurrentLogger(ctx context.Context) potatoLogger {
 	}
 }
 
-func GetCurrentGormLogger(ctx context.Context) potatoLogger {
+func GetCurrentGormLogger(ctx context.Context) PotatoLogger {
 	switch currentLogger {
 	case LoggerTypeZap:
 		return zapx.GormLogger(ctx)

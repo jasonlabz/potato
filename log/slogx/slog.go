@@ -31,14 +31,6 @@ type Options struct {
 }
 type Option func(o *Options)
 
-func NewOptions(opts ...Option) *Options {
-	options := &Options{}
-	for _, opt := range opts {
-		opt(options)
-	}
-	return options
-}
-
 func WithLevel(level string) Option {
 	return func(o *Options) {
 		o.Level = level

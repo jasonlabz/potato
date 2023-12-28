@@ -27,5 +27,5 @@ const (
 var DatabaseDsnMap = map[DatabaseType]string{
 	DatabaseTypeMySQL:     "%s:%s@tcp(%s:%d)/%s?parseTime=True&loc=Local",
 	DatabaseTypePostgres:  "user=%s password=%s host=%s port=%d dbname=%s sslmode=disable TimeZone=Asia/Shanghai",
-	DatabaseTypeSqlserver: "user id=%s;password=%s;server=%s;port=%d;database=%s",
+	DatabaseTypeSqlserver: "user id=%s;password=%s;server=%s;port=%d;database=%s;encrypt=disable",
 }
