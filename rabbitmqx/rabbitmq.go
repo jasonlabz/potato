@@ -18,8 +18,9 @@ import (
 )
 
 const (
-	DefaultRetryTimes = 5 * time.Second
-	Closed            = 1
+	DefaultRetryTimes        = 5 * time.Second
+	DefaultConsumeRetryTimes = 3 * time.Second
+	Closed                   = 1
 )
 
 type ModeType string
@@ -74,13 +75,14 @@ type QueueExchange struct {
 }
 
 type RabbitOperator struct {
-	name    string
-	config  *MQConfig
-	client  *RabbitMQClient
-	closeCh chan bool
-	isReady bool
-	closed  int32
-	mu      sync.Mutex
+	name          string
+	config        *MQConfig
+	client        *RabbitMQClient
+	closeCh       chan bool
+	notifyAllChan chan bool
+	isReady       bool
+	closed        int32
+	mu            sync.Mutex
 }
 
 type RabbitMQClient struct {
@@ -110,6 +112,7 @@ func (op *RabbitOperator) InitRabbitMQ(ctx context.Context, config *MQConfig) (e
 		closeConnNotify: make(chan *amqp.Error, 1),
 	}
 	op.closeCh = make(chan bool)
+	op.notifyAllChan = make(chan bool)
 	op.name = fmt.Sprintf("rmq_%v", rand.Int31())
 
 	// validate config param
@@ -186,6 +189,10 @@ func (op *RabbitOperator) tryReConnect() {
 			return
 		case <-op.client.closeConnNotify:
 			op.isReady = false
+			op.client.exchangeCh = sync.Map{}
+			op.client.queueCh = sync.Map{}
+			// notify all channel retry init
+			close(op.notifyAllChan)
 			logger.Error(fmt.Sprintf("rabbitmq is disconnect, retrying..."))
 		case <-timer.C:
 
@@ -263,8 +270,7 @@ type PushMsg struct {
 	bindingKeyMap map[string]string
 	routingKey    string
 	queueName     string
-	priority      uint8
-	content       []byte
+	amqp.Publishing
 }
 
 func (p *PushMsg) Validate() {
@@ -289,22 +295,22 @@ func (p *PushMsg) Validate() {
 	}
 
 	// 限制优先级为 0~10
-	if p.priority > 10 {
-		p.priority = 10
+	if p.Priority > 10 {
+		p.Priority = 10
 	}
 }
 
-func (p *PushMsg) Priority(priority uint8) *PushMsg {
-	p.priority = priority
+func (p *PushMsg) SetPriority(priority uint8) *PushMsg {
+	p.Priority = priority
 	return p
 }
 
-func (p *PushMsg) ExchangeName(exchangeName string) *PushMsg {
+func (p *PushMsg) SetExchangeName(exchangeName string) *PushMsg {
 	p.exchangeName = exchangeName
 	return p
 }
 
-func (p *PushMsg) ExchangeType(exchangeType ExchangeType) *PushMsg {
+func (p *PushMsg) SetExchangeType(exchangeType ExchangeType) *PushMsg {
 	p.exchangeType = exchangeType
 	return p
 }
@@ -320,18 +326,18 @@ func (p *PushMsg) BindQueue(queueName, bindingKey string) *PushMsg {
 	return p
 }
 
-func (p *PushMsg) RoutingKey(routingKey string) *PushMsg {
+func (p *PushMsg) SetRoutingKey(routingKey string) *PushMsg {
 	p.routingKey = routingKey
 	return p
 }
 
-func (p *PushMsg) QueueName(queueName string) *PushMsg {
+func (p *PushMsg) SetQueueName(queueName string) *PushMsg {
 	p.queueName = queueName
 	return p
 }
 
-func (p *PushMsg) Msg(msg []byte) *PushMsg {
-	p.content = msg
+func (p *PushMsg) SetMsg(msg []byte) *PushMsg {
+	p.Body = msg
 	return p
 }
 
@@ -346,12 +352,36 @@ func WithMaxPriority(priority int) ArgOption {
 	}
 }
 
-func (op *RabbitOperator) PushMessage(ctx context.Context, msg *PushMsg, args ...ArgOption) (err error) {
+func (op *RabbitOperator) Produce(ctx context.Context, msg *PushMsg, args ...ArgOption) (err error) {
 	logger := log.GetCurrentLogger(ctx)
-	if !op.isReady {
-		logger.Error("rabbitmq connection is not ready, push cancel")
-		return errors.New("connection is not ready")
+	timer := time.NewTimer(DefaultRetryTimes)
+	defer timer.Stop()
+	for {
+		if !op.isReady {
+			logger.Error("rabbitmq connection is not ready, push cancel")
+			err = errors.New("connection is not ready")
+			return
+		}
+		err = op.pushCore(ctx, msg, args...)
+		if err != nil {
+			select {
+			case <-op.closeCh:
+				logger.Error(fmt.Sprintf("[push]mq closed, push msg cancel"))
+				err = errors.New("rabbitmq connection closed")
+				return
+			case <-timer.C:
+			}
+			logger.Error(fmt.Sprintf("[push] Push failed. Retrying..."))
+			continue
+		}
+		logger.Info("[push] Push msg success.")
+		break
 	}
+	return
+}
+
+func (op *RabbitOperator) pushCore(ctx context.Context, msg *PushMsg, args ...ArgOption) (err error) {
+	logger := log.GetCurrentLogger(ctx)
 	channel, err := op.getChannel(ctx, false, msg.exchangeName, msg.queueName)
 	if err != nil {
 		logger.Error(err.Error())
@@ -416,12 +446,25 @@ func (op *RabbitOperator) PushMessage(ctx context.Context, msg *PushMsg, args ..
 	}
 
 	publishingMsg := amqp.Publishing{
-		ContentType: "text/plain",
-		Timestamp:   times.Now(),
-		Body:        msg.content,
+		Timestamp:       times.Now(),
+		Body:            msg.Body,
+		Headers:         msg.Headers,
+		ContentEncoding: msg.ContentEncoding,
+		ReplyTo:         msg.ReplyTo,
+		Expiration:      msg.Expiration,
+		MessageId:       msg.MessageId,
+		Type:            msg.Type,
+		UserId:          msg.UserId,
+		AppId:           msg.AppId,
 	}
-	if msg.priority > 0 {
-		publishingMsg.Priority = msg.priority
+	if msg.Priority > 0 {
+		publishingMsg.Priority = msg.Priority
+	}
+	if msg.DeliveryMode == 0 {
+		publishingMsg.DeliveryMode = amqp.Persistent
+	}
+	if msg.ContentType == "" {
+		publishingMsg.ContentType = "text/plain"
 	}
 	// 发送任务消息
 	err = channel.PublishWithContext(ctx, msg.exchangeName, msg.routingKey, false, false, publishingMsg)
@@ -436,10 +479,93 @@ type ConsumeParam struct {
 	exchangeName string
 	routingKey   string
 	queueName    string
+	xPriority    int
 	fetchCount   int
 }
 
-func (op *RabbitOperator) ConsumeMessage(ctx context.Context, param *ConsumeParam, args ...ArgOption) (msgs <-chan amqp.Delivery, err error) {
+func (op *RabbitOperator) Consume(ctx context.Context, param *ConsumeParam, options ...ArgOption) (msgs chan amqp.Delivery, err error) {
+	logger := log.GetCurrentLogger(ctx)
+	if !op.isReady {
+		logger.Error("rabbitmq connection is not ready, consume cancel")
+		err = errors.New("connection is not ready")
+		return
+	}
+	msgs = make(chan amqp.Delivery, 3)
+	table := amqp.Table{}
+	for _, opt := range options {
+		opt(table)
+	}
+	go func() {
+		rLogger := log.GetCurrentLogger(context.Background())
+		defer func() {
+			if e := recover(); e != nil {
+				logger.Error(fmt.Sprintf("recover_panic: %v", e))
+			}
+		}()
+
+		sig := make(chan os.Signal)
+		signal.Notify(sig, syscall.SIGINT, syscall.SIGKILL)
+
+		timer := time.NewTimer(DefaultConsumeRetryTimes)
+		defer timer.Stop()
+	process:
+		resChan, innerErr := op.consumeCore(ctx, param, table)
+		// Keep retrying when consumption fails
+		for innerErr != nil {
+			select {
+			case s := <-sig:
+				rLogger.Info(fmt.Sprintf("[consume:%v]recived： %v, exiting... ", *param, s))
+				return
+			case <-op.closeCh:
+				rLogger.Info(fmt.Sprintf("[consume:%v]rabbitmq is closed, exiting...", *param))
+				return
+			case <-timer.C:
+				rLogger.Error(fmt.Sprintf("[consume:%v]consume msg error: %s, retrying ...", *param, innerErr.Error()))
+			}
+			resChan, innerErr = op.consumeCore(ctx, param, table)
+		}
+
+		// Circular consumption of data
+		for {
+			select {
+			case s := <-sig:
+				rLogger.Info(fmt.Sprintf("[consume:%v]recived： %v, exiting... ", *param, s))
+				return
+			case <-op.closeCh:
+				rLogger.Info(fmt.Sprintf("[consume:%v]rabbitmq is closed, exiting...", *param))
+				return
+			case <-op.notifyAllChan:
+				rLogger.Warn(fmt.Sprintf("[consume:%v]rabbitmq is reconnected, reconsume...", *param))
+				op.notifyAllChan = make(chan bool)
+				goto process
+			case item := <-resChan:
+				if len(item.Body) == 0 {
+					continue
+				}
+				select {
+				case s := <-sig:
+					rLogger.Info(fmt.Sprintf("[consume:%v]recived： %v, exiting... ", *param, s))
+					return
+				case <-op.closeCh:
+					rLogger.Info(fmt.Sprintf("[consume:%v]rabbitmq is closed, exiting...", *param))
+					return
+				case <-op.notifyAllChan:
+					rLogger.Warn(fmt.Sprintf("[consume:%v]rabbitmq is reconnected, reconsume...", *param))
+					op.notifyAllChan = make(chan bool)
+					goto process
+				case msgs <- item:
+					rLogger.Info(fmt.Sprintf("[consume:%v]recived success: msgs <- item", *param))
+				}
+			case <-timer.C:
+				continue
+			}
+		}
+
+	}()
+	return
+}
+
+func (op *RabbitOperator) consumeCore(ctx context.Context, param *ConsumeParam, table amqp.Table) (msgs <-chan amqp.Delivery, err error) {
 	logger := log.GetCurrentLogger(ctx)
 	if !op.isReady {
 		logger.Error("rabbitmq connection is not ready, push cancel")
@@ -455,10 +581,6 @@ func (op *RabbitOperator) ConsumeMessage(ctx context.Context, param *ConsumePara
 		param.fetchCount = 1
 	}
 
-	table := amqp.Table{}
-	for _, arg := range args {
-		arg(table)
-	}
 	// 用于检查队列是否存在,已经存在不需要重复声明
 	_, err = channel.QueueDeclarePassive(param.queueName, true, false, false, true, table)
 	if err != nil {
@@ -486,7 +608,11 @@ func (op *RabbitOperator) ConsumeMessage(ctx context.Context, param *ConsumePara
 		logger.Error(fmt.Sprintf("open qos error:%s \n", err))
 		return
 	}
-	msgs, err = channel.Consume(param.queueName, "", false, false, false, false, nil)
+	var args amqp.Table
+	if param.xPriority != 0 {
+		args = amqp.Table{"x-priority": param.xPriority}
+	}
+	msgs, err = channel.Consume(param.queueName, "", false, false, false, false, args)
 	if err != nil {
 		logger.Error(fmt.Sprintf("The acquisition of the consumption channel is abnormal:%s \n", err))
 		return
