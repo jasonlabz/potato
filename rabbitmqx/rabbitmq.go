@@ -23,13 +23,6 @@ const (
 	Closed                   = 1
 )
 
-type ModeType string
-
-const (
-	ModeTypeQueue  ModeType = "queue"   // 队列模式
-	ModeTypePubSub ModeType = "pub_sub" // 发布/订阅模式
-)
-
 type ExchangeType string
 
 const (
@@ -66,18 +59,10 @@ func (c *MQConfig) Addr() string {
 	return fmt.Sprintf("amqp://%s:%s@%s:%d/", c.UserName, c.Password, c.Host, c.Port)
 }
 
-// QueueExchange 定义队列交换机对象
-type QueueExchange struct {
-	QueueName    string `json:"queue_name"`    // 队列名称
-	RoutingKey   string `json:"routing_key"`   // key值
-	ExchangeName string `json:"exchange_name"` // 交换机名称
-	ExchangeType string `json:"exchange_type"` // 交换机类型
-}
-
 type RabbitOperator struct {
 	name          string
 	config        *MQConfig
-	client        *RabbitMQClient
+	client        *Client
 	closeCh       chan bool
 	notifyAllChan chan bool
 	isReady       bool
@@ -85,8 +70,7 @@ type RabbitOperator struct {
 	mu            sync.Mutex
 }
 
-type RabbitMQClient struct {
-	mode            ModeType // 模式类型，默认queue模式
+type Client struct {
 	conn            *amqp.Connection
 	queueCh         sync.Map
 	exchangeMu      sync.Mutex
@@ -108,7 +92,7 @@ func (op *RabbitOperator) InitRabbitMQ(ctx context.Context, config *MQConfig) (e
 		return
 	}
 	// init
-	op.client = &RabbitMQClient{
+	op.client = &Client{
 		closeConnNotify: make(chan *amqp.Error, 1),
 	}
 	op.closeCh = make(chan bool)
@@ -265,38 +249,60 @@ func (op *RabbitOperator) getChannel(ctx context.Context, isConsume bool, exchan
 }
 
 type PushMsg struct {
-	exchangeName  string
-	exchangeType  ExchangeType
-	bindingKeyMap map[string]string
-	routingKey    string
-	queueName     string
+	ExchangeName     string
+	ExchangeType     ExchangeType
+	BindingKeyMap    map[string]string
+	RoutingKey       string
+	QueueName        string
+	QueueMaxPriority map[string]uint8
+	XMaxPriority     uint8
 	amqp.Publishing
 }
 
 func (p *PushMsg) Validate() {
-	if len(p.bindingKeyMap) == 0 {
-		p.bindingKeyMap = map[string]string{}
+	if len(p.BindingKeyMap) == 0 {
+		p.BindingKeyMap = map[string]string{}
 	}
 
-	if p.exchangeName != "" {
-		if string(p.exchangeType) == "" {
+	if p.ExchangeName != "" {
+		if string(p.ExchangeType) == "" {
 			//  default exchangeType is fanout
-			p.exchangeType = ExchangeTypeFanout
+			p.ExchangeType = ExchangeTypeFanout
 		}
 
-		if p.queueName != "" {
-			p.bindingKeyMap[p.queueName] = p.queueName
-			p.queueName = ""
+		if p.QueueName != "" {
+			p.BindingKeyMap[p.QueueName] = p.QueueName
+			p.QueueName = ""
 		}
 	}
 
-	if p.exchangeName == "" {
-		p.bindingKeyMap = nil
+	if p.ExchangeName == "" {
+		p.BindingKeyMap = nil
 	}
 
 	// 限制优先级为 0~10
 	if p.Priority > 10 {
 		p.Priority = 10
+	}
+
+	if p.RoutingKey == "" {
+		p.RoutingKey = p.QueueName
+	}
+
+	for queue, bindKey := range p.BindingKeyMap {
+		if bindKey == "" {
+			p.BindingKeyMap[queue] = queue
+		}
+	}
+
+	pri, ok := p.QueueMaxPriority[p.QueueName]
+	if ok {
+		p.XMaxPriority = pri
+	} else if p.XMaxPriority == 0 && len(p.QueueMaxPriority) > 0 {
+		for _, u := range p.QueueMaxPriority {
+			p.XMaxPriority = u
+			break
+		}
 	}
 }
 
@@ -305,34 +311,47 @@ func (p *PushMsg) SetPriority(priority uint8) *PushMsg {
 	return p
 }
 
+func (p *PushMsg) SetQueueWithMaxPriority(priority uint8, queues ...string) *PushMsg {
+	if p.XMaxPriority == 0 {
+		p.XMaxPriority = priority
+	}
+	if p.QueueMaxPriority == nil {
+		p.QueueMaxPriority = make(map[string]uint8)
+	}
+	for _, queue := range queues {
+		p.QueueMaxPriority[queue] = priority
+	}
+	return p
+}
+
 func (p *PushMsg) SetExchangeName(exchangeName string) *PushMsg {
-	p.exchangeName = exchangeName
+	p.ExchangeName = exchangeName
 	return p
 }
 
 func (p *PushMsg) SetExchangeType(exchangeType ExchangeType) *PushMsg {
-	p.exchangeType = exchangeType
+	p.ExchangeType = exchangeType
 	return p
 }
 
 func (p *PushMsg) BindQueue(queueName, bindingKey string) *PushMsg {
-	if len(p.bindingKeyMap) == 0 {
-		p.bindingKeyMap = map[string]string{}
+	if len(p.BindingKeyMap) == 0 {
+		p.BindingKeyMap = map[string]string{}
 	}
 	if bindingKey == "" {
 		bindingKey = queueName
 	}
-	p.bindingKeyMap[queueName] = bindingKey
+	p.BindingKeyMap[queueName] = bindingKey
 	return p
 }
 
 func (p *PushMsg) SetRoutingKey(routingKey string) *PushMsg {
-	p.routingKey = routingKey
+	p.RoutingKey = routingKey
 	return p
 }
 
 func (p *PushMsg) SetQueueName(queueName string) *PushMsg {
-	p.queueName = queueName
+	p.QueueName = queueName
 	return p
 }
 
@@ -344,9 +363,6 @@ func (p *PushMsg) SetMsg(msg []byte) *PushMsg {
 type ArgOption func(a amqp.Table)
 
 func WithMaxPriority(priority int) ArgOption {
-	if priority > 10 {
-		priority = 10
-	}
 	return func(a amqp.Table) {
 		a["x-max-priority"] = priority
 	}
@@ -382,7 +398,12 @@ func (op *RabbitOperator) Produce(ctx context.Context, msg *PushMsg, args ...Arg
 
 func (op *RabbitOperator) pushCore(ctx context.Context, msg *PushMsg, args ...ArgOption) (err error) {
 	logger := log.GetCurrentLogger(ctx)
-	channel, err := op.getChannel(ctx, false, msg.exchangeName, msg.queueName)
+	channel, err := op.getChannel(ctx, false, msg.ExchangeName, msg.QueueName)
+	if err != nil {
+		logger.Error(err.Error())
+		return
+	}
+	err = channel.Confirm(false)
 	if err != nil {
 		logger.Error(err.Error())
 		return
@@ -393,14 +414,14 @@ func (op *RabbitOperator) pushCore(ctx context.Context, msg *PushMsg, args ...Ar
 	for _, arg := range args {
 		arg(table)
 	}
-	if msg.exchangeName != "" {
+	if msg.ExchangeName != "" {
 		// 用于检查交换机是否存在,已经存在不需要重复声明
-		err = channel.ExchangeDeclarePassive(msg.exchangeName, string(msg.exchangeType), true, false, false, true, nil)
+		err = channel.ExchangeDeclarePassive(msg.ExchangeName, string(msg.ExchangeType), true, false, false, true, nil)
 		if err != nil {
 			// 注册交换机
 			// name:交换机名称,kind:交换机类型,durable:是否持久化,队列存盘,true服务重启后信息不会丢失,影响性能;autoDelete:是否自动删除;
 			// noWait:是否非阻塞, true为是,不等待RMQ返回信息;args:参数,传nil即可; internal:是否为内部
-			err = channel.ExchangeDeclare(msg.exchangeName, string(msg.exchangeType), true, false, false, true, nil)
+			err = channel.ExchangeDeclare(msg.ExchangeName, string(msg.ExchangeType), true, false, false, true, nil)
 			if err != nil {
 				logger.Error(fmt.Sprintf("MQ failed to declare the exchange:%s \n", err))
 				return
@@ -408,7 +429,11 @@ func (op *RabbitOperator) pushCore(ctx context.Context, msg *PushMsg, args ...Ar
 		}
 
 		// 交换机绑定队列处理
-		for queue, bindingKey := range msg.bindingKeyMap {
+		for queue, bindingKey := range msg.BindingKeyMap {
+			xMaxPri, ok := msg.QueueMaxPriority[queue]
+			if ok {
+				table["x-max-priority"] = xMaxPri
+			}
 			_, err = channel.QueueDeclarePassive(queue, true, false, false, true, table)
 			if err != nil {
 				// 队列不存在,声明队列
@@ -422,7 +447,7 @@ func (op *RabbitOperator) pushCore(ctx context.Context, msg *PushMsg, args ...Ar
 			}
 
 			// 队列绑定
-			err = channel.QueueBind(queue, bindingKey, msg.exchangeName, true, nil)
+			err = channel.QueueBind(queue, bindingKey, msg.ExchangeName, true, nil)
 			if err != nil {
 				logger.Error(fmt.Sprintf("MQ binding queue failed:%s \n", err))
 				return
@@ -430,14 +455,18 @@ func (op *RabbitOperator) pushCore(ctx context.Context, msg *PushMsg, args ...Ar
 		}
 	}
 
-	if msg.queueName != "" {
+	if msg.QueueName != "" {
+		xMaxPri, ok := msg.QueueMaxPriority[msg.QueueName]
+		if ok {
+			table["x-max-priority"] = xMaxPri
+		}
 		// 用于检查队列是否存在,已经存在不需要重复声明
-		_, err = channel.QueueDeclarePassive(msg.queueName, true, false, false, true, table)
+		_, err = channel.QueueDeclarePassive(msg.QueueName, true, false, false, true, table)
 		if err != nil {
 			// 队列不存在,声明队列
 			// name:队列名称;durable:是否持久化,队列存盘,true服务重启后信息不会丢失,影响性能;autoDelete:是否自动删除;noWait:是否非阻塞,
 			// true为是,不等待RMQ返回信息;args:参数,传nil即可;exclusive:是否设置排他
-			_, err = channel.QueueDeclare(msg.queueName, true, false, false, true, table)
+			_, err = channel.QueueDeclare(msg.QueueName, true, false, false, true, table)
 			if err != nil {
 				logger.Error(fmt.Sprintf("MQ declare queue failed:%s \n", err))
 				return
@@ -467,7 +496,7 @@ func (op *RabbitOperator) pushCore(ctx context.Context, msg *PushMsg, args ...Ar
 		publishingMsg.ContentType = "text/plain"
 	}
 	// 发送任务消息
-	err = channel.PublishWithContext(ctx, msg.exchangeName, msg.routingKey, false, false, publishingMsg)
+	err = channel.PublishWithContext(ctx, msg.ExchangeName, msg.RoutingKey, false, false, publishingMsg)
 	if err != nil {
 		logger.Error(fmt.Sprintf("MQ task failed to be sent:%s \n", err))
 		return
@@ -479,6 +508,7 @@ type ConsumeParam struct {
 	exchangeName string
 	routingKey   string
 	queueName    string
+	XMaxPriority uint8
 	xPriority    int
 	fetchCount   int
 }
@@ -495,6 +525,7 @@ func (op *RabbitOperator) Consume(ctx context.Context, param *ConsumeParam, opti
 	for _, opt := range options {
 		opt(table)
 	}
+
 	go func() {
 		rLogger := log.GetCurrentLogger(context.Background())
 		defer func() {
@@ -580,7 +611,9 @@ func (op *RabbitOperator) consumeCore(ctx context.Context, param *ConsumeParam, 
 	if param.fetchCount == 0 {
 		param.fetchCount = 1
 	}
-
+	if param.XMaxPriority > 0 {
+		table["x-max-priority"] = param.XMaxPriority
+	}
 	// 用于检查队列是否存在,已经存在不需要重复声明
 	_, err = channel.QueueDeclarePassive(param.queueName, true, false, false, true, table)
 	if err != nil {
