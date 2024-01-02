@@ -121,7 +121,7 @@ func (op *RabbitOperator) InitRabbitMQ(ctx context.Context, config *MQConfig) (e
 		logger.Warn(fmt.Sprintf("wait %ss for retry to connect...", DefaultRetryTimes))
 	}
 	// a new goroutine for check disconnect
-	go op.tryReConnect()
+	go op.tryReConnect(true)
 
 	return
 }
@@ -130,7 +130,7 @@ func (op *RabbitOperator) SetLogger(logger amqp.Logging) {
 	amqp.Logger = logger
 }
 
-func (op *RabbitOperator) tryReConnect() {
+func (op *RabbitOperator) tryReConnect(daemon bool) (connected bool) {
 	logger := log.GetCurrentGormLogger(context.Background())
 	sig := make(chan os.Signal)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGKILL)
@@ -147,8 +147,9 @@ func (op *RabbitOperator) tryReConnect() {
 		if !op.isReady {
 			conn, err := amqp.DialTLS(op.config.Addr(), &tls.Config{InsecureSkipVerify: true})
 			if err == nil {
-				op.isReady = true
 				op.client.conn = conn
+				op.client.conn.NotifyClose(op.client.closeConnNotify)
+				op.isReady = true
 				logger.Info(fmt.Sprintf("rabbitmq reconnect success[addr:%s]", op.config.Addr()))
 				continue
 			}
@@ -160,8 +161,12 @@ func (op *RabbitOperator) tryReConnect() {
 				logger.Info(fmt.Sprintf("rabbitmq is closed, exiting..."))
 				return
 			case <-timer.C:
-
 			}
+		}
+
+		if !daemon {
+			connected = true
+			break
 		}
 
 		select {
@@ -177,17 +182,18 @@ func (op *RabbitOperator) tryReConnect() {
 			op.client.queueCh = sync.Map{}
 			// notify all channel retry init
 			close(op.notifyAllChan)
+			op.notifyAllChan = make(chan bool)
 			logger.Error(fmt.Sprintf("rabbitmq is disconnect, retrying..."))
 		case <-timer.C:
-
 		}
 	}
+	return
 }
 
-func (op *RabbitOperator) getChannelForExchange(ctx context.Context, exchange string) (channel *amqp.Channel, err error) {
+func (op *RabbitOperator) getChannelForExchange(ctx context.Context, isConsume bool, exchange string) (channel *amqp.Channel, err error) {
 	logger := log.GetCurrentLogger(ctx)
 	ch, ok := op.client.exchangeCh.Load(exchange)
-	if ok {
+	if ok && !ch.(*amqp.Channel).IsClosed() {
 		channel = ch.(*amqp.Channel)
 		return
 	}
@@ -196,14 +202,33 @@ func (op *RabbitOperator) getChannelForExchange(ctx context.Context, exchange st
 	defer op.client.exchangeMu.Unlock()
 
 	ch, ok = op.client.exchangeCh.Load(exchange)
-	if ok {
+	if ok && !ch.(*amqp.Channel).IsClosed() {
 		channel = ch.(*amqp.Channel)
 		return
+	}
+	if op.client.conn.IsClosed() {
+		op.mu.Lock()
+		defer op.mu.Unlock()
+		if op.client.conn.IsClosed() {
+			op.isReady = false
+			op.client.queueCh = sync.Map{}
+			op.client.exchangeCh = sync.Map{}
+			if connected := op.tryReConnect(false); !connected {
+				err = errors.New("rabbitmq is closed")
+				return
+			}
+		}
 	}
 	channel, err = op.client.conn.Channel()
 	if err != nil {
 		logger.Error(err.Error())
 		return
+	}
+	if !isConsume {
+		if err = channel.Confirm(false); err != nil {
+			logger.Error(err.Error())
+			return
+		}
 	}
 	op.client.exchangeCh.Store(exchange, channel)
 	return
@@ -217,7 +242,7 @@ func (op *RabbitOperator) getChannelForQueue(ctx context.Context, isConsume bool
 		queue += "__push__"
 	}
 	ch, ok := op.client.queueCh.Load(queue)
-	if ok {
+	if ok && !ch.(*amqp.Channel).IsClosed() {
 		channel = ch.(*amqp.Channel)
 		return
 	}
@@ -226,25 +251,48 @@ func (op *RabbitOperator) getChannelForQueue(ctx context.Context, isConsume bool
 	defer op.client.queueMu.Unlock()
 
 	ch, ok = op.client.queueCh.Load(queue)
-	if ok {
+	if ok && !ch.(*amqp.Channel).IsClosed() {
 		channel = ch.(*amqp.Channel)
 		return
+	}
+	if op.client.conn.IsClosed() {
+		op.mu.Lock()
+		defer op.mu.Unlock()
+		if op.client.conn.IsClosed() {
+			op.isReady = false
+			op.client.queueCh = sync.Map{}
+			op.client.exchangeCh = sync.Map{}
+			if connected := op.tryReConnect(false); !connected {
+				err = errors.New("rabbitmq is closed")
+				return
+			}
+		}
 	}
 	channel, err = op.client.conn.Channel()
 	if err != nil {
 		logger.Error(err.Error())
 		return
 	}
+	if !isConsume {
+		if err = channel.Confirm(false); err != nil {
+			logger.Error(err.Error())
+			return
+		}
+	}
 	op.client.queueCh.Store(queue, channel)
 	return
 }
 
 func (op *RabbitOperator) getChannel(ctx context.Context, isConsume bool, exchange, queue string) (channel *amqp.Channel, err error) {
-	if exchange != "" {
-		channel, err = op.getChannelForExchange(ctx, exchange)
+	if isConsume {
+		channel, err = op.getChannelForQueue(ctx, isConsume, queue)
 		return
 	}
-	channel, err = op.getChannelForQueue(ctx, isConsume, queue)
+	if exchange != "" {
+		channel, err = op.getChannelForExchange(ctx, false, exchange)
+		return
+	}
+	channel, err = op.getChannelForQueue(ctx, false, queue)
 	return
 }
 
@@ -373,9 +421,9 @@ func (op *RabbitOperator) Produce(ctx context.Context, msg *PushMsg, args ...Arg
 	timer := time.NewTimer(DefaultRetryTimes)
 	defer timer.Stop()
 	for {
-		if !op.isReady {
-			logger.Error("rabbitmq connection is not ready, push cancel")
-			err = errors.New("connection is not ready")
+		if atomic.LoadInt32(&op.closed) == Closed {
+			logger.Error("rabbitmq connection is closed, push cancel")
+			err = errors.New("connection is closed")
 			return
 		}
 		err = op.pushCore(ctx, msg, args...)
@@ -403,11 +451,11 @@ func (op *RabbitOperator) pushCore(ctx context.Context, msg *PushMsg, args ...Ar
 		logger.Error(err.Error())
 		return
 	}
-	err = channel.Confirm(false)
-	if err != nil {
-		logger.Error(err.Error())
-		return
-	}
+	//err = channel.Confirm(false)
+	//if err != nil {
+	//	logger.Error(err.Error())
+	//	return
+	//}
 	msg.Validate()
 
 	table := amqp.Table{}
@@ -557,6 +605,7 @@ func (op *RabbitOperator) Consume(ctx context.Context, param *ConsumeParam, opti
 		}
 
 		// Circular consumption of data
+		allChan := op.notifyAllChan
 		for {
 			select {
 			case s := <-sig:
@@ -565,9 +614,9 @@ func (op *RabbitOperator) Consume(ctx context.Context, param *ConsumeParam, opti
 			case <-op.closeCh:
 				rLogger.Info(fmt.Sprintf("[consume:%v]rabbitmq is closed, exiting...", *param))
 				return
-			case <-op.notifyAllChan:
+			case <-allChan:
+				allChan = op.notifyAllChan
 				rLogger.Warn(fmt.Sprintf("[consume:%v]rabbitmq is reconnected, reconsume...", *param))
-				op.notifyAllChan = make(chan bool)
 				goto process
 			case item := <-resChan:
 				if len(item.Body) == 0 {
@@ -580,9 +629,9 @@ func (op *RabbitOperator) Consume(ctx context.Context, param *ConsumeParam, opti
 				case <-op.closeCh:
 					rLogger.Info(fmt.Sprintf("[consume:%v]rabbitmq is closed, exiting...", *param))
 					return
-				case <-op.notifyAllChan:
+				case <-allChan:
+					allChan = op.notifyAllChan
 					rLogger.Warn(fmt.Sprintf("[consume:%v]rabbitmq is reconnected, reconsume...", *param))
-					op.notifyAllChan = make(chan bool)
 					goto process
 				case msgs <- item:
 					rLogger.Info(fmt.Sprintf("[consume:%v]recived success: msgs <- item", *param))
