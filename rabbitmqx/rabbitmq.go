@@ -393,8 +393,14 @@ func (p *PushBody) SetQueueName(queueName string) *PushBody {
 	return p
 }
 
-func (p *PushBody) SetConfirmMode(confirm bool) *PushBody {
+func (p *PushBody) SetConfirmMode(confirm, noWait bool) *PushBody {
 	p.ConfirmMode = confirm
+	p.NoWait = noWait
+	return p
+}
+
+func (p *PushBody) SetDeliveryMode(deliveryMode uint8) *PushBody {
+	p.DeliveryMode = deliveryMode
 	return p
 }
 
@@ -462,17 +468,13 @@ func (op *RabbitOperator) pushCore(ctx context.Context, msg *PushBody, args ...A
 		arg(table)
 	}
 	if msg.ExchangeName != "" {
-		// 用于检查交换机是否存在,已经存在不需要重复声明
-		err = channel.ExchangeDeclarePassive(msg.ExchangeName, string(msg.ExchangeType), true, false, false, true, nil)
+		// 注册交换机
+		// name:交换机名称,kind:交换机类型,durable:是否持久化,队列存盘,true服务重启后信息不会丢失,影响性能;autoDelete:是否自动删除;
+		// noWait:是否非阻塞, true为是,不等待RMQ返回信息;args:参数,传nil即可; internal:是否为内部
+		err = channel.ExchangeDeclare(msg.ExchangeName, string(msg.ExchangeType), true, false, false, true, nil)
 		if err != nil {
-			// 注册交换机
-			// name:交换机名称,kind:交换机类型,durable:是否持久化,队列存盘,true服务重启后信息不会丢失,影响性能;autoDelete:是否自动删除;
-			// noWait:是否非阻塞, true为是,不等待RMQ返回信息;args:参数,传nil即可; internal:是否为内部
-			err = channel.ExchangeDeclare(msg.ExchangeName, string(msg.ExchangeType), true, false, false, true, nil)
-			if err != nil {
-				logger.Error(fmt.Sprintf("MQ failed to declare the exchange:%s \n", err))
-				return
-			}
+			logger.Error(fmt.Sprintf("MQ failed to declare the exchange:%s \n", err))
+			return
 		}
 
 		// 交换机绑定队列处理
@@ -481,16 +483,13 @@ func (op *RabbitOperator) pushCore(ctx context.Context, msg *PushBody, args ...A
 			if ok {
 				table["x-max-priority"] = xMaxPri
 			}
-			_, err = channel.QueueDeclarePassive(queue, true, false, false, true, table)
+			// 队列不存在,声明队列
+			// name:队列名称;durable:是否持久化,队列存盘,true服务重启后信息不会丢失,影响性能;autoDelete:是否自动删除;noWait:是否非阻塞,
+			// true为是,不等待RMQ返回信息;args:参数,传nil即可;exclusive:是否设置排他
+			_, err = channel.QueueDeclare(queue, true, false, false, true, table)
 			if err != nil {
-				// 队列不存在,声明队列
-				// name:队列名称;durable:是否持久化,队列存盘,true服务重启后信息不会丢失,影响性能;autoDelete:是否自动删除;noWait:是否非阻塞,
-				// true为是,不等待RMQ返回信息;args:参数,传nil即可;exclusive:是否设置排他
-				_, err = channel.QueueDeclare(queue, true, false, false, true, table)
-				if err != nil {
-					logger.Error(fmt.Sprintf("MQ declare queue failed:%s \n", err))
-					return
-				}
+				logger.Error(fmt.Sprintf("MQ declare queue failed:%s \n", err))
+				return
 			}
 
 			// 队列绑定
@@ -507,17 +506,13 @@ func (op *RabbitOperator) pushCore(ctx context.Context, msg *PushBody, args ...A
 		if ok {
 			table["x-max-priority"] = xMaxPri
 		}
-		// 用于检查队列是否存在,已经存在不需要重复声明
-		_, err = channel.QueueDeclarePassive(msg.QueueName, true, false, false, true, table)
+		// 队列不存在,声明队列
+		// name:队列名称;durable:是否持久化,队列存盘,true服务重启后信息不会丢失,影响性能;autoDelete:是否自动删除;noWait:是否非阻塞,
+		// true为是,不等待RMQ返回信息;args:参数,传nil即可;exclusive:是否设置排他
+		_, err = channel.QueueDeclare(msg.QueueName, true, false, false, true, table)
 		if err != nil {
-			// 队列不存在,声明队列
-			// name:队列名称;durable:是否持久化,队列存盘,true服务重启后信息不会丢失,影响性能;autoDelete:是否自动删除;noWait:是否非阻塞,
-			// true为是,不等待RMQ返回信息;args:参数,传nil即可;exclusive:是否设置排他
-			_, err = channel.QueueDeclare(msg.QueueName, true, false, false, true, table)
-			if err != nil {
-				logger.Error(fmt.Sprintf("MQ declare queue failed:%s \n", err))
-				return
-			}
+			logger.Error(fmt.Sprintf("MQ declare queue failed:%s \n", err))
+			return
 		}
 	}
 
@@ -551,7 +546,7 @@ func (op *RabbitOperator) pushCore(ctx context.Context, msg *PushBody, args ...A
 	return
 }
 
-type ConsumeParam struct {
+type ConsumeBody struct {
 	exchangeName string
 	routingKey   string
 	queueName    string
@@ -560,14 +555,14 @@ type ConsumeParam struct {
 	fetchCount   int
 }
 
-func (op *RabbitOperator) Consume(ctx context.Context, param *ConsumeParam, options ...ArgOption) (msgs chan amqp.Delivery, err error) {
+func (op *RabbitOperator) Consume(ctx context.Context, param *ConsumeBody, options ...ArgOption) (contents chan amqp.Delivery, err error) {
 	logger := log.GetCurrentLogger(ctx)
 	if !op.isReady {
 		logger.Error("rabbitmq connection is not ready, consume cancel")
 		err = errors.New("connection is not ready")
 		return
 	}
-	msgs = make(chan amqp.Delivery, 3)
+	contents = make(chan amqp.Delivery, 3)
 	table := amqp.Table{}
 	for _, opt := range options {
 		opt(table)
@@ -632,7 +627,7 @@ func (op *RabbitOperator) Consume(ctx context.Context, param *ConsumeParam, opti
 					allChan = op.notifyAllChan
 					rLogger.Warn(fmt.Sprintf("[consume:%v]rabbitmq is reconnected, reconsume...", *param))
 					goto process
-				case msgs <- item:
+				case contents <- item:
 					rLogger.Info(fmt.Sprintf("[consume:%v]recived success: msgs <- item", *param))
 				}
 			case <-timer.C:
@@ -644,7 +639,7 @@ func (op *RabbitOperator) Consume(ctx context.Context, param *ConsumeParam, opti
 	return
 }
 
-func (op *RabbitOperator) consumeCore(ctx context.Context, param *ConsumeParam, table amqp.Table) (msgs <-chan amqp.Delivery, err error) {
+func (op *RabbitOperator) consumeCore(ctx context.Context, param *ConsumeBody, table amqp.Table) (contents <-chan amqp.Delivery, err error) {
 	logger := log.GetCurrentLogger(ctx)
 	if !op.isReady {
 		logger.Error("rabbitmq connection is not ready, push cancel")
@@ -662,17 +657,13 @@ func (op *RabbitOperator) consumeCore(ctx context.Context, param *ConsumeParam, 
 	if param.XMaxPriority > 0 {
 		table["x-max-priority"] = param.XMaxPriority
 	}
-	// 用于检查队列是否存在,已经存在不需要重复声明
-	_, err = channel.QueueDeclarePassive(param.queueName, true, false, false, true, table)
+	// 队列不存在,声明队列
+	// name:队列名称;durable:是否持久化,队列存盘,true服务重启后信息不会丢失,影响性能;autoDelete:是否自动删除;noWait:是否非阻塞,
+	// true为是,不等待RMQ返回信息;args:参数,传nil即可;exclusive:是否设置排他
+	_, err = channel.QueueDeclare(param.queueName, true, false, false, true, table)
 	if err != nil {
-		// 队列不存在,声明队列
-		// name:队列名称;durable:是否持久化,队列存盘,true服务重启后信息不会丢失,影响性能;autoDelete:是否自动删除;noWait:是否非阻塞,
-		// true为是,不等待RMQ返回信息;args:参数,传nil即可;exclusive:是否设置排他
-		_, err = channel.QueueDeclare(param.queueName, true, false, false, true, table)
-		if err != nil {
-			logger.Error(fmt.Sprintf("MQ declare queue failed:%s \n", err))
-			return
-		}
+		logger.Error(fmt.Sprintf("MQ declare queue failed:%s \n", err))
+		return
 	}
 	if param.exchangeName != "" {
 		// 绑定任务
@@ -693,7 +684,7 @@ func (op *RabbitOperator) consumeCore(ctx context.Context, param *ConsumeParam, 
 	if param.xPriority != 0 {
 		args = amqp.Table{"x-priority": param.xPriority}
 	}
-	msgs, err = channel.Consume(param.queueName, "", false, false, false, false, args)
+	contents, err = channel.Consume(param.queueName, "", false, false, false, false, args)
 	if err != nil {
 		logger.Error(fmt.Sprintf("The acquisition of the consumption channel is abnormal:%s \n", err))
 		return
@@ -737,17 +728,15 @@ func (op *RabbitOperator) ReleaseQueueChannel(queueName string) (err error) {
 	return
 }
 
-func (op *RabbitOperator) Close(ctx context.Context) (err error) {
+func (op *RabbitOperator) Close() (err error) {
 	op.mu.Lock()
 	defer op.mu.Unlock()
-	logger := log.GetCurrentLogger(ctx)
 	if atomic.LoadInt32(&op.closed) == Closed {
 		return
 	}
 
 	err = op.client.conn.Close()
 	if err != nil {
-		logger.Error(fmt.Sprintf("close rabbitmq connection error: %v", err))
 		return err
 	}
 

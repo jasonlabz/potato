@@ -12,7 +12,7 @@ require (
 	github.com/google/uuid v1.3.1
 	github.com/panjf2000/ants/v2 v2.9.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible
-	github.com/rogpeppe/go-internal v1.9.0
+	github.com/rabbitmq/amqp091-go v1.9.1-0.20231218124336-a6fa7f7d76ec
 	github.com/spf13/cast v1.5.1
 	github.com/spf13/viper v1.17.0
 	go.uber.org/zap v1.26.0
@@ -52,7 +52,6 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/pelletier/go-toml/v2 v2.1.0 // indirect
-	github.com/rabbitmq/amqp091-go v1.9.1-0.20231218124336-a6fa7f7d76ec // indirect
 	github.com/sagikazarmark/locafero v0.3.0 // indirect
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect
