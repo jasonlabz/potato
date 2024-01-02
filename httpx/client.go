@@ -60,7 +60,7 @@ func (c *Client) GetRestyClient() (cli *resty.Client) {
 
 // Get get request and json response
 func (c *Client) Get(ctx context.Context, url string, result interface{}) (err error) {
-	logger := log.GetCurrentGormLogger(ctx)
+	logger := log.GetLogger(ctx)
 	logger.Info(fmt.Sprintf("HTTP Request [method:%s] [URL:%s]", http.MethodGet, url))
 	res, err := c.client.R().
 		SetResult(result).
@@ -115,7 +115,7 @@ func (c *Client) HeadForm(ctx context.Context, url string, formData map[string]s
 
 // requestForm send formData and response json
 func (c *Client) requestForm(ctx context.Context, url, method string, formData map[string]string, result interface{}) (res *resty.Response, err error) {
-	logger := log.GetCurrentGormLogger(ctx)
+	logger := log.GetLogger(ctx)
 	logger.Info(fmt.Sprintf("HTTP Request [method:%s] [URL:%s] [Form-Data:%s]", method, url, func() string {
 		if len(formData) == 0 {
 			return ""
@@ -159,7 +159,7 @@ func (c *Client) requestForm(ctx context.Context, url, method string, formData m
 
 // requestJson send json and response json
 func (c *Client) requestJson(ctx context.Context, url, method string, body interface{}, result interface{}) (res *resty.Response, err error) {
-	logger := log.GetCurrentGormLogger(ctx)
+	logger := log.GetLogger(ctx)
 	logger.Info(fmt.Sprintf("HTTP Request [method:%s] [URL:%s] [Body:%s]", method, url, func() string {
 		marshal, marErr := sonic.Marshal(body)
 		if marErr != nil {

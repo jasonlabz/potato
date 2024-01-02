@@ -36,7 +36,7 @@ func Set(ctx context.Context, k string, v interface{}, expiration time.Duration)
 	}
 	c.Set(k, v, expiration)
 	go func() {
-		log.GetCurrentGormLogger(ctx).Info(fmt.Sprintf("[Cache] Set done, key:\"%s\", val:%+v\n", k, func() string {
+		log.GetLogger(ctx).Info(fmt.Sprintf("[Cache] Set done, key:\"%s\", val:%+v\n", k, func() string {
 			bytes, err := sonic.Marshal(v)
 			if err != nil {
 				return ""
@@ -58,7 +58,7 @@ func Replace(ctx context.Context, k string, v interface{}, expiration time.Durat
 
 	_ = c.Replace(k, v, expiration)
 	go func() {
-		log.GetCurrentGormLogger(ctx).Info(fmt.Sprintf("[Cache] replace done, key:\"%s\", val:%+v\n", k, func() string {
+		log.GetLogger(ctx).Info(fmt.Sprintf("[Cache] replace done, key:\"%s\", val:%+v\n", k, func() string {
 			bytes, err := sonic.Marshal(v)
 			if err != nil {
 				return ""
@@ -82,7 +82,7 @@ func Get(ctx context.Context, k string, dest interface{}) (bool, error) {
 		return false, nil
 	}
 	go func() {
-		log.GetCurrentGormLogger(ctx).Info(fmt.Sprintf("[Cache] Get done, key:\"%s\", val:%+v\n", k, func() string {
+		log.GetLogger(ctx).Info(fmt.Sprintf("[Cache] Get done, key:\"%s\", val:%+v\n", k, func() string {
 			bytes, err := sonic.Marshal(v)
 			if err != nil {
 				return ""
@@ -106,13 +106,13 @@ func IsExist(ctx context.Context, k string) bool {
 		return false
 	}
 	_, ok := c.Get(k)
-	log.GetCurrentGormLogger(ctx).Info(fmt.Sprintf("[Cache] IsExist, key:\"%v\": \"%v\"", k, ok))
+	log.GetLogger(ctx).Info(fmt.Sprintf("[Cache] IsExist, key:\"%v\": \"%v\"", k, ok))
 	return ok
 }
 
 func Del(ctx context.Context, k string) {
 	c.Delete(k)
-	log.GetCurrentGormLogger(ctx).Info(fmt.Sprintf("[Cache] Del done, key:\"%s\"\n", k))
+	log.GetLogger(ctx).Info(fmt.Sprintf("[Cache] Del done, key:\"%s\"\n", k))
 }
 
 func GetOrSet(ctx context.Context, k string, dest interface{}, expiration time.Duration, callback func() (interface{}, error)) error {

@@ -62,7 +62,7 @@ func RequestMiddleware() gin.HandlerFunc {
 			requestBodyLogBytes = append(requestBodyLogBytes, []byte("......")...)
 		}
 
-		logger := log.GetCurrentGormLogger(c)
+		logger := log.GetLogger(c)
 		start := time.Now() // Start timer
 
 		logger.Info("[GIN] request",

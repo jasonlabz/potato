@@ -84,7 +84,7 @@ type Client struct {
 }
 
 func (op *RabbitOperator) InitRabbitMQ(ctx context.Context, config *MQConfig) (err error) {
-	logger := log.GetCurrentLogger(ctx)
+	logger := log.GetLogger(ctx)
 	op.mu.Lock()
 	defer op.mu.Unlock()
 	if op.isReady {
@@ -131,7 +131,7 @@ func (op *RabbitOperator) SetLogger(logger amqp.Logging) {
 }
 
 func (op *RabbitOperator) tryReConnect(daemon bool) (connected bool) {
-	logger := log.GetCurrentGormLogger(context.Background())
+	logger := log.GetLogger(context.Background())
 	sig := make(chan os.Signal)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGKILL)
 
@@ -191,7 +191,7 @@ func (op *RabbitOperator) tryReConnect(daemon bool) (connected bool) {
 }
 
 func (op *RabbitOperator) getChannelForExchange(ctx context.Context, isConsume bool, exchange string) (channel *amqp.Channel, err error) {
-	logger := log.GetCurrentLogger(ctx)
+	logger := log.GetLogger(ctx)
 	ch, ok := op.client.exchangeCh.Load(exchange)
 	if ok && !ch.(*amqp.Channel).IsClosed() {
 		channel = ch.(*amqp.Channel)
@@ -229,7 +229,7 @@ func (op *RabbitOperator) getChannelForExchange(ctx context.Context, isConsume b
 }
 
 func (op *RabbitOperator) getChannelForQueue(ctx context.Context, isConsume bool, queue string) (channel *amqp.Channel, err error) {
-	logger := log.GetCurrentLogger(ctx)
+	logger := log.GetLogger(ctx)
 	if isConsume {
 		queue += "__consume__"
 	} else {
@@ -418,7 +418,7 @@ func WithMaxPriority(priority int) ArgOption {
 }
 
 func (op *RabbitOperator) Push(ctx context.Context, msg *PushBody, args ...ArgOption) (err error) {
-	logger := log.GetCurrentLogger(ctx)
+	logger := log.GetLogger(ctx)
 	timer := time.NewTimer(DefaultRetryTimes)
 	defer timer.Stop()
 	for {
@@ -446,7 +446,7 @@ func (op *RabbitOperator) Push(ctx context.Context, msg *PushBody, args ...ArgOp
 }
 
 func (op *RabbitOperator) pushCore(ctx context.Context, msg *PushBody, args ...ArgOption) (err error) {
-	logger := log.GetCurrentLogger(ctx)
+	logger := log.GetLogger(ctx)
 	channel, err := op.getChannel(ctx, false, msg.ExchangeName, msg.QueueName)
 	if err != nil {
 		logger.Error(err.Error())
@@ -556,7 +556,7 @@ type ConsumeBody struct {
 }
 
 func (op *RabbitOperator) Consume(ctx context.Context, param *ConsumeBody, options ...ArgOption) (contents chan amqp.Delivery, err error) {
-	logger := log.GetCurrentLogger(ctx)
+	logger := log.GetLogger(ctx)
 	if !op.isReady {
 		logger.Error("rabbitmq connection is not ready, consume cancel")
 		err = errors.New("connection is not ready")
@@ -569,7 +569,7 @@ func (op *RabbitOperator) Consume(ctx context.Context, param *ConsumeBody, optio
 	}
 
 	go func() {
-		rLogger := log.GetCurrentLogger(context.Background())
+		rLogger := log.GetLogger(context.Background())
 		defer func() {
 			if e := recover(); e != nil {
 				logger.Error(fmt.Sprintf("recover_panic: %v", e))
@@ -640,7 +640,7 @@ func (op *RabbitOperator) Consume(ctx context.Context, param *ConsumeBody, optio
 }
 
 func (op *RabbitOperator) consumeCore(ctx context.Context, param *ConsumeBody, table amqp.Table) (contents <-chan amqp.Delivery, err error) {
-	logger := log.GetCurrentLogger(ctx)
+	logger := log.GetLogger(ctx)
 	if !op.isReady {
 		logger.Error("rabbitmq connection is not ready, push cancel")
 		err = errors.New("connection is not ready")

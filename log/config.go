@@ -27,7 +27,7 @@ func SetCurrentLogger(loggerType LoggerType) {
 	currentLogger = loggerType
 }
 
-func GetCurrentLogger(ctx context.Context) PotatoLogger {
+func GetLogger(ctx context.Context) PotatoLogger {
 	switch currentLogger {
 	case LoggerTypeZap:
 		return zapx.GetLogger(ctx)
@@ -38,7 +38,7 @@ func GetCurrentLogger(ctx context.Context) PotatoLogger {
 	}
 }
 
-func GetCurrentGormLogger(ctx context.Context) PotatoLogger {
+func GetGormLogger(ctx context.Context) PotatoLogger {
 	switch currentLogger {
 	case LoggerTypeZap:
 		return zapx.GormLogger(ctx)

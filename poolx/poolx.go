@@ -27,6 +27,6 @@ func GetFixedPool(size int) (pool *ants.Pool, err error) {
 func Submit(ctx context.Context, task func()) {
 	err := goPool.Submit(task)
 	if err != nil {
-		log.GetCurrentLogger(ctx).Error(err.Error())
+		log.GetLogger(ctx).Error(err.Error())
 	}
 }
