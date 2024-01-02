@@ -224,12 +224,6 @@ func (op *RabbitOperator) getChannelForExchange(ctx context.Context, isConsume b
 		logger.Error(err.Error())
 		return
 	}
-	if !isConsume {
-		if err = channel.Confirm(false); err != nil {
-			logger.Error(err.Error())
-			return
-		}
-	}
 	op.client.exchangeCh.Store(exchange, channel)
 	return
 }
@@ -273,12 +267,6 @@ func (op *RabbitOperator) getChannelForQueue(ctx context.Context, isConsume bool
 		logger.Error(err.Error())
 		return
 	}
-	if !isConsume {
-		if err = channel.Confirm(false); err != nil {
-			logger.Error(err.Error())
-			return
-		}
-	}
 	op.client.queueCh.Store(queue, channel)
 	return
 }
@@ -296,7 +284,9 @@ func (op *RabbitOperator) getChannel(ctx context.Context, isConsume bool, exchan
 	return
 }
 
-type PushMsg struct {
+type PushBody struct {
+	ConfirmMode      bool
+	NoWait           bool
 	ExchangeName     string
 	ExchangeType     ExchangeType
 	BindingKeyMap    map[string]string
@@ -307,7 +297,7 @@ type PushMsg struct {
 	amqp.Publishing
 }
 
-func (p *PushMsg) Validate() {
+func (p *PushBody) Validate() {
 	if len(p.BindingKeyMap) == 0 {
 		p.BindingKeyMap = map[string]string{}
 	}
@@ -354,12 +344,12 @@ func (p *PushMsg) Validate() {
 	}
 }
 
-func (p *PushMsg) SetPriority(priority uint8) *PushMsg {
+func (p *PushBody) SetPriority(priority uint8) *PushBody {
 	p.Priority = priority
 	return p
 }
 
-func (p *PushMsg) SetQueueWithMaxPriority(priority uint8, queues ...string) *PushMsg {
+func (p *PushBody) SetQueueWithMaxPriority(priority uint8, queues ...string) *PushBody {
 	if p.XMaxPriority == 0 {
 		p.XMaxPriority = priority
 	}
@@ -372,17 +362,17 @@ func (p *PushMsg) SetQueueWithMaxPriority(priority uint8, queues ...string) *Pus
 	return p
 }
 
-func (p *PushMsg) SetExchangeName(exchangeName string) *PushMsg {
+func (p *PushBody) SetExchangeName(exchangeName string) *PushBody {
 	p.ExchangeName = exchangeName
 	return p
 }
 
-func (p *PushMsg) SetExchangeType(exchangeType ExchangeType) *PushMsg {
+func (p *PushBody) SetExchangeType(exchangeType ExchangeType) *PushBody {
 	p.ExchangeType = exchangeType
 	return p
 }
 
-func (p *PushMsg) BindQueue(queueName, bindingKey string) *PushMsg {
+func (p *PushBody) BindQueue(queueName, bindingKey string) *PushBody {
 	if len(p.BindingKeyMap) == 0 {
 		p.BindingKeyMap = map[string]string{}
 	}
@@ -393,17 +383,22 @@ func (p *PushMsg) BindQueue(queueName, bindingKey string) *PushMsg {
 	return p
 }
 
-func (p *PushMsg) SetRoutingKey(routingKey string) *PushMsg {
+func (p *PushBody) SetRoutingKey(routingKey string) *PushBody {
 	p.RoutingKey = routingKey
 	return p
 }
 
-func (p *PushMsg) SetQueueName(queueName string) *PushMsg {
+func (p *PushBody) SetQueueName(queueName string) *PushBody {
 	p.QueueName = queueName
 	return p
 }
 
-func (p *PushMsg) SetMsg(msg []byte) *PushMsg {
+func (p *PushBody) SetConfirmMode(confirm bool) *PushBody {
+	p.ConfirmMode = confirm
+	return p
+}
+
+func (p *PushBody) SetMsg(msg []byte) *PushBody {
 	p.Body = msg
 	return p
 }
@@ -416,7 +411,7 @@ func WithMaxPriority(priority int) ArgOption {
 	}
 }
 
-func (op *RabbitOperator) Produce(ctx context.Context, msg *PushMsg, args ...ArgOption) (err error) {
+func (op *RabbitOperator) Push(ctx context.Context, msg *PushBody, args ...ArgOption) (err error) {
 	logger := log.GetCurrentLogger(ctx)
 	timer := time.NewTimer(DefaultRetryTimes)
 	defer timer.Stop()
@@ -444,18 +439,22 @@ func (op *RabbitOperator) Produce(ctx context.Context, msg *PushMsg, args ...Arg
 	return
 }
 
-func (op *RabbitOperator) pushCore(ctx context.Context, msg *PushMsg, args ...ArgOption) (err error) {
+func (op *RabbitOperator) pushCore(ctx context.Context, msg *PushBody, args ...ArgOption) (err error) {
 	logger := log.GetCurrentLogger(ctx)
 	channel, err := op.getChannel(ctx, false, msg.ExchangeName, msg.QueueName)
 	if err != nil {
 		logger.Error(err.Error())
 		return
 	}
-	//err = channel.Confirm(false)
-	//if err != nil {
-	//	logger.Error(err.Error())
-	//	return
-	//}
+
+	if msg.ConfirmMode {
+		err = channel.Confirm(msg.NoWait)
+		if err != nil {
+			logger.Error(err.Error())
+			return
+		}
+	}
+
 	msg.Validate()
 
 	table := amqp.Table{}
