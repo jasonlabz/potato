@@ -63,38 +63,9 @@ func (c *MQConfig) Addr() string {
 	return fmt.Sprintf("amqp://%s:%s@%s:%d/", c.UserName, c.Password, c.Host, c.Port)
 }
 
-type RabbitOperator struct {
-	name          string
-	config        *MQConfig
-	client        *Client
-	closeCh       chan bool
-	notifyAllChan chan bool
-	isReady       bool
-	closed        int32
-	mu            sync.Mutex
-}
-
-type Client struct {
-	conn            *amqp.Connection
-	queueCh         sync.Map
-	exchangeMu      sync.Mutex
-	exchangeCh      sync.Map
-	queueMu         sync.Mutex
-	closeConnNotify chan *amqp.Error
-	closeChanNotify chan *amqp.Error
-	routingKeyQueue map[string]string // routingKeyMap
-	exchangeName    string            // 交换机名称
-	exchangeType    ExchangeType      // 交换机类型
-}
-
-func (op *RabbitOperator) InitRabbitMQ(ctx context.Context, config *MQConfig) (err error) {
+func NewRabbitMQ(ctx context.Context, config *MQConfig) (op *RabbitOperator, err error) {
 	logger := log.GetLogger(ctx)
-	op.mu.Lock()
-	defer op.mu.Unlock()
-	if op.isReady {
-		// rabbitmq already init success
-		return
-	}
+	op = &RabbitOperator{}
 	// init
 	op.client = &Client{
 		closeConnNotify: make(chan *amqp.Error, 1),
@@ -128,6 +99,31 @@ func (op *RabbitOperator) InitRabbitMQ(ctx context.Context, config *MQConfig) (e
 	go op.tryReConnect(true)
 
 	return
+}
+
+type RabbitOperator struct {
+	name          string
+	config        *MQConfig
+	client        *Client
+	closeCh       chan bool
+	notifyAllChan chan bool
+	isReady       bool
+	closed        int32
+	mu            sync.Mutex
+}
+
+type Client struct {
+	conn            *amqp.Connection
+	commonCh        *amqp.Channel
+	queueCh         sync.Map
+	exchangeMu      sync.Mutex
+	exchangeCh      sync.Map
+	queueMu         sync.Mutex
+	closeConnNotify chan *amqp.Error
+	closeChanNotify chan *amqp.Error
+	routingKeyQueue map[string]string // routingKeyMap
+	exchangeName    string            // 交换机名称
+	exchangeType    ExchangeType      // 交换机类型
 }
 
 func (op *RabbitOperator) SetLogger(logger amqp.Logging) {
@@ -417,6 +413,19 @@ func WithMaxPriority(priority int) ArgOption {
 	}
 }
 
+func WithMsgTTL(duration time.Duration) ArgOption {
+	return func(a amqp.Table) {
+		a["x-message-ttl"] = duration
+	}
+}
+
+func WithDeadLetterExchange(exchange, routingKey string) ArgOption {
+	return func(a amqp.Table) {
+		a["x-dead-letter-exchange"] = exchange
+		a["x-dead-letter-routing-key"] = routingKey
+	}
+}
+
 func (op *RabbitOperator) Push(ctx context.Context, msg *PushBody, args ...ArgOption) (err error) {
 	if msg.MessageId == "" {
 		msg.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
@@ -632,7 +641,7 @@ func (op *RabbitOperator) Consume(ctx context.Context, param *ConsumeBody, optio
 					rLogger.Warn(fmt.Sprintf("[consume:%s]rabbitmq is reconnected, reconsume...", param.QueueName))
 					goto process
 				case contents <- item:
-					//rLogger.Info(fmt.Sprintf("[consume:%s]recived success: msgs <- item", param.QueueName))
+					rLogger.Info(fmt.Sprintf("[consume:%s]recived msg success: msg_id --> %s", param.QueueName, item.MessageId))
 				}
 			case <-timer.C:
 				continue
@@ -700,7 +709,7 @@ func (op *RabbitOperator) ReleaseExchangeChannel(exchangeName string) (err error
 	op.client.exchangeMu.Lock()
 	defer op.client.exchangeMu.Unlock()
 	value, ok := op.client.exchangeCh.Load(exchangeName)
-	if ok {
+	if ok && !value.(*amqp.Channel).IsClosed() {
 		err = value.(*amqp.Channel).Close()
 		if err != nil {
 			return
@@ -711,53 +720,29 @@ func (op *RabbitOperator) ReleaseExchangeChannel(exchangeName string) (err error
 }
 
 func (op *RabbitOperator) DeleteExchange(exchangeName string) (err error) {
-	op.client.exchangeMu.Lock()
-	defer op.client.exchangeMu.Unlock()
-	value, ok := op.client.exchangeCh.Load(exchangeName)
-	if ok {
-		channel := value.(*amqp.Channel)
-		err = channel.ExchangeDelete(exchangeName, false, false)
-		if err != nil {
-			return err
-		}
-		err = value.(*amqp.Channel).Close()
-		if err != nil {
-			return
-		}
-		op.client.exchangeCh.Delete(exchangeName)
+	channel, err := op.getCommonChannel()
+	if err != nil {
+		return
+	}
+
+	err = channel.ExchangeDelete(exchangeName, false, false)
+	if err != nil {
+		return err
 	}
 	return
 }
 
 func (op *RabbitOperator) DeleteQueue(queueName string) (err error) {
-	op.client.queueMu.Lock()
-	defer op.client.queueMu.Unlock()
-	value, ok := op.client.queueCh.Load(queueName + "__push__")
-	if ok {
-		channel := value.(*amqp.Channel)
-		_, err = channel.QueueDelete(queueName, false, false, false)
-		if err != nil {
-			return err
-		}
-		err = value.(*amqp.Channel).Close()
-		if err != nil {
-			return
-		}
-		op.client.queueCh.Delete(queueName + "__push__")
+	channel, err := op.getCommonChannel()
+	if err != nil {
+		return
 	}
-	value, ok = op.client.queueCh.Load(queueName + "__consume__")
-	if ok {
-		channel := value.(*amqp.Channel)
-		_, err = channel.QueueDelete(queueName, false, false, false)
-		if err != nil {
-			return err
-		}
-		err = value.(*amqp.Channel).Close()
-		if err != nil {
-			return
-		}
-		op.client.queueCh.Delete(queueName + "__consume__")
+
+	_, err = channel.QueueDelete(queueName, false, false, false)
+	if err != nil {
+		return err
 	}
+
 	return
 }
 
@@ -783,11 +768,24 @@ func (op *RabbitOperator) ReleaseQueueChannel(queueName string) (err error) {
 	return
 }
 
+func (op *RabbitOperator) getCommonChannel() (channel *amqp.Channel, err error) {
+	if op.client.commonCh.IsClosed() {
+		op.mu.Lock()
+		defer op.mu.Unlock()
+		if op.client.commonCh.IsClosed() {
+			op.client.commonCh, err = op.client.conn.Channel()
+		}
+	}
+	channel = op.client.commonCh
+	return
+}
+
 func (op *RabbitOperator) GetCount(ctx context.Context, queueName string) (count int, err error) {
-	channel, err := op.getChannelForQueue(true, queueName)
+	channel, err := op.getCommonChannel()
 	if err != nil {
 		return
 	}
+
 	queue, err := channel.QueueInspect(queueName)
 	if err != nil {
 		return
