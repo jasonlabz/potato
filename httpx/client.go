@@ -11,7 +11,7 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/go-resty/resty/v2"
-	"github.com/jasonlabz/potato/log"
+	log "github.com/jasonlabz/potato/log/zapx"
 )
 
 const (

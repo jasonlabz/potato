@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jasonlabz/potato/log"
+	log "github.com/jasonlabz/potato/log/zapx"
 	gormLogger "gorm.io/gorm/logger"
 )
 

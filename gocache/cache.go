@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/jasonlabz/potato/log"
+	log "github.com/jasonlabz/potato/log/zapx"
 	"reflect"
 	"time"
 

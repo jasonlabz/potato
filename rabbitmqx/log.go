@@ -3,7 +3,7 @@ package rabbitmqx
 import (
 	"context"
 	"fmt"
-	"github.com/jasonlabz/potato/log"
+	log "github.com/jasonlabz/potato/log/zapx"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
