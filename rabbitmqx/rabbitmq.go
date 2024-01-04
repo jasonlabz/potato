@@ -91,7 +91,7 @@ func NewRabbitMQ(ctx context.Context, config *MQConfig) (op *RabbitOperator, err
 			logger.Info(fmt.Sprintf("rabbitmq init success[addr:%s]", config.Addr()))
 			break
 		}
-
+		op.client.commonCh, err = op.client.conn.Channel()
 		<-timer.C
 		logger.Warn(fmt.Sprintf("wait %ss for retry to connect...", DefaultRetryTimes))
 	}
@@ -120,10 +120,6 @@ type Client struct {
 	exchangeCh      sync.Map
 	queueMu         sync.Mutex
 	closeConnNotify chan *amqp.Error
-	closeChanNotify chan *amqp.Error
-	routingKeyQueue map[string]string // routingKeyMap
-	exchangeName    string            // 交换机名称
-	exchangeType    ExchangeType      // 交换机类型
 }
 
 func (op *RabbitOperator) SetLogger(logger amqp.Logging) {
@@ -139,12 +135,7 @@ func (op *RabbitOperator) tryReConnect(daemon bool) (connected bool) {
 	defer timer.Stop()
 
 	for {
-		if atomic.LoadInt32(&op.closed) == Closed {
-			logger.Info(fmt.Sprintf("rabbitmq is closed [addr:%s], exit reconnect goroutime", op.config.Addr()))
-			return
-		}
-
-		if !op.isReady {
+		if !op.isReady && atomic.LoadInt32(&op.closed) != Closed {
 			conn, err := amqp.DialTLS(op.config.Addr(), &tls.Config{InsecureSkipVerify: true})
 			if err == nil {
 				op.client.conn = conn
@@ -190,7 +181,7 @@ func (op *RabbitOperator) tryReConnect(daemon bool) (connected bool) {
 	return
 }
 
-func (op *RabbitOperator) getChannelForExchange(isConsume bool, exchange string) (channel *amqp.Channel, err error) {
+func (op *RabbitOperator) getChannelForExchange(exchange string) (channel *amqp.Channel, err error) {
 	ch, ok := op.client.exchangeCh.Load(exchange)
 	if ok && !ch.(*amqp.Channel).IsClosed() {
 		channel = ch.(*amqp.Channel)
@@ -273,7 +264,7 @@ func (op *RabbitOperator) getChannel(isConsume bool, exchange, queue string) (ch
 		return
 	}
 	if exchange != "" {
-		channel, err = op.getChannelForExchange(false, exchange)
+		channel, err = op.getChannelForExchange(exchange)
 		return
 	}
 	channel, err = op.getChannelForQueue(false, queue)
@@ -705,7 +696,7 @@ func (op *RabbitOperator) consumeCore(ctx context.Context, param *ConsumeBody, t
 	return
 }
 
-func (op *RabbitOperator) ReleaseExchangeChannel(exchangeName string) (err error) {
+func (op *RabbitOperator) releaseExchangeChannel(exchangeName string) (err error) {
 	op.client.exchangeMu.Lock()
 	defer op.client.exchangeMu.Unlock()
 	value, ok := op.client.exchangeCh.Load(exchangeName)
@@ -715,6 +706,58 @@ func (op *RabbitOperator) ReleaseExchangeChannel(exchangeName string) (err error
 			return
 		}
 		op.client.exchangeCh.Delete(exchangeName)
+	}
+	return
+}
+
+func (op *RabbitOperator) DeclareExchange(exchangeName, exchangeType string, args amqp.Table) (err error) {
+	channel, err := op.getCommonChannel()
+	if err != nil {
+		return
+	}
+
+	err = channel.ExchangeDeclare(exchangeName, exchangeType, true, false, false, false, args)
+	if err != nil {
+		return err
+	}
+	return
+}
+
+func (op *RabbitOperator) DeclareQueue(queueName string, args amqp.Table) (err error) {
+	channel, err := op.getCommonChannel()
+	if err != nil {
+		return
+	}
+
+	_, err = channel.QueueDeclare(queueName, true, false, false, false, args)
+	if err != nil {
+		return err
+	}
+	return
+}
+
+func (op *RabbitOperator) BindQueue(exchangeName, queueName, routingKey string, args amqp.Table) (err error) {
+	channel, err := op.getCommonChannel()
+	if err != nil {
+		return
+	}
+
+	err = channel.QueueBind(queueName, routingKey, exchangeName, false, args)
+	if err != nil {
+		return err
+	}
+	return
+}
+
+func (op *RabbitOperator) UnBindQueue(exchangeName, queueName, routingKey string, args amqp.Table) (err error) {
+	channel, err := op.getCommonChannel()
+	if err != nil {
+		return
+	}
+
+	err = channel.QueueUnbind(queueName, routingKey, exchangeName, args)
+	if err != nil {
+		return err
 	}
 	return
 }
@@ -729,6 +772,9 @@ func (op *RabbitOperator) DeleteExchange(exchangeName string) (err error) {
 	if err != nil {
 		return err
 	}
+	go func() {
+		_ = op.releaseExchangeChannel(exchangeName)
+	}()
 	return
 }
 
@@ -742,11 +788,13 @@ func (op *RabbitOperator) DeleteQueue(queueName string) (err error) {
 	if err != nil {
 		return err
 	}
-
+	go func() {
+		_ = op.releaseQueueChannel(queueName)
+	}()
 	return
 }
 
-func (op *RabbitOperator) ReleaseQueueChannel(queueName string) (err error) {
+func (op *RabbitOperator) releaseQueueChannel(queueName string) (err error) {
 	op.client.queueMu.Lock()
 	defer op.client.queueMu.Unlock()
 	value, ok := op.client.queueCh.Load(queueName + "__push__")
@@ -808,6 +856,7 @@ func (op *RabbitOperator) Close() (err error) {
 
 	atomic.StoreInt32(&op.closed, Closed)
 	close(op.closeCh)
+	close(op.notifyAllChan)
 
 	op.isReady = false
 	return
