@@ -25,82 +25,101 @@ const (
 // CryptoConfig 加密配置
 type CryptoConfig struct {
 	Type string `mapstructure:"type" json:"type" ini:"type" yaml:"type"`
-	Key  string `mapstructure:"key" json:"key" ini:"key" yaml:"key" toml:"key"`
+	Key  string `mapstructure:"key" json:"key" ini:"key" yaml:"key"`
 }
 
 // KafkaConfig 配置
 type KafkaConfig struct {
-	Topic            []string `json:"topic" yaml:"topic"`
-	GroupId          string   `json:"group_id" yaml:"group_id"`
-	BootstrapServers string   `json:"bootstrap_servers" yaml:"bootstrap_servers"`
-	SecurityProtocol string   `json:"security_protocol" yaml:"security_protocol"`
-	SaslMechanism    string   `json:"sasl_mechanism" yaml:"sasl_mechanism"`
-	SaslUsername     string   `json:"sasl_username" yaml:"sasl_username"`
-	SaslPassword     string   `json:"sasl_password" yaml:"sasl_password"`
+	Topic            []string `json:"topic" yaml:"topic" ini:"topic"`
+	GroupId          string   `json:"group_id" yaml:"group_id" ini:"group_id"`
+	BootstrapServers string   `json:"bootstrap_servers" yaml:"bootstrap_servers" ini:"bootstrap_servers"`
+	SecurityProtocol string   `json:"security_protocol" yaml:"security_protocol" ini:"security_protocol"`
+	SaslMechanism    string   `json:"sasl_mechanism" yaml:"sasl_mechanism" ini:"sasl_mechanism"`
+	SaslUsername     string   `json:"sasl_username" yaml:"sasl_username" ini:"sasl_username"`
+	SaslPassword     string   `json:"sasl_password" yaml:"sasl_password" ini:"sasl_password"`
 }
 
 // Database 连接配置
 type Database struct {
-	DBType          string `json:"db_type" yaml:"db_type"`
-	DSN             string `json:"dsn" yaml:"dsn"`
-	LogMode         string `json:"log_mode" yaml:"log_mode"`
-	Host            string `json:"host" yaml:"host"`
-	Port            int    `json:"port" yaml:"port"`
-	Database        string `json:"database" yaml:"database"`
-	Username        string `json:"username" yaml:"username"`
-	Password        string `json:"password" yaml:"password"`
-	Charset         string `json:"charset" yaml:"charset"`
-	MaxIdleConn     int    `json:"max_idle_conn" yaml:"max_idle_conn"`
-	MaxOpenConn     int    `json:"max_open_conn" yaml:"max_open_conn"`
-	ConnMaxLifeTime int64  `json:"conn_max_life_time" yaml:"conn_max_life_time"`
+	DBType          string `json:"db_type" yaml:"db_type" ini:"db_type"`
+	DSN             string `json:"dsn" yaml:"dsn" ini:"dsn"`
+	LogMode         string `json:"log_mode" yaml:"log_mode" ini:"log_mode"`
+	Host            string `json:"host" yaml:"host" ini:"host"`
+	Port            int    `json:"port" yaml:"port" ini:"port"`
+	Database        string `json:"database" yaml:"database" ini:"database"`
+	Username        string `json:"username" yaml:"username" ini:"username"`
+	Password        string `json:"password" yaml:"password" ini:"password"`
+	Charset         string `json:"charset" yaml:"charset" ini:"charset"`
+	MaxIdleConn     int    `json:"max_idle_conn" yaml:"max_idle_conn" ini:"max_idle_conn"`
+	MaxOpenConn     int    `json:"max_open_conn" yaml:"max_open_conn" ini:"max_open_conn"`
+	ConnMaxLifeTime int64  `json:"conn_max_life_time" yaml:"conn_max_life_time" ini:"conn_max_life_time"`
 }
 
 // RedisConfig 连接配置
 type RedisConfig struct {
-	Address           string `json:"address" yaml:"address"`
-	Port              int    `json:"port" yaml:"port"`
-	Password          string `json:"password" yaml:"password"`
-	IndexDb           int    `json:"index_db" yaml:"index_db"`
-	MaxIdleConn       int    `json:"max_idle_conn" yaml:"max_idle_conn"`
-	MaxOpenConn       int    `json:"max_open_conn" yaml:"max_open_conn"`
-	MaxActive         int    `json:"max_active" yaml:"max_active"`
-	ConnTimeout       int64  `json:"conn_timeout" yaml:"conn_timeout"`
-	MaxRetryTimes     int    `json:"max_retry_times" yaml:"max_retry_times"`
-	ReConnectInterval int64  `json:"re_connect_interval" yaml:"re_connect_interval"`
+	Address           string `json:"address" yaml:"address" ini:"address"`
+	Port              int    `json:"port" yaml:"port" ini:"port"`
+	Password          string `json:"password" yaml:"password" ini:"password"`
+	IndexDb           int    `json:"index_db" yaml:"index_db" ini:"index_db"`
+	MaxIdleConn       int    `json:"max_idle_conn" yaml:"max_idle_conn" ini:"max_idle_conn"`
+	MaxOpenConn       int    `json:"max_open_conn" yaml:"max_open_conn" ini:"max_open_conn"`
+	MaxActive         int    `json:"max_active" yaml:"max_active" ini:"max_active"`
+	ConnTimeout       int64  `json:"conn_timeout" yaml:"conn_timeout" ini:"conn_timeout"`
+	MaxRetryTimes     int    `json:"max_retry_times" yaml:"max_retry_times" ini:"max_retry_times"`
+	ReConnectInterval int64  `json:"re_connect_interval" yaml:"re_connect_interval" ini:"re_connect_interval"`
 }
 
 type Elasticsearch struct {
-	Host     []string `json:"host" yaml:"host"`
-	Username string   `json:"username" yaml:"username"`
-	Password string   `json:"password" yaml:"password"`
-	CloudId  string   `json:"cloud_id" yaml:"cloud_id"`
-	APIKey   string   `json:"api_key" yaml:"api_key"`
+	Server   []string `json:"server" yaml:"server" ini:"server"`
+	Username string   `json:"username" yaml:"username" ini:"username"`
+	Password string   `json:"password" yaml:"password" ini:"password"`
+	CloudId  string   `json:"cloud_id" yaml:"cloud_id" ini:"cloud_id"`
+	APIKey   string   `json:"api_key" yaml:"api_key" ini:"api_key"`
 }
 
 type MongoConf struct {
-	Host            string `json:"host" yaml:"host"`
-	User            string `json:"user" yaml:"user"`
-	Password        string `json:"password" yaml:"password"`
-	MaxPoolSize     int    `json:"max_pool_size" yaml:"max_pool_size"`
-	ConnectTimeout  int    `json:"connect_timeout" yaml:"connect_timeout"`
-	MaxConnIdleTime int    `json:"max_conn_idle_time" yaml:"max_conn_idle_time"`
+	Host            string `json:"host" yaml:"host" ini:"host"`
+	Port            int    `json:"port" yaml:"port" ini:"port"`
+	User            string `json:"user" yaml:"user" ini:"user"`
+	Password        string `json:"password" yaml:"password" ini:"password"`
+	MaxPoolSize     int    `json:"max_pool_size" yaml:"max_pool_size" ini:"max_pool_size"`
+	ConnectTimeout  int    `json:"connect_timeout" yaml:"connect_timeout" ini:"connect_timeout"`
+	MaxConnIdleTime int    `json:"max_conn_idle_time" yaml:"max_conn_idle_time" ini:"max_conn_idle_time"`
+}
+
+type RabbitMQConf struct {
+	Server      string    `json:"server" yaml:"server" ini:"server"`
+	Port        int       `json:"port" yaml:"port" ini:"port"`
+	User        string    `json:"user" yaml:"user" ini:"user"`
+	Password    string    `json:"password" yaml:"password" ini:"password"`
+	LimitSwitch int       `json:"limit_switch" yaml:"limit_switch" ini:"limit_switch"`
+	RmqConf     LimitConf `json:"rmq_conf" yaml:"rmq_conf" ini:"rmq_conf"`
+}
+
+type LimitConf struct {
+	AttemptTimes    int `json:"attempt_times" yaml:"attempt_times" ini:"attempt_times"`
+	RetryTimeSecond int `json:"retry_time_second" yaml:"retry_time_second" ini:"retry_time_second"`
+	PrefetchCount   int `json:"prefetch_count" yaml:"prefetch_count" ini:"prefetch_count"`
+	Timeout         int `json:"timeout" yaml:"timeout" ini:"timeout"`
+	QueueLimit      int `json:"queue_limit" yaml:"queue_limit" ini:"queue_limit"`
 }
 
 // Application 服务地址端口配置
 type Application struct {
-	Address string `json:"address" yaml:"address"`
-	Port    int    `json:"port" yaml:"port"`
+	Address string `json:"address" yaml:"address" ini:"address"`
+	Port    int    `json:"port" yaml:"port" ini:"port"`
 }
 
 type Config struct {
-	Debug       bool            `json:"debug" yaml:"debug"`
-	Crypto      []*CryptoConfig `json:"cryptox" yaml:"cryptox"`
-	Application *Application    `json:"application" yaml:"application"`
-	Kafka       *KafkaConfig    `json:"kafka" yaml:"kafka"`
-	Database    *Database       `json:"database" yaml:"database"`
-	Redis       *RedisConfig    `json:"redis" yaml:"redis"`
-	ES          *Elasticsearch  `json:"es" yaml:"es"`
-	Mongo       *MongoConf      `json:"mongo" yaml:"mongo"`
+	Debug       bool            `json:"debug" yaml:"debug" ini:"debug"`
+	Crypto      []*CryptoConfig `json:"crypto" yaml:"crypto" ini:"crypto"`
+	Application *Application    `json:"application" yaml:"application" ini:"application"`
+	Kafka       *KafkaConfig    `json:"kafka" yaml:"kafka" ini:"kafka"`
+	Database    *Database       `json:"database" yaml:"database" ini:"database"`
+	Rabbitmq    *RabbitMQConf   `json:"rabbitmq" yaml:"rabbitmq" ini:"rabbitmq"`
+	Redis       *RedisConfig    `json:"redis" yaml:"redis" ini:"redis"`
+	ES          *Elasticsearch  `json:"es" yaml:"es" ini:"es"`
+	Mongo       *MongoConf      `json:"mongo" yaml:"mongo" ini:"mongo"`
 }
 
 var applicationConfig = new(Config)
