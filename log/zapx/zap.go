@@ -10,13 +10,13 @@ import (
 
 	"github.com/jasonlabz/potato/core/config"
 	"github.com/jasonlabz/potato/core/config/yaml"
+	"github.com/jasonlabz/potato/core/consts"
 	"github.com/jasonlabz/potato/core/times"
 	"github.com/jasonlabz/potato/core/utils"
 )
 
 var (
 	DefaultZapConfigName    = "default_zap_config"
-	DefaultZapConfigPath    = "./conf/application.yaml"
 	DefaultZapConfigPathBak = "./conf/logger.yaml"
 	zapLogger               *zap.Logger
 	zapSugaredLogger        *zap.SugaredLogger
@@ -89,8 +89,8 @@ func InitLogger(opts ...Option) {
 		configLoad = true
 	}
 
-	if !configLoad && utils.IsExist(DefaultZapConfigPath) {
-		provider := yaml.NewConfigProvider(DefaultZapConfigPath)
+	if !configLoad && utils.IsExist(consts.DefaultConfigPath) {
+		provider := yaml.NewConfigProvider(consts.DefaultConfigPath)
 		config.AddProviders(DefaultZapConfigName, provider)
 		configLoad = true
 	}

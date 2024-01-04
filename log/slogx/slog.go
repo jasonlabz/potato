@@ -1,22 +1,23 @@
 package slogx
 
 import (
-	"go.uber.org/zap/zapcore"
-	"gopkg.in/natefinch/lumberjack.v2"
 	"log"
 	"log/slog"
 	"os"
 
+	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
+
 	"github.com/jasonlabz/potato/core/config"
 	"github.com/jasonlabz/potato/core/config/yaml"
+	"github.com/jasonlabz/potato/core/consts"
 	"github.com/jasonlabz/potato/core/utils"
 )
 
 var (
 	logLevel                 = slog.LevelInfo
 	DefaultSlogConfigName    = "default_slog_config"
-	DefaultSlogConfigPath    = "./conf/log/logger.yaml"
-	DefaultSlogConfigPathBak = "./conf/logger.yaml"
+	DefaultSlogConfigPathBak = "./conf/log/logger.yaml"
 	slogLogger               *slog.Logger
 )
 
@@ -79,8 +80,8 @@ func InitLogger(opts ...Option) {
 		configLoad = true
 	}
 
-	if !configLoad && utils.IsExist(DefaultSlogConfigPath) {
-		provider := yaml.NewConfigProvider(DefaultSlogConfigPath)
+	if !configLoad && utils.IsExist(consts.DefaultConfigPath) {
+		provider := yaml.NewConfigProvider(consts.DefaultConfigPath)
 		config.AddProviders(DefaultSlogConfigName, provider)
 		configLoad = true
 	}
