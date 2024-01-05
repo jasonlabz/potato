@@ -2,13 +2,11 @@ package redisx
 
 import (
 	"context"
-	"github.com/jasonlabz/potato/core/config/application"
+	"fmt"
 	"time"
 
-	"github.com/bytedance/sonic"
+	"github.com/jasonlabz/potato/core/config/application"
 	"github.com/redis/go-redis/v9"
-
-	log "github.com/jasonlabz/potato/log/zapx"
 )
 
 var client *RedisOperator
@@ -18,7 +16,7 @@ func init() {
 	if config.Redis != nil {
 		InitRedisClient(&Config{
 			&redis.Options{
-				Addr:           config.Redis.Address,
+				Addr:           fmt.Sprintf("%s:%d", config.Redis.Host, config.Redis.Port),
 				Password:       config.Redis.Password,
 				DB:             config.Redis.IndexDb,
 				MaxIdleConns:   config.Redis.MaxIdleConn,
@@ -78,14 +76,13 @@ func NewRedisOperator(config *Config) (op *RedisOperator, err error) {
 	return
 }
 
-func (op *RedisOperator) Set(ctx context.Context, key string, value interface{}) (success bool) {
-	return op.SetEx(ctx, key, value, -1)
+func (op *RedisOperator) Set(ctx context.Context, key string, value any) (success bool, err error) {
+	return op.SetWithExpiration(ctx, key, value, -1)
 }
 
-func (op *RedisOperator) SetEx(ctx context.Context, key string, value interface{}, expiration time.Duration) (success bool) {
+func (op *RedisOperator) SetWithExpiration(ctx context.Context, key string, value any, expiration time.Duration) (success bool, err error) {
 	result, err := op.client.Set(ctx, key, value, expiration).Result()
 	if err != nil {
-		log.GetLogger(ctx).WithError(err).Error("redis set error: " + key)
 		return
 	}
 	if result == "OK" {
@@ -94,354 +91,222 @@ func (op *RedisOperator) SetEx(ctx context.Context, key string, value interface{
 	return
 }
 
-func (op *RedisOperator) Get(ctx context.Context, key string, result any) (success bool) {
-	value, err := op.client.Get(ctx, key).Result()
-	if err != nil {
-		log.GetLogger(ctx).WithError(err).Error("redis get error: " + key)
-		return
-	}
-	success = true
-	if _, ok := result.(string); ok {
-		result = value
-		return
-	}
-	err = sonic.Unmarshal([]byte(value), result)
-	if err != nil {
-		log.GetLogger(ctx).WithError(err).Error("redis get error: " + key)
-		success = false
-	}
+func (op *RedisOperator) Get(ctx context.Context, key string) (result string, err error) {
+	result, err = op.client.Get(ctx, key).Result()
 	return
 }
 
-func (op *RedisOperator) GetEx(ctx context.Context, key string, result any, expiration time.Duration) (success bool) {
-	value, err := op.client.GetEx(ctx, key, expiration).Result()
-	if err != nil {
-		log.GetLogger(ctx).WithError(err).Error("redis get error: " + key)
-		return
-	}
-	success = true
-	if _, ok := result.(string); ok {
-		result = value
-		return
-	}
-	err = sonic.Unmarshal([]byte(value), result)
-	if err != nil {
-		log.GetLogger(ctx).WithError(err).Error("redis get error: " + key)
-		success = false
-	}
+func (op *RedisOperator) GetWithExpiration(ctx context.Context, key string, expiration time.Duration) (result string, err error) {
+	result, err = op.client.GetEx(ctx, key, expiration).Result()
 	return
 }
 
 // GetSet 设置新值获取旧值
-func (op *RedisOperator) GetSet(ctx context.Context, key, value string) (bool, string) {
-	oldValue, err := op.client.GetSet(ctx, key, value).Result()
-	if err != nil {
-		log.GetLogger(ctx).Error(err.Error())
-		return false, ""
-	}
-	return true, oldValue
+func (op *RedisOperator) GetSet(ctx context.Context, key, value string) (result string, err error) {
+	result, err = op.client.GetSet(ctx, key, value).Result()
+	return
 }
 
 // Incr key值每次加一 并返回新值
-func (op *RedisOperator) Incr(ctx context.Context, key string) int64 {
-	val, err := op.client.Incr(ctx, key).Result()
-	if err != nil {
-		log.GetLogger(ctx).Error(err.Error())
-	}
-	return val
+func (op *RedisOperator) Incr(ctx context.Context, key string) (result int64, err error) {
+	result, err = op.client.Incr(ctx, key).Result()
+	return
 }
 
 // IncrBy key值每次加指定数值 并返回新值
-func (op *RedisOperator) IncrBy(ctx context.Context, key string, incr int64) int64 {
-	val, err := op.client.IncrBy(ctx, key, incr).Result()
-	if err != nil {
-		log.GetLogger(ctx).Error(err.Error())
-	}
-	return val
+func (op *RedisOperator) IncrBy(ctx context.Context, key string, inc int64) (result int64, err error) {
+	result, err = op.client.IncrBy(ctx, key, inc).Result()
+	return
 }
 
 // IncrByFloat key值每次加指定浮点型数值 并返回新值
-func (op *RedisOperator) IncrByFloat(ctx context.Context, key string, incrFloat float64) float64 {
-	val, err := op.client.IncrByFloat(ctx, key, incrFloat).Result()
-	if err != nil {
-		log.GetLogger(ctx).Error(err.Error())
-	}
-	return val
+func (op *RedisOperator) IncrByFloat(ctx context.Context, key string, incFloat float64) (result float64, err error) {
+	result, err = op.client.IncrByFloat(ctx, key, incFloat).Result()
+	return
 }
 
 // Decr key值每次递减 1 并返回新值
-func (op *RedisOperator) Decr(ctx context.Context, key string) int64 {
-	val, err := op.client.Decr(ctx, key).Result()
-	if err != nil {
-		log.GetLogger(ctx).Error(err.Error())
-	}
-	return val
+func (op *RedisOperator) Decr(ctx context.Context, key string) (result int64, err error) {
+	result, err = op.client.Decr(ctx, key).Result()
+	return
 }
 
 // DecrBy key值每次递减指定数值 并返回新值
-func (op *RedisOperator) DecrBy(ctx context.Context, key string, incr int64) int64 {
-	val, err := op.client.DecrBy(ctx, key, incr).Result()
-	if err != nil {
-		log.GetLogger(ctx).Error(err.Error())
-	}
-	return val
+func (op *RedisOperator) DecrBy(ctx context.Context, key string, inc int64) (result int64, err error) {
+	result, err = op.client.DecrBy(ctx, key, inc).Result()
+	return
 }
 
 // Del 删除 key
-func (op *RedisOperator) Del(ctx context.Context, key string) bool {
-	result, err := op.client.Del(ctx, key).Result()
+func (op *RedisOperator) Del(ctx context.Context, key string) (result bool, err error) {
+	res, err := op.client.Del(ctx, key).Result()
 	if err != nil {
-		return false
+		return
 	}
-	return result == 1
+	if res == 1 {
+		result = true
+	}
+	return
 }
 
 // Expire 设置 key的过期时间
-func (op *RedisOperator) Expire(ctx context.Context, key string, ex time.Duration) bool {
-	result, err := op.client.Expire(ctx, key, ex).Result()
-	if err != nil {
-		return false
-	}
-	return result
+func (op *RedisOperator) Expire(ctx context.Context, key string, ex time.Duration) (result bool, err error) {
+	result, err = op.client.Expire(ctx, key, ex).Result()
+	return
 }
 
 /*------------------------------------ list 操作 ------------------------------------*/
 
 // LPush 从列表左边插入数据，并返回列表长度
-func (op *RedisOperator) LPush(ctx context.Context, key string, date ...interface{}) int64 {
-	result, err := op.client.LPush(ctx, key, date).Result()
-	if err != nil {
-		log.GetLogger(ctx).Error(err.Error())
-	}
-	return result
+func (op *RedisOperator) LPush(ctx context.Context, key string, date ...any) (result int64, err error) {
+	result, err = op.client.LPush(ctx, key, date).Result()
+	return
 }
 
 // RPush 从列表右边插入数据，并返回列表长度
-func (op *RedisOperator) RPush(ctx context.Context, key string, date ...interface{}) int64 {
-	result, err := op.client.RPush(ctx, key, date).Result()
-	if err != nil {
-		log.GetLogger(ctx).Error(err.Error())
-	}
-	return result
+func (op *RedisOperator) RPush(ctx context.Context, key string, date ...any) (result int64, err error) {
+	result, err = op.client.RPush(ctx, key, date).Result()
+	return
 }
 
 // LPop 从列表左边删除第一个数据，并返回删除的数据
-func (op *RedisOperator) LPop(ctx context.Context, key string) (bool, string) {
-	val, err := op.client.LPop(ctx, key).Result()
-	if err != nil {
-		log.GetLogger(ctx).Error(err.Error())
-		return false, ""
-	}
-	return true, val
+func (op *RedisOperator) LPop(ctx context.Context, key string) (result string, err error) {
+	result, err = op.client.LPop(ctx, key).Result()
+	return
 }
 
 // RPop 从列表右边删除第一个数据，并返回删除的数据
-func (op *RedisOperator) RPop(ctx context.Context, key string) (bool, string) {
-	val, err := op.client.RPop(ctx, key).Result()
-	if err != nil {
-		log.GetLogger(ctx).Error(err.Error())
-		return false, ""
-	}
-	return true, val
+func (op *RedisOperator) RPop(ctx context.Context, key string) (result string, err error) {
+	result, err = op.client.RPop(ctx, key).Result()
+	return
 }
 
 // LIndex 根据索引坐标，查询列表中的数据
-func (op *RedisOperator) LIndex(ctx context.Context, key string, index int64) (bool, string) {
-	val, err := op.client.LIndex(ctx, key, index).Result()
-	if err != nil {
-		log.GetLogger(ctx).Error(err.Error())
-		return false, ""
-	}
-	return true, val
+func (op *RedisOperator) LIndex(ctx context.Context, key string, index int64) (result string, err error) {
+	result, err = op.client.LIndex(ctx, key, index).Result()
+	return
 }
 
 // LLen 返回列表长度
-func (op *RedisOperator) LLen(ctx context.Context, key string) int64 {
-	val, err := op.client.LLen(ctx, key).Result()
-	if err != nil {
-		log.GetLogger(ctx).Error(err.Error())
-	}
-	return val
+func (op *RedisOperator) LLen(ctx context.Context, key string) (result int64, err error) {
+	result, err = op.client.LLen(ctx, key).Result()
+	return
 }
 
 // LRange 返回列表的一个范围内的数据，也可以返回全部数据
-func (op *RedisOperator) LRange(ctx context.Context, key string, start, stop int64) []string {
-	vales, err := op.client.LRange(ctx, key, start, stop).Result()
-	if err != nil {
-		log.GetLogger(ctx).Error(err.Error())
-	}
-	return vales
+func (op *RedisOperator) LRange(ctx context.Context, key string, start, stop int64) (result []string, err error) {
+	result, err = op.client.LRange(ctx, key, start, stop).Result()
+	return
 }
 
 // LRem 从列表左边开始，删除元素data， 如果出现重复元素，仅删除 count次
-func (op *RedisOperator) LRem(ctx context.Context, key string, count int64, data interface{}) bool {
-	_, err := op.client.LRem(ctx, key, count, data).Result()
-	if err != nil {
-		log.GetLogger(ctx).Error(err.Error())
-	}
-	return true
+func (op *RedisOperator) LRem(ctx context.Context, key string, count int64, data any) (err error) {
+	_, err = op.client.LRem(ctx, key, count, data).Result()
+	return
 }
 
 // LInsert 在列表中 pivot 元素的后面插入 data
-func (op *RedisOperator) LInsert(ctx context.Context, key string, pivot int64, data interface{}) bool {
-	err := op.client.LInsert(ctx, key, "after", pivot, data).Err()
-	if err != nil {
-		log.GetLogger(ctx).Error(err.Error())
-		return false
-	}
-	return true
+func (op *RedisOperator) LInsert(ctx context.Context, key string, pivot int64, data any) (err error) {
+	_, err = op.client.LInsert(ctx, key, "after", pivot, data).Result()
+	return
 }
 
 /*------------------------------------ set 操作 ------------------------------------*/
 
 // SAdd 添加元素到集合中
-func (op *RedisOperator) SAdd(ctx context.Context, key string, data ...interface{}) bool {
-	err := op.client.SAdd(ctx, key, data).Err()
-	if err != nil {
-		log.GetLogger(ctx).Error(err.Error())
-		return false
-	}
-	return true
+func (op *RedisOperator) SAdd(ctx context.Context, key string, data ...any) (err error) {
+	err = op.client.SAdd(ctx, key, data).Err()
+	return
 }
 
 // SCard 获取集合元素个数
-func (op *RedisOperator) SCard(ctx context.Context, key string) int64 {
-	size, err := op.client.SCard(ctx, "key").Result()
-	if err != nil {
-		log.GetLogger(ctx).Error(err.Error())
-	}
-	return size
+func (op *RedisOperator) SCard(ctx context.Context, key string) (result int64, err error) {
+	result, err = op.client.SCard(ctx, key).Result()
+	return
 }
 
 // SIsMember 判断元素是否在集合中
-func (op *RedisOperator) SIsMember(ctx context.Context, key string, data interface{}) bool {
-	ok, err := op.client.SIsMember(ctx, key, data).Result()
-	if err != nil {
-		log.GetLogger(ctx).Error(err.Error())
-	}
-	return ok
+func (op *RedisOperator) SIsMember(ctx context.Context, key string, data any) (result bool, err error) {
+	result, err = op.client.SIsMember(ctx, key, data).Result()
+	return
 }
 
 // SMembers 获取集合所有元素
-func (op *RedisOperator) SMembers(ctx context.Context, key string) []string {
-	es, err := op.client.SMembers(ctx, key).Result()
-	if err != nil {
-		log.GetLogger(ctx).Error(err.Error())
-	}
-	return es
+func (op *RedisOperator) SMembers(ctx context.Context, key string) (result []string, err error) {
+	result, err = op.client.SMembers(ctx, key).Result()
+	return
 }
 
 // SRem 删除 key集合中的 data元素
-func (op *RedisOperator) SRem(ctx context.Context, key string, data ...interface{}) bool {
-	_, err := op.client.SRem(ctx, key, data).Result()
-	if err != nil {
-		log.GetLogger(ctx).Error(err.Error())
-		return false
-	}
-	return true
+func (op *RedisOperator) SRem(ctx context.Context, key string, data ...any) (err error) {
+	_, err = op.client.SRem(ctx, key, data).Result()
+	return
 }
 
 // SPopN 随机返回集合中的 count个元素，并且删除这些元素
-func (op *RedisOperator) SPopN(ctx context.Context, key string, count int64) []string {
-	vales, err := op.client.SPopN(ctx, key, count).Result()
-	if err != nil {
-		log.GetLogger(ctx).Error(err.Error())
-	}
-	return vales
+func (op *RedisOperator) SPopN(ctx context.Context, key string, count int64) (result []string, err error) {
+	result, err = op.client.SPopN(ctx, key, count).Result()
+	return
 }
 
 /*------------------------------------ hash 操作 ------------------------------------*/
 
 // HSet 根据 key和 field字段设置，field字段的值
-func (op *RedisOperator) HSet(ctx context.Context, key, field, value string) bool {
-	err := op.client.HSet(ctx, key, field, value).Err()
-	if err != nil {
-		return false
-	}
-	return true
+func (op *RedisOperator) HSet(ctx context.Context, key, field, value string) (err error) {
+	err = op.client.HSet(ctx, key, field, value).Err()
+	return
 }
 
 // HGet 根据 key和 field字段，查询field字段的值
-func (op *RedisOperator) HGet(ctx context.Context, key, field string) string {
-	val, err := op.client.HGet(ctx, key, field).Result()
-	if err != nil {
-		log.GetLogger(ctx).Error(err.Error())
-	}
-	return val
+func (op *RedisOperator) HGet(ctx context.Context, key, field string) (result string, err error) {
+	result, err = op.client.HGet(ctx, key, field).Result()
+	return
 }
 
 // HMGet 根据key和多个字段名，批量查询多个 hash字段值
-func (op *RedisOperator) HMGet(ctx context.Context, key string, fields ...string) []interface{} {
-	vales, err := op.client.HMGet(ctx, key, fields...).Result()
-	if err != nil {
-		panic(err)
-	}
-	return vales
+func (op *RedisOperator) HMGet(ctx context.Context, key string, fields ...string) (result []any, err error) {
+	result, err = op.client.HMGet(ctx, key, fields...).Result()
+	return
 }
 
 // HGetAll 根据 key查询所有字段和值
-func (op *RedisOperator) HGetAll(ctx context.Context, key string) map[string]string {
-	data, err := op.client.HGetAll(ctx, key).Result()
-	if err != nil {
-		log.GetLogger(ctx).Error(err.Error())
-	}
-	return data
+func (op *RedisOperator) HGetAll(ctx context.Context, key string) (result map[string]string, err error) {
+	result, err = op.client.HGetAll(ctx, key).Result()
+	return
 }
 
 // HKeys 根据 key返回所有字段名
-func (op *RedisOperator) HKeys(ctx context.Context, key string) []string {
-	fields, err := op.client.HKeys(ctx, key).Result()
-	if err != nil {
-		log.GetLogger(ctx).Error(err.Error())
-	}
-	return fields
+func (op *RedisOperator) HKeys(ctx context.Context, key string) (result []string, err error) {
+	result, err = op.client.HKeys(ctx, key).Result()
+	return
 }
 
 // HLen 根据 key，查询hash的字段数量
-func (op *RedisOperator) HLen(ctx context.Context, key string) int64 {
-	size, err := op.client.HLen(ctx, key).Result()
-	if err != nil {
-		log.GetLogger(ctx).Error(err.Error())
-	}
-	return size
+func (op *RedisOperator) HLen(ctx context.Context, key string) (result int64, err error) {
+	result, err = op.client.HLen(ctx, key).Result()
+	return
 }
 
 // HMSet 根据 key和多个字段名和字段值，批量设置 hash字段值
-func (op *RedisOperator) HMSet(ctx context.Context, key string, data map[string]interface{}) bool {
-	result, err := op.client.HMSet(ctx, key, data).Result()
-	if err != nil {
-		log.GetLogger(ctx).Error(err.Error())
-		return false
-	}
-	return result
+func (op *RedisOperator) HMSet(ctx context.Context, key string, data map[string]any) (result bool, err error) {
+	result, err = op.client.HMSet(ctx, key, data).Result()
+	return
 }
 
 // HSetNX 如果 field字段不存在，则设置 hash字段值
-func (op *RedisOperator) HSetNX(ctx context.Context, key, field string, value interface{}) bool {
-	result, err := op.client.HSetNX(ctx, key, field, value).Result()
-	if err != nil {
-		log.GetLogger(ctx).Error(err.Error())
-		return false
-	}
-	return result
+func (op *RedisOperator) HSetNX(ctx context.Context, key, field string, value any) (result bool, err error) {
+	result, err = op.client.HSetNX(ctx, key, field, value).Result()
+	return
 }
 
 // HDel 根据 key和字段名，删除 hash字段，支持批量删除
-func (op *RedisOperator) HDel(ctx context.Context, key string, fields ...string) bool {
-	_, err := op.client.HDel(ctx, key, fields...).Result()
-	if err != nil {
-		log.GetLogger(ctx).Error(err.Error())
-		return false
-	}
-	return true
+func (op *RedisOperator) HDel(ctx context.Context, key string, fields ...string) (err error) {
+	_, err = op.client.HDel(ctx, key, fields...).Result()
+	return
 }
 
 // HExists 检测 hash字段名是否存在
-func (op *RedisOperator) HExists(ctx context.Context, key, field string) bool {
-	result, err := op.client.HExists(ctx, key, field).Result()
-	if err != nil {
-		log.GetLogger(ctx).Error(err.Error())
-		return false
-	}
-	return result
+func (op *RedisOperator) HExists(ctx context.Context, key, field string) (result bool, err error) {
+	result, err = op.client.HExists(ctx, key, field).Result()
+	return
 }

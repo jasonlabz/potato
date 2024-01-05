@@ -57,7 +57,7 @@ type Database struct {
 
 // RedisConfig 连接配置
 type RedisConfig struct {
-	Address           string `json:"address" yaml:"address" ini:"address"`
+	Host              string `json:"host" yaml:"host" ini:"host"`
 	Port              int    `json:"port" yaml:"port" ini:"port"`
 	Password          string `json:"password" yaml:"password" ini:"password"`
 	IndexDb           int    `json:"index_db" yaml:"index_db" ini:"index_db"`

@@ -1,15 +1,8 @@
 package gocache
 
 import (
-	"context"
-	"errors"
-	"fmt"
-	log "github.com/jasonlabz/potato/log/zapx"
-	"reflect"
 	"time"
 
-	"github.com/bytedance/sonic"
-	"github.com/jasonlabz/potato/core/utils"
 	"github.com/patrickmn/go-cache"
 )
 
@@ -22,125 +15,39 @@ const (
 
 var c *cache.Cache
 
-var (
-	ErrNoKey = errors.New("cache: k is empty")
-)
-
 func init() {
 	c = cache.New(DefaultExpiration, CleanupInterval)
 }
 
-func Set(ctx context.Context, k string, v interface{}, expiration time.Duration) error {
-	if k == "" {
-		return ErrNoKey
-	}
+func Set(k string, v any, expiration time.Duration) {
 	c.Set(k, v, expiration)
-	go func() {
-		log.GetLogger(ctx).Info(fmt.Sprintf("[Cache] Set done, key:\"%s\", val:%+v\n", k, func() string {
-			bytes, err := sonic.Marshal(v)
-			if err != nil {
-				return ""
-			}
-			msg := string(bytes)
-			if len(msg) > 1000 {
-				msg = msg[:1000] + "...[more than 1000 character.]"
-			}
-			return msg
-		}()))
-	}()
-	return nil
 }
 
-func Replace(ctx context.Context, k string, v interface{}, expiration time.Duration) error {
-	if k == "" {
-		return ErrNoKey
-	}
-
-	_ = c.Replace(k, v, expiration)
-	go func() {
-		log.GetLogger(ctx).Info(fmt.Sprintf("[Cache] replace done, key:\"%s\", val:%+v\n", k, func() string {
-			bytes, err := sonic.Marshal(v)
-			if err != nil {
-				return ""
-			}
-			msg := string(bytes)
-			if len(msg) > 1000 {
-				msg = msg[:1000] + "...[more than 1000 character.]"
-			}
-			return msg
-		}()))
-	}()
-	return nil
+func Replace(k string, v any, expiration time.Duration) (err error) {
+	err = c.Replace(k, v, expiration)
+	return
 }
 
-func Get(ctx context.Context, k string, dest interface{}) (bool, error) {
-	if k == "" {
-		return false, ErrNoKey
-	}
-	v, ok := c.Get(k)
-	if !ok {
-		return false, nil
-	}
-	go func() {
-		log.GetLogger(ctx).Info(fmt.Sprintf("[Cache] Get done, key:\"%s\", val:%+v\n", k, func() string {
-			bytes, err := sonic.Marshal(v)
-			if err != nil {
-				return ""
-			}
-			msg := string(bytes)
-			if len(msg) > 1000 {
-				msg = msg[:1000] + "...[more than 1000 character.]"
-			}
-			return msg
-		}()))
-	}()
-	err := utils.CopyStruct(v, dest)
-	if err != nil {
-		return false, err
-	}
-	return true, nil
+func Get(k string) (res any, ok bool) {
+	res, ok = c.Get(k)
+	return
 }
 
-func IsExist(ctx context.Context, k string) bool {
-	if k == "" {
-		return false
-	}
-	_, ok := c.Get(k)
-	log.GetLogger(ctx).Info(fmt.Sprintf("[Cache] IsExist, key:\"%v\": \"%v\"", k, ok))
-	return ok
+func IsExist(k string) (exist bool) {
+	_, exist = c.Get(k)
+	return
 }
 
-func Del(ctx context.Context, k string) {
+func Del(k string) {
 	c.Delete(k)
-	log.GetLogger(ctx).Info(fmt.Sprintf("[Cache] Del done, key:\"%s\"\n", k))
 }
 
-func GetOrSet(ctx context.Context, k string, dest interface{}, expiration time.Duration, callback func() (interface{}, error)) error {
-	ok, err := Get(ctx, k, dest)
-	if err != nil {
-		return err
-	}
-	if ok {
-		return nil
-	}
+func GetWithExpiration(key string) (res any, expired time.Time, ok bool) {
+	return c.GetWithExpiration(key)
+}
 
-	v, cbErr := callback()
-	if cbErr != nil {
-		return cbErr
-	}
-
-	if v != nil {
-		elem := reflect.Indirect(reflect.ValueOf(dest))
-		rv := reflect.Indirect(reflect.ValueOf(v))
-		elem.Set(rv)
-
-		err = Set(ctx, k, dest, expiration)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+func ItemCount() int {
+	return c.ItemCount()
 }
 
 func Increment(key string, incrementNum int64) error {
@@ -166,6 +73,6 @@ func DecrementInt32(key string, decrementNum int32) (int32, error) {
 	return c.DecrementInt32(key, decrementNum)
 }
 
-func OnEvicted(f func(string, interface{})) {
+func OnEvicted(f func(string, any)) {
 	c.OnEvicted(f)
 }
