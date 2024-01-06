@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -254,6 +255,12 @@ func (op *RabbitOperator) getChannelForQueue(isConsume bool, queue string) (chan
 	if err != nil {
 		return
 	}
+	//notifyPush := make(chan amqp.Confirmation, 1)
+	//channel.NotifyPublish(notifyPush)
+	//
+	//go func() {
+	//
+	//}()
 	op.client.queueCh.Store(queue, channel)
 	return
 }
@@ -271,153 +278,190 @@ func (op *RabbitOperator) getChannel(isConsume bool, exchange, queue string) (ch
 	return
 }
 
-type PushBody struct {
-	ConfirmMode      bool
-	NoWait           bool
-	ExchangeName     string
-	ExchangeType     ExchangeType
-	BindingKeyMap    map[string]string
-	RoutingKey       string
-	QueueName        string
-	QueueMaxPriority map[string]uint8
-	XMaxPriority     uint8
-	amqp.Publishing
+func (op *RabbitOperator) PushDelayMessage(ctx context.Context, body *PushDelayBody) (err error) {
+	if body.MessageId == "" {
+		body.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
+	}
+	logger := log.GetLogger(ctx).WithField(log.String("msg_id", body.MessageId))
+	timer := time.NewTimer(DefaultRetryTimes)
+	defer timer.Stop()
+
+	if body.DelayTime == 0 && body.Expiration == "" {
+		err = errors.New("no expire time set")
+		return
+	}
+	for i := 0; i < RetryTimes; i++ {
+		if atomic.LoadInt32(&op.closed) == Closed {
+			logger.Error("rabbitmq connection is closed, push cancel")
+			err = errors.New("connection is closed")
+			return
+		}
+		err = op.pushDelayMessageCore(ctx, body)
+		if err != nil {
+			logger.WithError(err).Error(fmt.Sprintf("[push] Push failed. after %d seconds and retry...", DefaultRetryTimes))
+			select {
+			case <-op.closeCh:
+				logger.Error(fmt.Sprintf("[push]rmq closed, push msg cancel"))
+				err = errors.New("rabbitmq connection closed")
+				return
+			case <-timer.C:
+			}
+			continue
+		}
+		logger.Info("[push] Push msg success.")
+		return
+	}
+	logger.Info("[push] Push msg failed. msg: " + string(body.Body))
+	return
 }
+func (op *RabbitOperator) pushDelayMessageCore(ctx context.Context, body *PushDelayBody) (err error) {
+	delayStr := strconv.FormatInt(int64(body.DelayTime), 10)
+	delayQueueName := body.QueueName + "_delay:" + delayStr
+	delayRouteKey := body.RoutingKey + "_delay:" + delayStr
 
-func (p *PushBody) Validate() {
-	if len(p.BindingKeyMap) == 0 {
-		p.BindingKeyMap = map[string]string{}
+	channel, err := op.getChannelForQueue(false, body.QueueName)
+	if err != nil {
+		return
 	}
 
-	if p.ExchangeName != "" {
-		if string(p.ExchangeType) == "" {
-			//  default exchangeType is fanout
-			p.ExchangeType = ExchangeTypeFanout
-		}
-
-		if p.QueueName != "" {
-			p.BindingKeyMap[p.QueueName] = p.QueueName
-			p.QueueName = ""
-		}
-	}
-
-	if p.ExchangeName == "" {
-		p.BindingKeyMap = nil
-	}
-
-	// 限制优先级为 0~10
-	if p.Priority > 10 {
-		p.Priority = 10
-	}
-
-	if p.RoutingKey == "" {
-		p.RoutingKey = p.QueueName
-	}
-
-	for queue, bindKey := range p.BindingKeyMap {
-		if bindKey == "" {
-			p.BindingKeyMap[queue] = queue
-		}
-	}
-
-	pri, ok := p.QueueMaxPriority[p.QueueName]
-	if ok {
-		p.XMaxPriority = pri
-	} else if p.XMaxPriority == 0 && len(p.QueueMaxPriority) > 0 {
-		for _, u := range p.QueueMaxPriority {
-			p.XMaxPriority = u
-			break
+	if body.OpenConfirm {
+		err = channel.Confirm(body.ConfirmNoWait)
+		if err != nil {
+			return
 		}
 	}
-}
-
-func (p *PushBody) SetPriority(priority uint8) *PushBody {
-	p.Priority = priority
-	return p
-}
-
-func (p *PushBody) SetQueueWithMaxPriority(priority uint8, queues ...string) *PushBody {
-	if p.XMaxPriority == 0 {
-		p.XMaxPriority = priority
+	if string(body.ExchangeType) == "" {
+		body.ExchangeType = ExchangeTypeFanout
 	}
-	if p.QueueMaxPriority == nil {
-		p.QueueMaxPriority = make(map[string]uint8)
+	// 注册交换机
+	// name:交换机名称,kind:交换机类型,durable:是否持久化,队列存盘,true服务重启后信息不会丢失,影响性能;autoDelete:是否自动删除;
+	// noWait:是否非阻塞, true为是,不等待RMQ返回信息;args:参数,传nil即可; internal:是否为内部
+	err = channel.ExchangeDeclare(body.ExchangeName, string(body.ExchangeType), true, false, false, true, body.ExchangeArgs)
+	if err != nil {
+		return
 	}
-	for _, queue := range queues {
-		p.QueueMaxPriority[queue] = priority
+
+	// 队列不存在,声明队列
+	// name:队列名称;durable:是否持久化,队列存盘,true服务重启后信息不会丢失,影响性能;autoDelete:是否自动删除;noWait:是否非阻塞,
+	// true为是,不等待RMQ返回信息;args:参数,传nil即可;exclusive:是否设置排他
+	_, err = channel.QueueDeclare(body.QueueName, true, false, false, true, body.Args)
+	if err != nil {
+		return
 	}
-	return p
-}
 
-func (p *PushBody) SetExchangeName(exchangeName string) *PushBody {
-	p.ExchangeName = exchangeName
-	return p
-}
-
-func (p *PushBody) SetExchangeType(exchangeType ExchangeType) *PushBody {
-	p.ExchangeType = exchangeType
-	return p
-}
-
-func (p *PushBody) BindQueue(queueName, bindingKey string) *PushBody {
-	if len(p.BindingKeyMap) == 0 {
-		p.BindingKeyMap = map[string]string{}
+	// 定义延迟队列(死信队列)
+	_, err = channel.QueueDeclare(delayQueueName, true, false, false, true,
+		amqp.Table{
+			"x-dead-letter-exchange": body.ExchangeName, // 指定死信交换机
+			//"x-dead-letter-routing-key": body.RoutingKey,   // 指定死信routing-key
+		})
+	// 延迟队列绑定到exchange
+	err = channel.QueueBind(body.QueueName, body.RoutingKey, body.ExchangeName, true, nil)
+	if err != nil {
+		return err
 	}
-	if bindingKey == "" {
-		bindingKey = queueName
+
+	publishingMsg := amqp.Publishing{
+		Timestamp:       times.Now(),
+		Body:            body.Body,
+		Headers:         body.Headers,
+		ContentEncoding: body.ContentEncoding,
+		ReplyTo:         body.ReplyTo,
+		Expiration:      body.Expiration,
+		MessageId:       body.MessageId,
+		Type:            body.Type,
+		UserId:          body.UserId,
+		AppId:           body.AppId,
 	}
-	p.BindingKeyMap[queueName] = bindingKey
-	return p
-}
-
-func (p *PushBody) SetRoutingKey(routingKey string) *PushBody {
-	p.RoutingKey = routingKey
-	return p
-}
-
-func (p *PushBody) SetQueueName(queueName string) *PushBody {
-	p.QueueName = queueName
-	return p
-}
-
-func (p *PushBody) SetConfirmMode(confirm, noWait bool) *PushBody {
-	p.ConfirmMode = confirm
-	p.NoWait = noWait
-	return p
-}
-
-func (p *PushBody) SetDeliveryMode(deliveryMode uint8) *PushBody {
-	p.DeliveryMode = deliveryMode
-	return p
-}
-
-func (p *PushBody) SetMsg(msg []byte) *PushBody {
-	p.Body = msg
-	return p
-}
-
-type ArgOption func(a amqp.Table)
-
-func WithMaxPriority(priority int) ArgOption {
-	return func(a amqp.Table) {
-		a["x-max-priority"] = priority
+	if body.Priority > 0 {
+		publishingMsg.Priority = body.Priority
 	}
-}
-
-func WithMsgTTL(duration time.Duration) ArgOption {
-	return func(a amqp.Table) {
-		a["x-message-ttl"] = duration
+	if body.DeliveryMode == 0 {
+		publishingMsg.DeliveryMode = amqp.Persistent
 	}
-}
-
-func WithDeadLetterExchange(exchange, routingKey string) ArgOption {
-	return func(a amqp.Table) {
-		a["x-dead-letter-exchange"] = exchange
-		a["x-dead-letter-routing-key"] = routingKey
+	if body.ContentType == "" {
+		publishingMsg.ContentType = "text/plain"
 	}
+	if body.Expiration == "" {
+		publishingMsg.Expiration = delayStr
+	}
+	// 发送消息，将消息发送到延迟队列，到期后自动路由到正常队列中
+	err = channel.PublishWithContext(ctx, "", delayRouteKey, false, false, publishingMsg)
+	if err != nil {
+		return
+	}
+	return
 }
 
-func (op *RabbitOperator) Push(ctx context.Context, msg *PushBody, args ...ArgOption) (err error) {
+func (op *RabbitOperator) PushExchange(ctx context.Context, body *ExchangePushBody) (err error) {
+	if body.MessageId == "" {
+		body.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
+	}
+	logger := log.GetLogger(ctx).WithField(log.String("msg_id", body.MessageId))
+	timer := time.NewTimer(DefaultRetryTimes)
+	defer timer.Stop()
+	body.Validate()
+
+	for i := 0; i < RetryTimes; i++ {
+		if atomic.LoadInt32(&op.closed) == Closed {
+			logger.Error("rabbitmq connection is closed, push cancel")
+			err = errors.New("connection is closed")
+			return
+		}
+		err = op.pushExchangeCore(ctx, body)
+		if err != nil {
+			logger.WithError(err).Error(fmt.Sprintf("[push] Push failed. after %d seconds and retry...", DefaultRetryTimes))
+			select {
+			case <-op.closeCh:
+				logger.Error(fmt.Sprintf("[push]rmq closed, push msg cancel"))
+				err = errors.New("rabbitmq connection closed")
+				return
+			case <-timer.C:
+			}
+			continue
+		}
+		logger.Info("[push] Push msg success.")
+		return
+	}
+	logger.Info("[push] Push msg failed. msg: " + string(body.Body))
+	return
+}
+
+func (op *RabbitOperator) PushQueue(ctx context.Context, body *QueuePushBody) (err error) {
+	if body.MessageId == "" {
+		body.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
+	}
+	logger := log.GetLogger(ctx).WithField(log.String("msg_id", body.MessageId))
+	timer := time.NewTimer(DefaultRetryTimes)
+	defer timer.Stop()
+
+	body.Validate()
+	for i := 0; i < RetryTimes; i++ {
+		if atomic.LoadInt32(&op.closed) == Closed {
+			logger.Error("rabbitmq connection is closed, push cancel")
+			err = errors.New("connection is closed")
+			return
+		}
+		err = op.pushQueueCore(ctx, body)
+		if err != nil {
+			logger.WithError(err).Error(fmt.Sprintf("[push] Push failed. after %d seconds and retry...", DefaultRetryTimes))
+			select {
+			case <-op.closeCh:
+				logger.Error(fmt.Sprintf("[push]mq closed, push msg cancel"))
+				err = errors.New("rabbitmq connection closed")
+				return
+			case <-timer.C:
+			}
+			continue
+		}
+		logger.Info("[push] Push msg success.")
+		return
+	}
+	logger.Info("[push] Push msg failed. msg: " + string(body.Body))
+	return
+}
+
+func (op *RabbitOperator) Push(ctx context.Context, msg *PushBody) (err error) {
 	if msg.MessageId == "" {
 		msg.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
 	}
@@ -430,7 +474,7 @@ func (op *RabbitOperator) Push(ctx context.Context, msg *PushBody, args ...ArgOp
 			err = errors.New("connection is closed")
 			return
 		}
-		err = op.pushCore(ctx, msg, args...)
+		err = op.pushCore(ctx, msg)
 		if err != nil {
 			select {
 			case <-op.closeCh:
@@ -449,7 +493,143 @@ func (op *RabbitOperator) Push(ctx context.Context, msg *PushBody, args ...ArgOp
 	return
 }
 
-func (op *RabbitOperator) pushCore(ctx context.Context, msg *PushBody, args ...ArgOption) (err error) {
+/*
+@method: pushQueueCore
+@arg: QueuePushBody ->  Args是队列的参数设置，例如优先级队列为amqp.Table{"x-max-priority":10}
+@description: 向队列推送消息
+*/
+func (op *RabbitOperator) pushQueueCore(ctx context.Context, body *QueuePushBody) (err error) {
+	channel, err := op.getChannelForQueue(false, body.QueueName)
+	if err != nil {
+		return
+	}
+
+	if body.OpenConfirm {
+		err = channel.Confirm(body.ConfirmNoWait)
+		if err != nil {
+			return
+		}
+	}
+
+	// 队列不存在,声明队列
+	// name:队列名称;durable:是否持久化,队列存盘,true服务重启后信息不会丢失,影响性能;autoDelete:是否自动删除;noWait:是否非阻塞,
+	// true为是,不等待RMQ返回信息;args:参数,传nil即可;exclusive:是否设置排他
+	_, err = channel.QueueDeclare(body.QueueName, true, false, false, true, body.Args)
+	if err != nil {
+		return
+	}
+
+	publishingMsg := amqp.Publishing{
+		Timestamp:       times.Now(),
+		Body:            body.Body,
+		Headers:         body.Headers,
+		ContentEncoding: body.ContentEncoding,
+		ReplyTo:         body.ReplyTo,
+		Expiration:      body.Expiration,
+		MessageId:       body.MessageId,
+		Type:            body.Type,
+		UserId:          body.UserId,
+		AppId:           body.AppId,
+	}
+	if body.Priority > 0 {
+		publishingMsg.Priority = body.Priority
+	}
+	if body.DeliveryMode == 0 {
+		publishingMsg.DeliveryMode = amqp.Persistent
+	}
+	if body.ContentType == "" {
+		publishingMsg.ContentType = "text/plain"
+	}
+	// 发送任务消息
+	err = channel.PublishWithContext(ctx, "", body.QueueName, false, false, publishingMsg)
+	if err != nil {
+		return
+	}
+	return
+}
+
+/*
+@method: pushExchangeCore
+@arg: ExchangePushBody ->  Args是交换机和队列的参数设置，例如优先级队列为amqp.Table{"x-max-priority":10}
+@description: 向队列推送消息
+*/
+func (op *RabbitOperator) pushExchangeCore(ctx context.Context, body *ExchangePushBody) (err error) {
+	channel, err := op.getChannelForExchange(body.ExchangeName)
+	if err != nil {
+		return
+	}
+
+	if body.OpenConfirm {
+		err = channel.Confirm(body.ConfirmNoWait)
+		if err != nil {
+			return
+		}
+	}
+
+	if body.ExchangeType == "" {
+		body.ExchangeType = ExchangeTypeFanout
+	}
+
+	if len(body.QueueArgs) == 0 {
+		body.QueueArgs = make(map[string]amqp.Table)
+	}
+
+	// 注册交换机
+	// name:交换机名称,kind:交换机类型,durable:是否持久化,队列存盘,true服务重启后信息不会丢失,影响性能;autoDelete:是否自动删除;
+	// noWait:是否非阻塞, true为是,不等待RMQ返回信息;args:参数,传nil即可; internal:是否为内部
+	err = channel.ExchangeDeclare(body.ExchangeName, string(body.ExchangeType), true, false, false, true, body.ExchangeArgs)
+	if err != nil {
+		return
+	}
+
+	// 交换机绑定队列处理
+	for queue, bindingKey := range body.BindingKeyMap {
+		table := body.QueueArgs[queue]
+		// 队列不存在,声明队列
+		// name:队列名称;durable:是否持久化,队列存盘,true服务重启后信息不会丢失,影响性能;autoDelete:是否自动删除;noWait:是否非阻塞,
+		// true为是,不等待RMQ返回信息;args:参数,传nil即可;exclusive:是否设置排他
+		_, err = channel.QueueDeclare(queue, true, false, false, true, table)
+		if err != nil {
+			return
+		}
+
+		// 队列绑定
+		err = channel.QueueBind(queue, bindingKey, body.ExchangeName, true, nil)
+		if err != nil {
+			return
+		}
+	}
+
+	publishingMsg := amqp.Publishing{
+		Timestamp:       times.Now(),
+		Body:            body.Body,
+		Headers:         body.Headers,
+		ContentEncoding: body.ContentEncoding,
+		ReplyTo:         body.ReplyTo,
+		Expiration:      body.Expiration,
+		MessageId:       body.MessageId,
+		Type:            body.Type,
+		UserId:          body.UserId,
+		AppId:           body.AppId,
+	}
+	if body.Priority > 0 {
+		publishingMsg.Priority = body.Priority
+	}
+	if body.DeliveryMode == 0 {
+		publishingMsg.DeliveryMode = amqp.Persistent
+	}
+	if body.ContentType == "" {
+		publishingMsg.ContentType = "text/plain"
+	}
+	// 发送任务消息
+	err = channel.PublishWithContext(ctx, body.ExchangeName, body.RoutingKey, false, false, publishingMsg)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (op *RabbitOperator) pushCore(ctx context.Context, msg *PushBody) (err error) {
 	logger := log.GetLogger(ctx).WithField(log.String("msg_id", msg.MessageId))
 	channel, err := op.getChannel(false, msg.ExchangeName, msg.QueueName)
 	if err != nil {
@@ -457,8 +637,8 @@ func (op *RabbitOperator) pushCore(ctx context.Context, msg *PushBody, args ...A
 		return
 	}
 
-	if msg.ConfirmMode {
-		err = channel.Confirm(msg.NoWait)
+	if msg.OpenConfirm {
+		err = channel.Confirm(msg.ConfirmNoWait)
 		if err != nil {
 			logger.Error(err.Error())
 			return
@@ -467,15 +647,11 @@ func (op *RabbitOperator) pushCore(ctx context.Context, msg *PushBody, args ...A
 
 	msg.Validate()
 
-	table := amqp.Table{}
-	for _, arg := range args {
-		arg(table)
-	}
 	if msg.ExchangeName != "" {
 		// 注册交换机
 		// name:交换机名称,kind:交换机类型,durable:是否持久化,队列存盘,true服务重启后信息不会丢失,影响性能;autoDelete:是否自动删除;
 		// noWait:是否非阻塞, true为是,不等待RMQ返回信息;args:参数,传nil即可; internal:是否为内部
-		err = channel.ExchangeDeclare(msg.ExchangeName, string(msg.ExchangeType), true, false, false, true, nil)
+		err = channel.ExchangeDeclare(msg.ExchangeName, string(msg.ExchangeType), true, false, false, true, msg.ExchangeArgs)
 		if err != nil {
 			logger.Error(fmt.Sprintf("MQ failed to declare the exchange:%s \n", err))
 			return
@@ -483,10 +659,7 @@ func (op *RabbitOperator) pushCore(ctx context.Context, msg *PushBody, args ...A
 
 		// 交换机绑定队列处理
 		for queue, bindingKey := range msg.BindingKeyMap {
-			xMaxPri, ok := msg.QueueMaxPriority[queue]
-			if ok {
-				table["x-max-priority"] = xMaxPri
-			}
+			table := msg.QueueArgs[queue]
 			// 队列不存在,声明队列
 			// name:队列名称;durable:是否持久化,队列存盘,true服务重启后信息不会丢失,影响性能;autoDelete:是否自动删除;noWait:是否非阻塞,
 			// true为是,不等待RMQ返回信息;args:参数,传nil即可;exclusive:是否设置排他
@@ -506,14 +679,10 @@ func (op *RabbitOperator) pushCore(ctx context.Context, msg *PushBody, args ...A
 	}
 
 	if msg.QueueName != "" {
-		xMaxPri, ok := msg.QueueMaxPriority[msg.QueueName]
-		if ok {
-			table["x-max-priority"] = xMaxPri
-		}
 		// 队列不存在,声明队列
 		// name:队列名称;durable:是否持久化,队列存盘,true服务重启后信息不会丢失,影响性能;autoDelete:是否自动删除;noWait:是否非阻塞,
 		// true为是,不等待RMQ返回信息;args:参数,传nil即可;exclusive:是否设置排他
-		_, err = channel.QueueDeclare(msg.QueueName, true, false, false, true, table)
+		_, err = channel.QueueDeclare(msg.QueueName, true, false, false, true, msg.Args)
 		if err != nil {
 			logger.Error(fmt.Sprintf("MQ declare queue failed:%s \n", err))
 			return
@@ -550,16 +719,7 @@ func (op *RabbitOperator) pushCore(ctx context.Context, msg *PushBody, args ...A
 	return
 }
 
-type ConsumeBody struct {
-	ExchangeName string
-	RoutingKey   string
-	QueueName    string
-	XMaxPriority uint8
-	XPriority    int
-	FetchCount   int
-}
-
-func (op *RabbitOperator) Consume(ctx context.Context, param *ConsumeBody, options ...ArgOption) (contents chan amqp.Delivery, err error) {
+func (op *RabbitOperator) Consume(ctx context.Context, param *ConsumeBody) (contents chan amqp.Delivery, err error) {
 	logger := log.GetLogger(ctx)
 	if !op.isReady {
 		logger.Error("rabbitmq connection is not ready, consume cancel")
@@ -567,10 +727,6 @@ func (op *RabbitOperator) Consume(ctx context.Context, param *ConsumeBody, optio
 		return
 	}
 	contents = make(chan amqp.Delivery, 3)
-	table := amqp.Table{}
-	for _, opt := range options {
-		opt(table)
-	}
 
 	go func() {
 		rLogger := log.GetLogger(context.Background())
@@ -586,7 +742,7 @@ func (op *RabbitOperator) Consume(ctx context.Context, param *ConsumeBody, optio
 		timer := time.NewTimer(DefaultConsumeRetryTimes)
 		defer timer.Stop()
 	process:
-		resChan, innerErr := op.consumeCore(ctx, param, table)
+		resChan, innerErr := op.consumeCore(ctx, param)
 		// Keep retrying when consumption fails
 		for innerErr != nil {
 			select {
@@ -599,7 +755,7 @@ func (op *RabbitOperator) Consume(ctx context.Context, param *ConsumeBody, optio
 			case <-timer.C:
 				rLogger.Error(fmt.Sprintf("[consume:%s]consume msg error: %s, retrying ...", param.QueueName, innerErr.Error()))
 			}
-			resChan, innerErr = op.consumeCore(ctx, param, table)
+			resChan, innerErr = op.consumeCore(ctx, param)
 		}
 
 		// Circular consumption of data
@@ -643,7 +799,7 @@ func (op *RabbitOperator) Consume(ctx context.Context, param *ConsumeBody, optio
 	return
 }
 
-func (op *RabbitOperator) consumeCore(ctx context.Context, param *ConsumeBody, table amqp.Table) (contents <-chan amqp.Delivery, err error) {
+func (op *RabbitOperator) consumeCore(ctx context.Context, param *ConsumeBody) (contents <-chan amqp.Delivery, err error) {
 	logger := log.GetLogger(ctx)
 	if !op.isReady {
 		logger.Error("rabbitmq connection is not ready, push cancel")
@@ -658,13 +814,11 @@ func (op *RabbitOperator) consumeCore(ctx context.Context, param *ConsumeBody, t
 	if param.FetchCount == 0 {
 		param.FetchCount = 1
 	}
-	if param.XMaxPriority > 0 {
-		table["x-max-priority"] = param.XMaxPriority
-	}
+
 	// 队列不存在,声明队列
 	// name:队列名称;durable:是否持久化,队列存盘,true服务重启后信息不会丢失,影响性能;autoDelete:是否自动删除;noWait:是否非阻塞,
 	// true为是,不等待RMQ返回信息;args:参数,传nil即可;exclusive:是否设置排他
-	_, err = channel.QueueDeclare(param.QueueName, true, false, false, true, table)
+	_, err = channel.QueueDeclare(param.QueueName, true, false, false, true, param.QueueArgs)
 	if err != nil {
 		logger.Error(fmt.Sprintf("MQ declare queue failed:%s \n", err))
 		return
@@ -828,7 +982,7 @@ func (op *RabbitOperator) getCommonChannel() (channel *amqp.Channel, err error) 
 	return
 }
 
-func (op *RabbitOperator) GetCount(ctx context.Context, queueName string) (count int, err error) {
+func (op *RabbitOperator) GetCount(queueName string) (count int, err error) {
 	channel, err := op.getCommonChannel()
 	if err != nil {
 		return
