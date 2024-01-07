@@ -9,7 +9,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-var client *RedisOperator
+var operator *RedisOperator
 
 func init() {
 	config := application.GetConfig()
@@ -27,13 +27,20 @@ func init() {
 	}
 }
 
-func GetRedisClient() *RedisOperator {
-	return client
+func GetOperator() *RedisOperator {
+	return operator
+}
+
+func GetRedisClient() *redis.Client {
+	if operator == nil {
+		return nil
+	}
+	return operator.client
 }
 
 func InitRedisClient(config *Config) {
 	var err error
-	client, err = NewRedisOperator(config)
+	operator, err = NewRedisOperator(config)
 	if err != nil {
 		panic(err)
 	}
@@ -158,14 +165,14 @@ func (op *RedisOperator) Expire(ctx context.Context, key string, ex time.Duratio
 /*------------------------------------ list 操作 ------------------------------------*/
 
 // LPush 从列表左边插入数据，并返回列表长度
-func (op *RedisOperator) LPush(ctx context.Context, key string, date ...any) (result int64, err error) {
-	result, err = op.client.LPush(ctx, key, date).Result()
+func (op *RedisOperator) LPush(ctx context.Context, key string, data ...any) (result int64, err error) {
+	result, err = op.client.LPush(ctx, key, data...).Result()
 	return
 }
 
 // RPush 从列表右边插入数据，并返回列表长度
-func (op *RedisOperator) RPush(ctx context.Context, key string, date ...any) (result int64, err error) {
-	result, err = op.client.RPush(ctx, key, date).Result()
+func (op *RedisOperator) RPush(ctx context.Context, key string, data ...any) (result int64, err error) {
+	result, err = op.client.RPush(ctx, key, data...).Result()
 	return
 }
 
@@ -215,7 +222,7 @@ func (op *RedisOperator) LInsert(ctx context.Context, key string, pivot int64, d
 
 // SAdd 添加元素到集合中
 func (op *RedisOperator) SAdd(ctx context.Context, key string, data ...any) (err error) {
-	err = op.client.SAdd(ctx, key, data).Err()
+	err = op.client.SAdd(ctx, key, data...).Err()
 	return
 }
 
@@ -246,6 +253,37 @@ func (op *RedisOperator) SRem(ctx context.Context, key string, data ...any) (err
 // SPopN 随机返回集合中的 count个元素，并且删除这些元素
 func (op *RedisOperator) SPopN(ctx context.Context, key string, count int64) (result []string, err error) {
 	result, err = op.client.SPopN(ctx, key, count).Result()
+	return
+}
+
+/*------------------------------------ zset 操作 ------------------------------------*/
+
+// ZAdd 添加元素到有序集合中
+func (op *RedisOperator) ZAdd(ctx context.Context, key string, data ...redis.Z) (err error) {
+	err = op.client.ZAdd(ctx, key, data...).Err()
+	return
+}
+
+// ZCard 获取集合元素个数
+func (op *RedisOperator) ZCard(ctx context.Context, key string) (result int64, err error) {
+	result, err = op.client.ZCard(ctx, key).Result()
+	return
+}
+
+func (op *RedisOperator) ZAddArgs(ctx context.Context, key string, data redis.ZAddArgs) (result int64, err error) {
+	result, err = op.client.ZAddArgs(ctx, key, data).Result()
+	return
+}
+
+// ZRangeWithScores 某个区间的元素
+func (op *RedisOperator) ZRangeWithScores(ctx context.Context, key string, start int64, stop int64) (result []redis.Z, err error) {
+	result, err = op.client.ZRangeWithScores(ctx, key, start, stop).Result()
+	return
+}
+
+// ZRem 删除 key集合中的 data元素
+func (op *RedisOperator) ZRem(ctx context.Context, key string, data ...any) (result int64, err error) {
+	result, err = op.client.ZRem(ctx, key, data...).Result()
 	return
 }
 
