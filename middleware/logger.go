@@ -65,7 +65,7 @@ func RequestMiddleware() gin.HandlerFunc {
 		logger := log.GetLogger(c)
 		start := time.Now() // Start timer
 
-		logger.Info("[GIN] request",
+		logger.Info("	[GIN] request",
 			"method", c.Request.Method,
 			"agent", c.Request.UserAgent(),
 			"body", string(requestBodyLogBytes),
@@ -74,7 +74,7 @@ func RequestMiddleware() gin.HandlerFunc {
 
 		c.Next()
 
-		logger.Info("[GIN] response",
+		logger.Info("	[GIN] response",
 			"error_message", c.Errors.ByType(gin.ErrorTypePrivate).String(),
 			"body", bodyLog.body.String(),
 			"path", c.Request.URL.RawPath,

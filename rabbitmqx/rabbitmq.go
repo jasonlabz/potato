@@ -116,10 +116,8 @@ type RabbitOperator struct {
 type Client struct {
 	conn            *amqp.Connection
 	commonCh        *amqp.Channel
-	queueCh         sync.Map
-	exchangeMu      sync.Mutex
-	exchangeCh      sync.Map
-	queueMu         sync.Mutex
+	channelCache    sync.Map
+	cacheMu         sync.Mutex
 	closeConnNotify chan *amqp.Error
 }
 
@@ -170,8 +168,7 @@ func (op *RabbitOperator) tryReConnect(daemon bool) (connected bool) {
 			return
 		case <-op.client.closeConnNotify:
 			op.isReady = false
-			op.client.exchangeCh = sync.Map{}
-			op.client.queueCh = sync.Map{}
+			op.client.channelCache = sync.Map{}
 			// notify all channel retry init
 			close(op.notifyAllChan)
 			op.notifyAllChan = make(chan bool)
@@ -183,16 +180,17 @@ func (op *RabbitOperator) tryReConnect(daemon bool) (connected bool) {
 }
 
 func (op *RabbitOperator) getChannelForExchange(exchange string) (channel *amqp.Channel, err error) {
-	ch, ok := op.client.exchangeCh.Load(exchange)
+	exchange = exchange + "_exchange:publish"
+	ch, ok := op.client.channelCache.Load(exchange)
 	if ok && !ch.(*amqp.Channel).IsClosed() {
 		channel = ch.(*amqp.Channel)
 		return
 	}
 
-	op.client.exchangeMu.Lock()
-	defer op.client.exchangeMu.Unlock()
+	op.client.cacheMu.Lock()
+	defer op.client.cacheMu.Unlock()
 
-	ch, ok = op.client.exchangeCh.Load(exchange)
+	ch, ok = op.client.channelCache.Load(exchange)
 	if ok && !ch.(*amqp.Channel).IsClosed() {
 		channel = ch.(*amqp.Channel)
 		return
@@ -202,8 +200,7 @@ func (op *RabbitOperator) getChannelForExchange(exchange string) (channel *amqp.
 		defer op.mu.Unlock()
 		if op.client.conn.IsClosed() {
 			op.isReady = false
-			op.client.queueCh = sync.Map{}
-			op.client.exchangeCh = sync.Map{}
+			op.client.channelCache = sync.Map{}
 			if connected := op.tryReConnect(false); !connected {
 				err = errors.New("rabbitmq is closed")
 				return
@@ -214,26 +211,26 @@ func (op *RabbitOperator) getChannelForExchange(exchange string) (channel *amqp.
 	if err != nil {
 		return
 	}
-	op.client.exchangeCh.Store(exchange, channel)
+	op.client.channelCache.Store(exchange, channel)
 	return
 }
 
 func (op *RabbitOperator) getChannelForQueue(isConsume bool, queue string) (channel *amqp.Channel, err error) {
 	if isConsume {
-		queue += "__consume__"
+		queue += "_queue:consume"
 	} else {
-		queue += "__push__"
+		queue += "_queue:publish"
 	}
-	ch, ok := op.client.queueCh.Load(queue)
+	ch, ok := op.client.channelCache.Load(queue)
 	if ok && !ch.(*amqp.Channel).IsClosed() {
 		channel = ch.(*amqp.Channel)
 		return
 	}
 
-	op.client.queueMu.Lock()
-	defer op.client.queueMu.Unlock()
+	op.client.cacheMu.Lock()
+	defer op.client.cacheMu.Unlock()
 
-	ch, ok = op.client.queueCh.Load(queue)
+	ch, ok = op.client.channelCache.Load(queue)
 	if ok && !ch.(*amqp.Channel).IsClosed() {
 		channel = ch.(*amqp.Channel)
 		return
@@ -243,8 +240,7 @@ func (op *RabbitOperator) getChannelForQueue(isConsume bool, queue string) (chan
 		defer op.mu.Unlock()
 		if op.client.conn.IsClosed() {
 			op.isReady = false
-			op.client.queueCh = sync.Map{}
-			op.client.exchangeCh = sync.Map{}
+			op.client.channelCache = sync.Map{}
 			if connected := op.tryReConnect(false); !connected {
 				err = errors.New("rabbitmq is closed")
 				return
@@ -261,7 +257,7 @@ func (op *RabbitOperator) getChannelForQueue(isConsume bool, queue string) (chan
 	//go func() {
 	//
 	//}()
-	op.client.queueCh.Store(queue, channel)
+	op.client.channelCache.Store(queue, channel)
 	return
 }
 
@@ -851,15 +847,16 @@ func (op *RabbitOperator) consumeCore(ctx context.Context, param *ConsumeBody) (
 }
 
 func (op *RabbitOperator) releaseExchangeChannel(exchangeName string) (err error) {
-	op.client.exchangeMu.Lock()
-	defer op.client.exchangeMu.Unlock()
-	value, ok := op.client.exchangeCh.Load(exchangeName)
+	op.client.cacheMu.Lock()
+	defer op.client.cacheMu.Unlock()
+	exchangeName += "_exchange:publish"
+	value, ok := op.client.channelCache.Load(exchangeName)
 	if ok && !value.(*amqp.Channel).IsClosed() {
 		err = value.(*amqp.Channel).Close()
 		if err != nil {
 			return
 		}
-		op.client.exchangeCh.Delete(exchangeName)
+		op.client.channelCache.Delete(exchangeName)
 	}
 	return
 }
@@ -883,7 +880,7 @@ func (op *RabbitOperator) DeclareQueue(queueName string, args amqp.Table) (err e
 		return
 	}
 
-	_, err = channel.QueueDeclare(queueName, true, false, false, false, args)
+	_, err = channel.QueueDeclare(queueName, true, false, false, true, args)
 	if err != nil {
 		return err
 	}
@@ -949,23 +946,23 @@ func (op *RabbitOperator) DeleteQueue(queueName string) (err error) {
 }
 
 func (op *RabbitOperator) releaseQueueChannel(queueName string) (err error) {
-	op.client.queueMu.Lock()
-	defer op.client.queueMu.Unlock()
-	value, ok := op.client.queueCh.Load(queueName + "__push__")
+	op.client.cacheMu.Lock()
+	defer op.client.cacheMu.Unlock()
+	value, ok := op.client.channelCache.Load(queueName + "_queue:publish")
 	if ok {
 		err = value.(*amqp.Channel).Close()
 		if err != nil {
 			return
 		}
-		op.client.queueCh.Delete(queueName + "__push__")
+		op.client.channelCache.Delete(queueName + "_queue:publish")
 	}
-	value, ok = op.client.queueCh.Load(queueName + "__consume__")
+	value, ok = op.client.channelCache.Load(queueName + "_queue:consume")
 	if ok {
 		err = value.(*amqp.Channel).Close()
 		if err != nil {
 			return
 		}
-		op.client.queueCh.Delete(queueName + "__consume__")
+		op.client.channelCache.Delete(queueName + "__consume__")
 	}
 	return
 }
@@ -982,7 +979,7 @@ func (op *RabbitOperator) getCommonChannel() (channel *amqp.Channel, err error) 
 	return
 }
 
-func (op *RabbitOperator) GetCount(queueName string) (count int, err error) {
+func (op *RabbitOperator) GetMessageCount(queueName string) (count int, err error) {
 	channel, err := op.getCommonChannel()
 	if err != nil {
 		return
