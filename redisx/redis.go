@@ -69,17 +69,26 @@ func (c *Config) Validate() {
 }
 
 type RedisOperator struct {
-	config *Config
-	client *redis.Client
+	config  *Config
+	client  *redis.Client
+	closeCh chan struct{}
 }
 
 func NewRedisOperator(config *Config) (op *RedisOperator, err error) {
 	op = &RedisOperator{
-		config: config,
+		config:  config,
+		closeCh: make(chan struct{}),
 	}
 
 	op.client = redis.NewClient(config.Options)
+	err = op.client.Ping(context.Background()).Err()
 	//op.client = redis.NewClusterClient(config.ClusterOptions)
+	return
+}
+
+func (op *RedisOperator) Close() (err error) {
+	close(op.closeCh)
+	err = op.client.Close()
 	return
 }
 
