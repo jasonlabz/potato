@@ -21,7 +21,7 @@ const (
 
 var cli *Client
 
-func GetClient(ctx context.Context) *Client {
+func GetClient() *Client {
 	newClient := *cli
 	return &newClient
 }
