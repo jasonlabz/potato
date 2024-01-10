@@ -89,10 +89,10 @@ func NewRabbitMQ(ctx context.Context, config *MQConfig) (op *RabbitOperator, err
 		op.client.conn, err = amqp.DialTLS(config.Addr(), &tls.Config{InsecureSkipVerify: true})
 		if err == nil {
 			op.isReady = true
+			op.client.commonCh, err = op.client.conn.Channel()
 			logger.Info(fmt.Sprintf("rabbitmq init success[addr:%s]", config.Addr()))
 			break
 		}
-		op.client.commonCh, err = op.client.conn.Channel()
 		<-timer.C
 		logger.Warn(fmt.Sprintf("wait %ss for retry to connect...", DefaultRetryTimes))
 	}
@@ -971,7 +971,7 @@ func (op *RabbitOperator) getCommonChannel() (channel *amqp.Channel, err error) 
 	if op.client.commonCh.IsClosed() {
 		op.mu.Lock()
 		defer op.mu.Unlock()
-		if op.client.commonCh.IsClosed() {
+		if op.client.commonCh == nil || op.client.commonCh.IsClosed() {
 			op.client.commonCh, err = op.client.conn.Channel()
 		}
 	}
