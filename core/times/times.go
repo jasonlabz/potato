@@ -41,6 +41,14 @@ func CurrentTime() string {
 	return FormatDateTime(Now())
 }
 
+func CurrentTimeMillis() int64 {
+	return Now().UnixMilli()
+}
+
+func CurrentTimeSeconds() int64 {
+	return Now().Unix()
+}
+
 func ParseTime(timeStr string) (time.Time, error) {
 	tm, err := time.ParseInLocation(DateFormat, timeStr, time.Local)
 	return tm, err

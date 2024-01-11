@@ -42,7 +42,11 @@ func GetString(key any) string {
 	case time.Time:
 		return key.(time.Time).String()
 	default:
-		return fmt.Sprintf("%+v", key)
+		bytes, err := sonic.Marshal(key)
+		if err != nil {
+			return ""
+		}
+		return string(bytes)
 	}
 }
 
