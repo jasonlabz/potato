@@ -3,6 +3,7 @@ package redisx
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/jasonlabz/potato/core/config/application"
@@ -69,9 +70,11 @@ func (c *Config) Validate() {
 }
 
 type RedisOperator struct {
-	config  *Config
-	client  *redis.Client
-	closeCh chan struct{}
+	delayQueues sync.Map
+	mu          sync.Mutex
+	config      *Config
+	client      *redis.Client
+	closeCh     chan struct{}
 }
 
 func NewRedisOperator(config *Config) (op *RedisOperator, err error) {
