@@ -1,107 +1,54 @@
-package redisx
+package sentinel
 
 import (
 	"context"
-	"fmt"
+	"github.com/jasonlabz/potato/goredis/single"
+	"github.com/redis/go-redis/v9"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/jasonlabz/potato/core/config/application"
-	"github.com/redis/go-redis/v9"
 )
-
-var operator *RedisOperator
-
-func init() {
-	config := application.GetConfig()
-	if config.Redis != nil {
-		InitRedisClient(&Config{
-			&redis.Options{
-				Addr:           fmt.Sprintf("%s:%d", config.Redis.Host, config.Redis.Port),
-				Password:       config.Redis.Password,
-				DB:             config.Redis.IndexDb,
-				MaxIdleConns:   config.Redis.MaxIdleConn,
-				MaxActiveConns: config.Redis.MaxActive,
-				MaxRetries:     config.Redis.MaxRetryTimes,
-			},
-		})
-	}
-}
-
-func GetOperator() *RedisOperator {
-	return operator
-}
-
-func GetRedisClient() *redis.Client {
-	if operator == nil {
-		return nil
-	}
-	return operator.client
-}
-
-func InitRedisClient(config *Config) {
-	var err error
-	operator, err = NewRedisOperator(config)
-	if err != nil {
-		panic(err)
-	}
-}
-
-type Config struct {
-	//*redis.ClusterOptions
-	*redis.Options
-}
-
-func (c *Config) Validate() {
-	if c.MinIdleConns == 0 {
-		if c.MaxIdleConns == 0 {
-			c.MinIdleConns = 5
-		} else {
-			c.MinIdleConns = c.MaxIdleConns/2 + 1
-		}
-	}
-	if c.MaxIdleConns == 0 && c.MinIdleConns == 5 {
-		c.MaxIdleConns = 2 * c.MinIdleConns
-	}
-	if c.MaxActiveConns == 0 && c.MinIdleConns == 5 {
-		c.MaxActiveConns = 3 * c.MinIdleConns
-	}
-	return
-}
 
 type RedisOperator struct {
 	delayQueues sync.Map
 	mu          sync.Mutex
-	config      *Config
+	config      *redis.FailoverOptions
 	client      *redis.Client
 	closed      int32
 }
 
-func NewRedisOperator(config *Config) (op *RedisOperator, err error) {
+func NewRedisOperator(config *redis.FailoverOptions) (op *RedisOperator, err error) {
 	op = &RedisOperator{
 		config: config,
 	}
 
-	op.client = redis.NewClient(config.Options)
-	err = op.client.Ping(context.Background()).Err()
-
+	op.client = redis.NewFailoverClient(config)
+	ctx, cancelFunc := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancelFunc()
+	err = op.client.Ping(ctx).Err()
+	if err != nil {
+		return
+	}
 	// daemon process
 	go op.tryMigrationDaemon(context.Background())
 	return
 }
 
+func (op *RedisOperator) GetRedisClient() redis.UniversalClient {
+	return op.client
+}
+
 func (op *RedisOperator) Close() (err error) {
-	if atomic.LoadInt32(&op.closed) == Closed {
+	if atomic.LoadInt32(&op.closed) == single.Closed {
 		return
 	}
 	op.mu.Lock()
 	defer op.mu.Unlock()
-	if atomic.LoadInt32(&op.closed) == Closed {
+	if atomic.LoadInt32(&op.closed) == single.Closed {
 		return
 	}
 	err = op.client.Close()
-	op.closed = Closed
+	op.closed = single.Closed
 	return
 }
 

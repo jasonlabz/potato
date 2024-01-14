@@ -1,4 +1,4 @@
-package redisx
+package cluster
 
 import (
 	"context"
@@ -146,13 +146,13 @@ func (op *RedisOperator) PushDelayMessage(ctx context.Context, queue string, msg
 
 // Publish 发布消息
 func (op *RedisOperator) Publish(ctx context.Context, channel string, msg string) (err error) {
-	op.client.Publish(ctx, channel, msg)
+	err = op.client.Publish(ctx, channel, msg).Err()
 	return
 }
 
 // Subscribe 订阅消息
-func (op *RedisOperator) Subscribe(ctx context.Context, channels ...string) (err error) {
-	op.client.Subscribe(ctx, channels...)
+func (op *RedisOperator) Subscribe(ctx context.Context, channels ...string) (pubSub *redis.PubSub, err error) {
+	pubSub = op.client.Subscribe(ctx, channels...)
 	return
 }
 

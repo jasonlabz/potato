@@ -57,16 +57,18 @@ type Database struct {
 
 // RedisConfig 连接配置
 type RedisConfig struct {
-	Host              string `json:"host" yaml:"host" ini:"host"`
-	Port              int    `json:"port" yaml:"port" ini:"port"`
-	Password          string `json:"password" yaml:"password" ini:"password"`
-	IndexDb           int    `json:"index_db" yaml:"index_db" ini:"index_db"`
-	MaxIdleConn       int    `json:"max_idle_conn" yaml:"max_idle_conn" ini:"max_idle_conn"`
-	MaxOpenConn       int    `json:"max_open_conn" yaml:"max_open_conn" ini:"max_open_conn"`
-	MaxActive         int    `json:"max_active" yaml:"max_active" ini:"max_active"`
-	ConnTimeout       int64  `json:"conn_timeout" yaml:"conn_timeout" ini:"conn_timeout"`
-	MaxRetryTimes     int    `json:"max_retry_times" yaml:"max_retry_times" ini:"max_retry_times"`
-	ReConnectInterval int64  `json:"re_connect_interval" yaml:"re_connect_interval" ini:"re_connect_interval"`
+	ClientName       string   `json:"client_name" yaml:"client_name" ini:"client_name"` // 自定义客户端名
+	MasterName       string   `json:"master_name" yaml:"master_name" ini:"master_name"` // 主节点
+	Endpoints        []string `json:"endpoints" yaml:"endpoints" ini:"endpoints"`
+	Username         string   `json:"username" yaml:"username" ini:"username"`
+	Password         string   `json:"password" yaml:"password" ini:"password"`
+	IndexDB          int      `json:"index_db" yaml:"index_db" ini:"index_db"`
+	MinIdleConns     int      `json:"min_idle_conns" yaml:"min_idle_conns" ini:"min_idle_conns"`
+	MaxIdleConns     int      `json:"max_idle_conns" yaml:"max_idle_conns" ini:"max_idle_conns"`
+	MaxActiveConns   int      `json:"max_active_conns" yaml:"max_active_conns" ini:"max_active_conns"`
+	MaxRetryTimes    int      `json:"max_retry_times" yaml:"max_retry_times" ini:"max_retry_times"`
+	SentinelUsername string   `json:"sentinel_username" yaml:"sentinel_username" ini:"sentinel_username"`
+	SentinelPassword string   `json:"sentinel_password" yaml:"sentinel_password" ini:"sentinel_password"`
 }
 
 type Elasticsearch struct {
