@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/jasonlabz/potato/core/config/application"
@@ -74,24 +75,33 @@ type RedisOperator struct {
 	mu          sync.Mutex
 	config      *Config
 	client      *redis.Client
-	closeCh     chan struct{}
+	closed      int32
 }
 
 func NewRedisOperator(config *Config) (op *RedisOperator, err error) {
 	op = &RedisOperator{
-		config:  config,
-		closeCh: make(chan struct{}),
+		config: config,
 	}
 
 	op.client = redis.NewClient(config.Options)
 	err = op.client.Ping(context.Background()).Err()
-	//op.client = redis.NewClusterClient(config.ClusterOptions)
+
+	// daemon process
+	go op.tryMigrationDaemon(context.Background())
 	return
 }
 
 func (op *RedisOperator) Close() (err error) {
-	close(op.closeCh)
+	if atomic.LoadInt32(&op.closed) == Closed {
+		return
+	}
+	op.mu.Lock()
+	defer op.mu.Unlock()
+	if atomic.LoadInt32(&op.closed) == Closed {
+		return
+	}
 	err = op.client.Close()
+	op.closed = Closed
 	return
 }
 
