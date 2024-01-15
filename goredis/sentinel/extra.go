@@ -136,7 +136,7 @@ func (op *RedisOperator) PushDelayMessage(ctx context.Context, queue string, msg
 	}
 
 	op.client.ZAdd(ctx, delayQueueTimeout, redis.Z{
-		Score:  float64(times.CurrentTimeMillis() + int64(delay)/1e6),
+		Score:  float64(times.Now().Add(delay).UnixMilli()),
 		Member: msg,
 	})
 	return
