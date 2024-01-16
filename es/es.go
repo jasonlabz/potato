@@ -3,16 +3,52 @@ package es
 import (
 	"crypto/tls"
 	"github.com/elastic/go-elasticsearch/v8"
+	"github.com/jasonlabz/potato/core/config/application"
+	log "github.com/jasonlabz/potato/log/zapx"
 	"net/http"
+	"strings"
 	"time"
 )
 
-type ElasticSearchClient struct {
+var operator *ElasticSearchOperator
+
+func GetESOperator() *ElasticSearchOperator {
+	return operator
+}
+
+func init() {
+	appConf := application.GetConfig()
+	if appConf.ES != nil && len(appConf.ES.Endpoints) > 0 {
+		err := InitElasticSearchOperator(&Config{
+			IsHttps:   appConf.ES.IsHttps,
+			Endpoints: appConf.ES.Endpoints,
+			Username:  appConf.ES.Username,
+			Password:  appConf.ES.Password,
+			APIKey:    appConf.ES.APIKey,
+			CloudID:   appConf.ES.CloudId,
+		})
+		if err != nil {
+			log.DefaultLogger().WithError(err).Errorf("init ES Client error, skipping ...")
+		}
+	}
+}
+
+// InitElasticSearchOperator 负责初始化全局变量operator，NewElasticSearchOperator函数负责根据配置创建es客户端对象供外部调用
+func InitElasticSearchOperator(config *Config) (err error) {
+	operator, err = NewElasticSearchOperator(config)
+	if err != nil {
+		return
+	}
+	return
+}
+
+type ElasticSearchOperator struct {
 	client *elasticsearch.Client
 	config *Config
 }
 
 type Config struct {
+	IsHttps   bool
 	Endpoints []string
 	Username  string
 	Password  string
@@ -36,8 +72,22 @@ type Config struct {
 	DisableMetaHeader        bool
 }
 
-func NewESClient(config *Config) (cli *ElasticSearchClient, err error) {
-	client, err := elasticsearch.NewClient(elasticsearch.Config{
+// NewElasticSearchOperator 该函数负责根据配置创建es客户端对象供外部调用
+func NewElasticSearchOperator(config *Config) (op *ElasticSearchOperator, err error) {
+	for i, endpoint := range config.Endpoints {
+		if !config.IsHttps && strings.HasPrefix(endpoint, "https://") {
+			config.IsHttps = true
+		}
+		if !strings.HasPrefix(endpoint, "http") {
+			if config.IsHttps {
+				endpoint = "https://" + endpoint
+			} else {
+				endpoint = "http://" + endpoint
+			}
+			config.Endpoints[i] = endpoint
+		}
+	}
+	esConfig := elasticsearch.Config{
 		Addresses: config.Endpoints,
 		Username:  config.Username,
 		Password:  config.Password,
@@ -59,16 +109,19 @@ func NewESClient(config *Config) (cli *ElasticSearchClient, err error) {
 		EnableDebugLogger:        config.EnableDebugLogger,
 		EnableCompatibilityMode:  config.EnableCompatibilityMode,
 		DisableMetaHeader:        config.DisableMetaHeader,
-		Transport: &http.Transport{
+	}
+	if config.IsHttps {
+		esConfig.Transport = &http.Transport{
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true,
 			},
-		},
-	})
+		}
+	}
+	client, err := elasticsearch.NewClient(esConfig)
 	if err != nil {
 		return
 	}
-	cli = &ElasticSearchClient{
+	op = &ElasticSearchOperator{
 		config: config,
 		client: client,
 	}

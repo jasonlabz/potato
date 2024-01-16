@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	log "github.com/jasonlabz/potato/log/zapx"
 	"io/fs"
 	"math/rand"
 	"os"
@@ -15,6 +16,9 @@ import (
 
 	"github.com/bytedance/sonic"
 )
+
+var letters = []byte("abcdefghjkmnpqrstuvwxyz123456789")
+var longLetters = []byte("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ=_")
 
 func GetString(key any) string {
 	switch key.(type) {
@@ -240,4 +244,10 @@ func RandHex(n int) []byte {
 	}
 	hex.Encode(dst, src)
 	return dst[:n]
+}
+
+func HandlePanic() {
+	if r := recover(); r != nil {
+		log.DefaultLogger().Errorf("Recovered:", r)
+	}
 }

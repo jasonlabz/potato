@@ -57,11 +57,11 @@ type Database struct {
 
 // RedisConfig 连接配置
 type RedisConfig struct {
-	ClientName       string   `json:"client_name" yaml:"client_name" ini:"client_name"` // 自定义客户端名
-	MasterName       string   `json:"master_name" yaml:"master_name" ini:"master_name"` // 主节点
 	Endpoints        []string `json:"endpoints" yaml:"endpoints" ini:"endpoints"`
 	Username         string   `json:"username" yaml:"username" ini:"username"`
 	Password         string   `json:"password" yaml:"password" ini:"password"`
+	ClientName       string   `json:"client_name" yaml:"client_name" ini:"client_name"` // 自定义客户端名
+	MasterName       string   `json:"master_name" yaml:"master_name" ini:"master_name"` // 主节点
 	IndexDB          int      `json:"index_db" yaml:"index_db" ini:"index_db"`
 	MinIdleConns     int      `json:"min_idle_conns" yaml:"min_idle_conns" ini:"min_idle_conns"`
 	MaxIdleConns     int      `json:"max_idle_conns" yaml:"max_idle_conns" ini:"max_idle_conns"`
@@ -72,17 +72,18 @@ type RedisConfig struct {
 }
 
 type Elasticsearch struct {
-	Server   []string `json:"server" yaml:"server" ini:"server"`
-	Username string   `json:"username" yaml:"username" ini:"username"`
-	Password string   `json:"password" yaml:"password" ini:"password"`
-	CloudId  string   `json:"cloud_id" yaml:"cloud_id" ini:"cloud_id"`
-	APIKey   string   `json:"api_key" yaml:"api_key" ini:"api_key"`
+	Endpoints []string `json:"endpoints" yaml:"endpoints" ini:"endpoints"`
+	Username  string   `json:"username" yaml:"username" ini:"username"`
+	Password  string   `json:"password" yaml:"password" ini:"password"`
+	IsHttps   bool     `json:"is_https" yaml:"is_https" ini:"is_https"`
+	CloudId   string   `json:"cloud_id" yaml:"cloud_id" ini:"cloud_id"`
+	APIKey    string   `json:"api_key" yaml:"api_key" ini:"api_key"`
 }
 
 type MongoConf struct {
 	Host            string `json:"host" yaml:"host" ini:"host"`
 	Port            int    `json:"port" yaml:"port" ini:"port"`
-	User            string `json:"user" yaml:"user" ini:"user"`
+	Username        string `json:"username" yaml:"username" ini:"username"`
 	Password        string `json:"password" yaml:"password" ini:"password"`
 	MaxPoolSize     int    `json:"max_pool_size" yaml:"max_pool_size" ini:"max_pool_size"`
 	ConnectTimeout  int    `json:"connect_timeout" yaml:"connect_timeout" ini:"connect_timeout"`
@@ -90,12 +91,12 @@ type MongoConf struct {
 }
 
 type RabbitMQConf struct {
-	Server      string    `json:"server" yaml:"server" ini:"server"`
+	Host        string    `json:"host" yaml:"host" ini:"host"`
 	Port        int       `json:"port" yaml:"port" ini:"port"`
-	User        string    `json:"user" yaml:"user" ini:"user"`
+	Username    string    `json:"username" yaml:"username" ini:"username"`
 	Password    string    `json:"password" yaml:"password" ini:"password"`
-	LimitSwitch int       `json:"limit_switch" yaml:"limit_switch" ini:"limit_switch"`
-	RmqConf     LimitConf `json:"rmq_conf" yaml:"rmq_conf" ini:"rmq_conf"`
+	LimitSwitch bool      `json:"limit_switch" yaml:"limit_switch" ini:"limit_switch"`
+	LimitConf   LimitConf `json:"limit_conf" yaml:"limit_conf" ini:"limit_conf"`
 }
 
 type LimitConf struct {

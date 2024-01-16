@@ -16,10 +16,44 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jasonlabz/potato/core/times"
-	log "github.com/jasonlabz/potato/log/zapx"
 	amqp "github.com/rabbitmq/amqp091-go"
+
+	"github.com/jasonlabz/potato/core/config/application"
+	"github.com/jasonlabz/potato/core/times"
+	"github.com/jasonlabz/potato/core/utils"
+	log "github.com/jasonlabz/potato/log/zapx"
 )
+
+var operator *RabbitMQOperator
+
+func GetRabbitMQOperator() *RabbitMQOperator {
+	return operator
+}
+
+func init() {
+	appConf := application.GetConfig()
+	if appConf.Rabbitmq != nil && len(appConf.Rabbitmq.Host) > 0 {
+		mqConf := &MQConfig{}
+		err := utils.CopyStruct(appConf.Rabbitmq, mqConf)
+		if err != nil {
+			log.DefaultLogger().WithError(err).Errorf("copy rmq config error, skipping ...")
+			return
+		}
+		err = InitRabbitMQOperator(mqConf)
+		if err != nil {
+			log.DefaultLogger().WithError(err).Errorf("init rmq Client error, skipping ...")
+		}
+	}
+}
+
+// InitRabbitMQOperator 负责初始化全局变量operator，NewRabbitMQOperator函数负责根据配置创建rmq客户端对象供外部调用
+func InitRabbitMQOperator(config *MQConfig) (err error) {
+	operator, err = NewRabbitMQOperator(config)
+	if err != nil {
+		return
+	}
+	return
+}
 
 const (
 	DefaultRetryWaitTimes    = 2 * time.Second
@@ -36,43 +70,10 @@ const (
 	ExchangeTypeTopic  ExchangeType = "topic"  // 通配符
 )
 
-// MQConfig 定义队列连接信息
-type MQConfig struct {
-	UserName string `json:"user_name"` // 用户
-	Password string `json:"password"`  // 密码
-	Host     string `json:"host"`      // 服务地址
-	Port     int    `json:"port"`      // 端口
-}
-
-func (c *MQConfig) Validate() error {
-	if c.UserName == "" {
-		return errors.New("username is empty")
-	}
-	if c.Password == "" {
-		return errors.New("password is empty")
-	}
-	if c.Host == "" {
-		return errors.New("host is empty")
-	}
-	if c.Port == 0 {
-		return errors.New("port is empty")
-	}
-	return nil
-}
-
-func (c *MQConfig) Addr() string {
-	return fmt.Sprintf("amqp://%s:%s@%s:%d/", c.UserName, c.Password, c.Host, c.Port)
-}
-
-func handlePanic() {
-	if r := recover(); r != nil {
-		log.DefaultLogger().Errorf("Recovered:", r)
-	}
-}
-
-func NewRabbitMQ(ctx context.Context, config *MQConfig) (op *RabbitOperator, err error) {
-	logger := log.GetLogger(ctx)
-	op = &RabbitOperator{}
+// NewRabbitMQOperator 该函数负责根据配置创建rmq客户端对象供外部调用
+func NewRabbitMQOperator(config *MQConfig) (op *RabbitMQOperator, err error) {
+	logger := log.DefaultLogger()
+	op = &RabbitMQOperator{}
 	// init
 	op.client = &Client{
 		closeConnNotify: make(chan *amqp.Error, 1),
@@ -108,7 +109,45 @@ func NewRabbitMQ(ctx context.Context, config *MQConfig) (op *RabbitOperator, err
 	return
 }
 
-type RabbitOperator struct {
+// MQConfig 定义队列连接信息
+type MQConfig struct {
+	Username    string    `json:"username"` // 用户
+	Password    string    `json:"password"` // 密码
+	Host        string    `json:"host"`     // 服务地址
+	Port        int       `json:"port"`     // 端口
+	LimitSwitch bool      `json:"limit_switch"`
+	LimitConf   LimitConf `json:"limit_conf"`
+}
+
+type LimitConf struct {
+	AttemptTimes    int `json:"attempt_times"`
+	RetryTimeSecond int `json:"retry_time_second"`
+	PrefetchCount   int `json:"prefetch_count"`
+	Timeout         int `json:"timeout"`
+	QueueLimit      int `json:"queue_limit"`
+}
+
+func (c *MQConfig) Validate() error {
+	if c.Username == "" {
+		return errors.New("username is empty")
+	}
+	if c.Password == "" {
+		return errors.New("password is empty")
+	}
+	if c.Host == "" {
+		return errors.New("host is empty")
+	}
+	if c.Port == 0 {
+		return errors.New("port is empty")
+	}
+	return nil
+}
+
+func (c *MQConfig) Addr() string {
+	return fmt.Sprintf("amqp://%s:%s@%s:%d/", c.Username, c.Password, c.Host, c.Port)
+}
+
+type RabbitMQOperator struct {
 	name          string
 	config        *MQConfig
 	client        *Client
@@ -127,12 +166,12 @@ type Client struct {
 	closeConnNotify chan *amqp.Error
 }
 
-func (op *RabbitOperator) SetLogger(logger amqp.Logging) {
+func (op *RabbitMQOperator) SetLogger(logger amqp.Logging) {
 	amqp.Logger = logger
 }
 
-func (op *RabbitOperator) tryReConnect(daemon bool) (connected bool) {
-	logger := log.GetLogger(context.Background())
+func (op *RabbitMQOperator) tryReConnect(daemon bool) (connected bool) {
+	logger := log.DefaultLogger()
 	sig := make(chan os.Signal)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGKILL)
 
@@ -184,7 +223,7 @@ func (op *RabbitOperator) tryReConnect(daemon bool) (connected bool) {
 	return
 }
 
-func (op *RabbitOperator) getChannelForExchange(exchange string) (channel *amqp.Channel, err error) {
+func (op *RabbitMQOperator) getChannelForExchange(exchange string) (channel *amqp.Channel, err error) {
 	exchange = exchange + "_exchange:publish"
 	ch, ok := op.client.channelCache.Load(exchange)
 	if ok && !ch.(*amqp.Channel).IsClosed() {
@@ -215,7 +254,7 @@ func (op *RabbitOperator) getChannelForExchange(exchange string) (channel *amqp.
 	return
 }
 
-func (op *RabbitOperator) getChannelForQueue(isConsume bool, queue string) (channel *amqp.Channel, err error) {
+func (op *RabbitMQOperator) getChannelForQueue(isConsume bool, queue string) (channel *amqp.Channel, err error) {
 	if isConsume {
 		queue += "_queue:consume"
 	} else {
@@ -256,7 +295,7 @@ func (op *RabbitOperator) getChannelForQueue(isConsume bool, queue string) (chan
 	return
 }
 
-func (op *RabbitOperator) getChannel(isConsume bool, exchange, queue string) (channel *amqp.Channel, err error) {
+func (op *RabbitMQOperator) getChannel(isConsume bool, exchange, queue string) (channel *amqp.Channel, err error) {
 	if isConsume {
 		channel, err = op.getChannelForQueue(isConsume, queue)
 		return
@@ -269,8 +308,8 @@ func (op *RabbitOperator) getChannel(isConsume bool, exchange, queue string) (ch
 	return
 }
 
-func (op *RabbitOperator) PushDelayMessage(ctx context.Context, body *PushDelayBody) (err error) {
-	defer handlePanic()
+func (op *RabbitMQOperator) PushDelayMessage(ctx context.Context, body *PushDelayBody) (err error) {
+	defer utils.HandlePanic()
 	if body.MessageId == "" {
 		body.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
 	}
@@ -307,7 +346,7 @@ func (op *RabbitOperator) PushDelayMessage(ctx context.Context, body *PushDelayB
 	return
 }
 
-func (op *RabbitOperator) pushDelayMessageCore(ctx context.Context, body *PushDelayBody) (err error) {
+func (op *RabbitMQOperator) pushDelayMessageCore(ctx context.Context, body *PushDelayBody) (err error) {
 	delayStr := strconv.FormatInt(int64(body.DelayTime), 10)
 	delayQueueName := body.QueueName + "_delay:" + delayStr
 	delayRouteKey := body.RoutingKey + "_delay:" + delayStr
@@ -386,8 +425,8 @@ func (op *RabbitOperator) pushDelayMessageCore(ctx context.Context, body *PushDe
 	return
 }
 
-func (op *RabbitOperator) PushExchange(ctx context.Context, body *ExchangePushBody) (err error) {
-	defer handlePanic()
+func (op *RabbitMQOperator) PushExchange(ctx context.Context, body *ExchangePushBody) (err error) {
+	defer utils.HandlePanic()
 	if body.MessageId == "" {
 		body.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
 	}
@@ -421,8 +460,8 @@ func (op *RabbitOperator) PushExchange(ctx context.Context, body *ExchangePushBo
 	return
 }
 
-func (op *RabbitOperator) PushQueue(ctx context.Context, body *QueuePushBody) (err error) {
-	defer handlePanic()
+func (op *RabbitMQOperator) PushQueue(ctx context.Context, body *QueuePushBody) (err error) {
+	defer utils.HandlePanic()
 	if body.MessageId == "" {
 		body.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
 	}
@@ -456,8 +495,8 @@ func (op *RabbitOperator) PushQueue(ctx context.Context, body *QueuePushBody) (e
 	return
 }
 
-func (op *RabbitOperator) Push(ctx context.Context, msg *PushBody) (err error) {
-	defer handlePanic()
+func (op *RabbitMQOperator) Push(ctx context.Context, msg *PushBody) (err error) {
+	defer utils.HandlePanic()
 	if msg.MessageId == "" {
 		msg.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
 	}
@@ -494,7 +533,7 @@ func (op *RabbitOperator) Push(ctx context.Context, msg *PushBody) (err error) {
 @arg: QueuePushBody ->  Args是队列的参数设置，例如优先级队列为amqp.Table{"x-max-priority":10}
 @description: 向队列推送消息
 */
-func (op *RabbitOperator) pushQueueCore(ctx context.Context, body *QueuePushBody) (err error) {
+func (op *RabbitMQOperator) pushQueueCore(ctx context.Context, body *QueuePushBody) (err error) {
 	channel, err := op.getChannelForQueue(false, body.QueueName)
 	if err != nil {
 		return
@@ -549,7 +588,7 @@ func (op *RabbitOperator) pushQueueCore(ctx context.Context, body *QueuePushBody
 @arg: ExchangePushBody ->  Args是交换机和队列的参数设置，例如优先级队列为amqp.Table{"x-max-priority":10}
 @description: 向队列推送消息
 */
-func (op *RabbitOperator) pushExchangeCore(ctx context.Context, body *ExchangePushBody) (err error) {
+func (op *RabbitMQOperator) pushExchangeCore(ctx context.Context, body *ExchangePushBody) (err error) {
 	channel, err := op.getChannelForExchange(body.ExchangeName)
 	if err != nil {
 		return
@@ -625,7 +664,7 @@ func (op *RabbitOperator) pushExchangeCore(ctx context.Context, body *ExchangePu
 	return
 }
 
-func (op *RabbitOperator) pushCore(ctx context.Context, msg *PushBody) (err error) {
+func (op *RabbitMQOperator) pushCore(ctx context.Context, msg *PushBody) (err error) {
 	logger := log.GetLogger(ctx).WithField(log.String("msg_id", msg.MessageId))
 	channel, err := op.getChannel(false, msg.ExchangeName, msg.QueueName)
 	if err != nil {
@@ -715,7 +754,7 @@ func (op *RabbitOperator) pushCore(ctx context.Context, msg *PushBody) (err erro
 	return
 }
 
-func (op *RabbitOperator) Consume(ctx context.Context, param *ConsumeBody) (contents chan amqp.Delivery, err error) {
+func (op *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (contents chan amqp.Delivery, err error) {
 	logger := log.GetLogger(ctx)
 	if !op.isReady {
 		logger.Error("rabbitmq connection is not ready, consume cancel")
@@ -795,7 +834,7 @@ func (op *RabbitOperator) Consume(ctx context.Context, param *ConsumeBody) (cont
 	return
 }
 
-func (op *RabbitOperator) consumeCore(ctx context.Context, param *ConsumeBody) (contents <-chan amqp.Delivery, err error) {
+func (op *RabbitMQOperator) consumeCore(ctx context.Context, param *ConsumeBody) (contents <-chan amqp.Delivery, err error) {
 	logger := log.GetLogger(ctx)
 	if !op.isReady {
 		logger.Error("rabbitmq connection is not ready, push cancel")
@@ -846,7 +885,7 @@ func (op *RabbitOperator) consumeCore(ctx context.Context, param *ConsumeBody) (
 	return
 }
 
-func (op *RabbitOperator) releaseExchangeChannel(exchangeName string) (err error) {
+func (op *RabbitMQOperator) releaseExchangeChannel(exchangeName string) (err error) {
 	op.client.cacheMu.Lock()
 	defer op.client.cacheMu.Unlock()
 	exchangeName += "_exchange:publish"
@@ -861,7 +900,7 @@ func (op *RabbitOperator) releaseExchangeChannel(exchangeName string) (err error
 	return
 }
 
-func (op *RabbitOperator) DeclareExchange(exchangeName, exchangeType string, args amqp.Table) (err error) {
+func (op *RabbitMQOperator) DeclareExchange(exchangeName, exchangeType string, args amqp.Table) (err error) {
 	channel, err := op.getCommonChannel()
 	if err != nil {
 		return
@@ -874,7 +913,7 @@ func (op *RabbitOperator) DeclareExchange(exchangeName, exchangeType string, arg
 	return
 }
 
-func (op *RabbitOperator) DeclareQueue(queueName string, args amqp.Table) (err error) {
+func (op *RabbitMQOperator) DeclareQueue(queueName string, args amqp.Table) (err error) {
 	channel, err := op.getCommonChannel()
 	if err != nil {
 		return
@@ -887,7 +926,7 @@ func (op *RabbitOperator) DeclareQueue(queueName string, args amqp.Table) (err e
 	return
 }
 
-func (op *RabbitOperator) BindQueue(exchangeName, queueName, routingKey string, args amqp.Table) (err error) {
+func (op *RabbitMQOperator) BindQueue(exchangeName, queueName, routingKey string, args amqp.Table) (err error) {
 	channel, err := op.getCommonChannel()
 	if err != nil {
 		return
@@ -900,7 +939,7 @@ func (op *RabbitOperator) BindQueue(exchangeName, queueName, routingKey string, 
 	return
 }
 
-func (op *RabbitOperator) UnBindQueue(exchangeName, queueName, routingKey string, args amqp.Table) (err error) {
+func (op *RabbitMQOperator) UnBindQueue(exchangeName, queueName, routingKey string, args amqp.Table) (err error) {
 	channel, err := op.getCommonChannel()
 	if err != nil {
 		return
@@ -913,7 +952,7 @@ func (op *RabbitOperator) UnBindQueue(exchangeName, queueName, routingKey string
 	return
 }
 
-func (op *RabbitOperator) DeleteExchange(exchangeName string) (err error) {
+func (op *RabbitMQOperator) DeleteExchange(exchangeName string) (err error) {
 	channel, err := op.getCommonChannel()
 	if err != nil {
 		return
@@ -929,7 +968,7 @@ func (op *RabbitOperator) DeleteExchange(exchangeName string) (err error) {
 	return
 }
 
-func (op *RabbitOperator) DeleteQueue(queueName string) (err error) {
+func (op *RabbitMQOperator) DeleteQueue(queueName string) (err error) {
 	channel, err := op.getCommonChannel()
 	if err != nil {
 		return
@@ -945,7 +984,7 @@ func (op *RabbitOperator) DeleteQueue(queueName string) (err error) {
 	return
 }
 
-func (op *RabbitOperator) releaseQueueChannel(queueName string) (err error) {
+func (op *RabbitMQOperator) releaseQueueChannel(queueName string) (err error) {
 	op.client.cacheMu.Lock()
 	defer op.client.cacheMu.Unlock()
 	value, ok := op.client.channelCache.Load(queueName + "_queue:publish")
@@ -967,7 +1006,7 @@ func (op *RabbitOperator) releaseQueueChannel(queueName string) (err error) {
 	return
 }
 
-func (op *RabbitOperator) getCommonChannel() (channel *amqp.Channel, err error) {
+func (op *RabbitMQOperator) getCommonChannel() (channel *amqp.Channel, err error) {
 	if !op.client.commonCh.IsClosed() {
 		channel = op.client.commonCh
 		return
@@ -987,7 +1026,7 @@ func (op *RabbitOperator) getCommonChannel() (channel *amqp.Channel, err error) 
 	return
 }
 
-func (op *RabbitOperator) GetMessageCount(queueName string) (count int, err error) {
+func (op *RabbitMQOperator) GetMessageCount(queueName string) (count int, err error) {
 	channel, err := op.getCommonChannel()
 	if err != nil {
 		return
@@ -1001,7 +1040,7 @@ func (op *RabbitOperator) GetMessageCount(queueName string) (count int, err erro
 	return
 }
 
-func (op *RabbitOperator) Close() (err error) {
+func (op *RabbitMQOperator) Close() (err error) {
 	op.mu.Lock()
 	defer op.mu.Unlock()
 	if atomic.LoadInt32(&op.closed) == Closed {
@@ -1021,7 +1060,7 @@ func (op *RabbitOperator) Close() (err error) {
 	return
 }
 
-func (op *RabbitOperator) Ack(ctx context.Context, msg *amqp.Delivery) {
+func (op *RabbitMQOperator) Ack(ctx context.Context, msg *amqp.Delivery) {
 	logger := log.GetLogger(ctx).WithField(log.String("msg_id", msg.MessageId))
 	ch := make(chan bool, 1)
 	defer close(ch)
@@ -1048,7 +1087,7 @@ func (op *RabbitOperator) Ack(ctx context.Context, msg *amqp.Delivery) {
 	}
 }
 
-func (op *RabbitOperator) Nack(ctx context.Context, msg *amqp.Delivery) {
+func (op *RabbitMQOperator) Nack(ctx context.Context, msg *amqp.Delivery) {
 	logger := log.GetLogger(ctx).WithField(log.String("msg_id", msg.MessageId))
 	ch := make(chan bool, 1)
 	defer close(ch)
