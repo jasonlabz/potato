@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	log "github.com/jasonlabz/potato/log/zapx"
 	"io/fs"
 	"math/rand"
 	"os"
@@ -244,10 +243,4 @@ func RandHex(n int) []byte {
 	}
 	hex.Encode(dst, src)
 	return dst[:n]
-}
-
-func HandlePanic() {
-	if r := recover(); r != nil {
-		log.DefaultLogger().Errorf("Recovered:", r)
-	}
 }

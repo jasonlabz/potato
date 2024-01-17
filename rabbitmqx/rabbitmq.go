@@ -109,6 +109,12 @@ func NewRabbitMQOperator(config *MQConfig) (op *RabbitMQOperator, err error) {
 	return
 }
 
+func handlePanic() {
+	if r := recover(); r != nil {
+		log.DefaultLogger().Errorf("Recovered:", r)
+	}
+}
+
 // MQConfig 定义队列连接信息
 type MQConfig struct {
 	Username    string    `json:"username"` // 用户
@@ -309,7 +315,7 @@ func (op *RabbitMQOperator) getChannel(isConsume bool, exchange, queue string) (
 }
 
 func (op *RabbitMQOperator) PushDelayMessage(ctx context.Context, body *PushDelayBody) (err error) {
-	defer utils.HandlePanic()
+	defer handlePanic()
 	if body.MessageId == "" {
 		body.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
 	}
@@ -426,7 +432,7 @@ func (op *RabbitMQOperator) pushDelayMessageCore(ctx context.Context, body *Push
 }
 
 func (op *RabbitMQOperator) PushExchange(ctx context.Context, body *ExchangePushBody) (err error) {
-	defer utils.HandlePanic()
+	defer handlePanic()
 	if body.MessageId == "" {
 		body.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
 	}
@@ -461,7 +467,7 @@ func (op *RabbitMQOperator) PushExchange(ctx context.Context, body *ExchangePush
 }
 
 func (op *RabbitMQOperator) PushQueue(ctx context.Context, body *QueuePushBody) (err error) {
-	defer utils.HandlePanic()
+	defer handlePanic()
 	if body.MessageId == "" {
 		body.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
 	}
@@ -496,7 +502,7 @@ func (op *RabbitMQOperator) PushQueue(ctx context.Context, body *QueuePushBody) 
 }
 
 func (op *RabbitMQOperator) Push(ctx context.Context, msg *PushBody) (err error) {
-	defer utils.HandlePanic()
+	defer handlePanic()
 	if msg.MessageId == "" {
 		msg.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
 	}

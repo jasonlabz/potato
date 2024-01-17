@@ -13,7 +13,6 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/jasonlabz/potato/core/times"
-	"github.com/jasonlabz/potato/core/utils"
 	log "github.com/jasonlabz/potato/log/zapx"
 )
 
@@ -53,7 +52,7 @@ func (op *RedisOperator) Watch(ctx context.Context, fn func(*redis.Tx) error, ke
 /**********************************************************  延迟队列 ****************************************************************/
 // tryMigrationDaemon 将到期的PublishBody迁移到ready队列等待执行
 func (op *RedisOperator) tryMigrationDaemon(ctx context.Context) {
-	defer utils.HandlePanic()
+	defer handlePanic()
 	logger := log.GetLogger(ctx).WithField("tag", "redis_delay_queue_method")
 	sig := make(chan os.Signal)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGKILL)
