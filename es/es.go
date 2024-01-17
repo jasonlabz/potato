@@ -1,13 +1,22 @@
 package es
 
 import (
+	"context"
 	"crypto/tls"
-	"github.com/elastic/go-elasticsearch/v8"
-	"github.com/jasonlabz/potato/core/config/application"
-	log "github.com/jasonlabz/potato/log/zapx"
+	"io"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/bytedance/sonic"
+	"github.com/elastic/go-elasticsearch/v8"
+	"github.com/elastic/go-elasticsearch/v8/esapi"
+	core_get "github.com/elastic/go-elasticsearch/v8/typedapi/core/get"
+	"github.com/elastic/go-elasticsearch/v8/typedapi/indices/create"
+	indices_get "github.com/elastic/go-elasticsearch/v8/typedapi/indices/get"
+
+	"github.com/jasonlabz/potato/core/config/application"
+	log "github.com/jasonlabz/potato/log/zapx"
 )
 
 var operator *ElasticSearchOperator
@@ -43,8 +52,9 @@ func InitElasticSearchOperator(config *Config) (err error) {
 }
 
 type ElasticSearchOperator struct {
-	client *elasticsearch.Client
-	config *Config
+	//client     *elasticsearch.Client
+	typeClient *elasticsearch.TypedClient
+	config     *Config
 }
 
 type Config struct {
@@ -117,13 +127,114 @@ func NewElasticSearchOperator(config *Config) (op *ElasticSearchOperator, err er
 			},
 		}
 	}
-	client, err := elasticsearch.NewClient(esConfig)
+	typedClient, err := elasticsearch.NewTypedClient(esConfig)
 	if err != nil {
 		return
 	}
+	ok, err := typedClient.Ping().IsSuccess(context.Background())
+	if err != nil {
+		log.DefaultLogger().WithError(err).Error("typedClient ping失败")
+	}
+	if !ok {
+		log.DefaultLogger().WithError(err).Error("connect to ES server fail!")
+	} else {
+		log.DefaultLogger().Info("------- ES connected success")
+	}
+	//client, err := elasticsearch.NewClient(esConfig)
+	//if err != nil {
+	//	return
+	//}
+	//_, err = client.Ping()
+	//if err != nil {
+	//	log.DefaultLogger().WithError(err).Error("client ping fail")
+	//}
 	op = &ElasticSearchOperator{
 		config: config,
-		client: client,
+		//client:     client,
+		typeClient: typedClient,
+	}
+	return
+}
+
+func (op *ElasticSearchOperator) GetIndexList(ctx context.Context) (res []*IndexInfo, err error) {
+	response, err := esapi.CatIndicesRequest{Format: "json"}.Do(ctx, op.typeClient)
+	if err != nil {
+		return
+	}
+	res = make([]*IndexInfo, 0)
+	defer response.Body.Close()
+	buffer, err := io.ReadAll(response.Body)
+	err = sonic.Unmarshal(buffer, &res)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (op *ElasticSearchOperator) CreateIndex(ctx context.Context, indexName string, mappingJson string) (err error) {
+	exists, err := op.IsExist(ctx, indexName)
+	if err != nil {
+		log.DefaultLogger().WithError(err).Error("create index error: " + indexName)
+		return
+	}
+	//索引不存在则创建索引
+	//索引不存在时查询会报错，但索引不存在的时候可以直接插入
+	if exists {
+		return
+	}
+	req := &create.Request{}
+	if mappingJson != "" {
+		req, err = req.FromJSON(mappingJson)
+		if err != nil {
+			return
+		}
+	}
+	cr, crErr := op.typeClient.Indices.Create(indexName).Request(req).Do(ctx)
+	if crErr != nil {
+		log.DefaultLogger().WithError(crErr).Error("index create error: " + cr.Index)
+		return
+	}
+	log.DefaultLogger().Info("index created: " + cr.Index)
+	return
+}
+
+func (op *ElasticSearchOperator) DeleteIndex(ctx context.Context, indexName string) (err error) {
+	exists, err := op.IsExist(ctx, indexName)
+	if err != nil {
+		log.DefaultLogger().WithError(err).Error("delete index error: " + indexName)
+		return
+	}
+	//索引不存在则退出
+	if !exists {
+		return
+	}
+	_, crErr := op.typeClient.Indices.Delete(indexName).Do(ctx)
+	if crErr != nil {
+		log.DefaultLogger().WithError(crErr).Error("index delete error: " + indexName)
+		return
+	}
+	log.DefaultLogger().Info("index delete success: " + indexName)
+	return
+}
+func (op *ElasticSearchOperator) IsExist(ctx context.Context, indexName string) (isExist bool, err error) {
+	isExist, err = op.typeClient.Indices.Exists(indexName).IsSuccess(ctx)
+	return
+}
+
+func (op *ElasticSearchOperator) GetIndexInfo(ctx context.Context, indexName string) (response indices_get.Response, err error) {
+	response, err = op.typeClient.Indices.Get(indexName).Do(ctx)
+	if err != nil {
+		log.DefaultLogger().WithError(err).Error("get index info error: " + indexName)
+		return
+	}
+	return
+}
+
+func (op *ElasticSearchOperator) GetDocument(ctx context.Context, indexName, docID string) (response *core_get.Response, err error) {
+	response, err = op.typeClient.Get(indexName, docID).Do(ctx)
+	if err != nil {
+		log.DefaultLogger().WithError(err).Error("get doc info error: " + docID)
+		return
 	}
 	return
 }

@@ -533,6 +533,7 @@ type ConsumeBody struct {
 	ExchangeName string
 	RoutingKey   string
 	QueueName    string
+	AutoAck      bool
 	QueueArgs    amqp.Table
 	FetchCount   int
 	XPriority    uint8
@@ -540,14 +541,6 @@ type ConsumeBody struct {
 
 func (c *ConsumeBody) SetXPriority(xPriority uint8) *ConsumeBody {
 	c.XPriority = xPriority
-	return c
-}
-
-func (c *ConsumeBody) SetQueueMaxPriority(priority uint8) *ConsumeBody {
-	if c.QueueArgs == nil {
-		c.QueueArgs = amqp.Table{}
-	}
-	c.QueueArgs["x-max-priority"] = priority
 	return c
 }
 
@@ -636,5 +629,10 @@ func (c *ConsumeBody) SetRoutingKey(routingKey string) *ConsumeBody {
 
 func (c *ConsumeBody) SetQueueName(queueName string) *ConsumeBody {
 	c.QueueName = queueName
+	return c
+}
+
+func (c *ConsumeBody) SetAckMode(autoAck bool) *ConsumeBody {
+	c.AutoAck = autoAck
 	return c
 }

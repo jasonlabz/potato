@@ -90,8 +90,8 @@ func NewRabbitMQOperator(config *MQConfig) (op *RabbitMQOperator, err error) {
 	op.config = config
 
 	// ready connect rmq
-	timer := time.NewTimer(DefaultRetryWaitTimes)
-	defer timer.Stop()
+	ticker := time.NewTicker(DefaultRetryWaitTimes)
+	defer ticker.Stop()
 	for {
 		op.client.conn, err = amqp.DialTLS(config.Addr(), &tls.Config{InsecureSkipVerify: true})
 		if err == nil {
@@ -100,7 +100,7 @@ func NewRabbitMQOperator(config *MQConfig) (op *RabbitMQOperator, err error) {
 			logger.Info(fmt.Sprintf("rabbitmq init success[addr:%s]", config.Addr()))
 			break
 		}
-		<-timer.C
+		<-ticker.C
 		logger.Warn(fmt.Sprintf("wait %ss for retry to connect...", DefaultRetryWaitTimes))
 	}
 	// a new goroutine for check disconnect
@@ -181,8 +181,8 @@ func (op *RabbitMQOperator) tryReConnect(daemon bool) (connected bool) {
 	sig := make(chan os.Signal)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGKILL)
 
-	timer := time.NewTimer(DefaultRetryWaitTimes)
-	defer timer.Stop()
+	ticker := time.NewTicker(DefaultRetryWaitTimes)
+	defer ticker.Stop()
 
 	for {
 		if !op.isReady && atomic.LoadInt32(&op.closed) != Closed {
@@ -201,7 +201,7 @@ func (op *RabbitMQOperator) tryReConnect(daemon bool) (connected bool) {
 			case <-op.closeCh:
 				logger.Info(fmt.Sprintf("rabbitmq is closed, exiting..."))
 				return
-			case <-timer.C:
+			case <-ticker.C:
 			}
 		}
 
@@ -291,12 +291,6 @@ func (op *RabbitMQOperator) getChannelForQueue(isConsume bool, queue string) (ch
 	if err != nil {
 		return
 	}
-	//notifyPush := make(chan amqp.Confirmation, 1)
-	//channel.NotifyPublish(notifyPush)
-	//
-	//go func() {
-	//
-	//}()
 	op.client.channelCache.Store(queue, channel)
 	return
 }
@@ -320,8 +314,8 @@ func (op *RabbitMQOperator) PushDelayMessage(ctx context.Context, body *PushDela
 		body.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
 	}
 	logger := log.GetLogger(ctx).WithField(log.String("msg_id", body.MessageId))
-	timer := time.NewTimer(DefaultRetryWaitTimes)
-	defer timer.Stop()
+	ticker := time.NewTicker(DefaultRetryWaitTimes)
+	defer ticker.Stop()
 
 	if body.DelayTime == 0 && body.Expiration == "" {
 		err = errors.New("no expire time set")
@@ -333,15 +327,15 @@ func (op *RabbitMQOperator) PushDelayMessage(ctx context.Context, body *PushDela
 			err = errors.New("connection is closed")
 			return
 		}
-		err = op.pushDelayMessageCore(ctx, body)
-		if err != nil {
-			logger.WithError(err).Error(fmt.Sprintf("[push] Push failed. after %d seconds and retry...", DefaultRetryWaitTimes))
+		pushErr := op.pushDelayMessageCore(ctx, body)
+		if pushErr != nil {
+			logger.WithError(pushErr).Warn(fmt.Sprintf("[push] Push failed. after %d seconds and retry...", DefaultRetryWaitTimes))
 			select {
 			case <-op.closeCh:
 				logger.Error(fmt.Sprintf("[push]rmq closed, push msg cancel"))
 				err = errors.New("rabbitmq connection closed")
 				return
-			case <-timer.C:
+			case <-ticker.C:
 			}
 			continue
 		}
@@ -437,8 +431,8 @@ func (op *RabbitMQOperator) PushExchange(ctx context.Context, body *ExchangePush
 		body.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
 	}
 	logger := log.GetLogger(ctx).WithField(log.String("msg_id", body.MessageId))
-	timer := time.NewTimer(DefaultRetryWaitTimes)
-	defer timer.Stop()
+	ticker := time.NewTicker(DefaultRetryWaitTimes)
+	defer ticker.Stop()
 	body.Validate()
 
 	for i := 0; i < RetryTimes; i++ {
@@ -447,15 +441,15 @@ func (op *RabbitMQOperator) PushExchange(ctx context.Context, body *ExchangePush
 			err = errors.New("connection is closed")
 			return
 		}
-		err = op.pushExchangeCore(ctx, body)
-		if err != nil {
-			logger.WithError(err).Error(fmt.Sprintf("[push] Push failed. after %d seconds and retry...", DefaultRetryWaitTimes))
+		pushErr := op.pushExchangeCore(ctx, body)
+		if pushErr != nil {
+			logger.WithError(pushErr).Warn(fmt.Sprintf("[push] Push failed. after %d seconds and retry...", DefaultRetryWaitTimes))
 			select {
 			case <-op.closeCh:
 				logger.Error(fmt.Sprintf("[push]rmq closed, push msg cancel"))
 				err = errors.New("rabbitmq connection closed")
 				return
-			case <-timer.C:
+			case <-ticker.C:
 			}
 			continue
 		}
@@ -472,8 +466,8 @@ func (op *RabbitMQOperator) PushQueue(ctx context.Context, body *QueuePushBody) 
 		body.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
 	}
 	logger := log.GetLogger(ctx).WithField(log.String("msg_id", body.MessageId))
-	timer := time.NewTimer(DefaultRetryWaitTimes)
-	defer timer.Stop()
+	ticker := time.NewTicker(DefaultRetryWaitTimes)
+	defer ticker.Stop()
 
 	body.Validate()
 	for i := 0; i < RetryTimes; i++ {
@@ -482,15 +476,15 @@ func (op *RabbitMQOperator) PushQueue(ctx context.Context, body *QueuePushBody) 
 			err = errors.New("connection is closed")
 			return
 		}
-		err = op.pushQueueCore(ctx, body)
-		if err != nil {
-			logger.WithError(err).Error(fmt.Sprintf("[push] Push failed. after %d seconds and retry...", DefaultRetryWaitTimes))
+		pushErr := op.pushQueueCore(ctx, body)
+		if pushErr != nil {
+			logger.WithError(pushErr).Warn(fmt.Sprintf("[push] Push failed. after %d seconds and retry...", DefaultRetryWaitTimes))
 			select {
 			case <-op.closeCh:
 				logger.Error(fmt.Sprintf("[push]mq closed, push msg cancel"))
 				err = errors.New("rabbitmq connection closed")
 				return
-			case <-timer.C:
+			case <-ticker.C:
 			}
 			continue
 		}
@@ -507,24 +501,24 @@ func (op *RabbitMQOperator) Push(ctx context.Context, msg *PushBody) (err error)
 		msg.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
 	}
 	logger := log.GetLogger(ctx).WithField(log.String("msg_id", msg.MessageId))
-	timer := time.NewTimer(DefaultRetryWaitTimes)
-	defer timer.Stop()
+	ticker := time.NewTicker(DefaultRetryWaitTimes)
+	defer ticker.Stop()
 	for i := 0; i < RetryTimes; i++ {
 		if atomic.LoadInt32(&op.closed) == Closed {
 			logger.Error("rabbitmq connection is closed, push cancel")
 			err = errors.New("connection is closed")
 			return
 		}
-		err = op.pushCore(ctx, msg)
-		if err != nil {
+		pushErr := op.pushCore(ctx, msg)
+		if pushErr != nil {
+			logger.WithError(pushErr).Warn(fmt.Sprintf("[push] Push failed. Retrying..."))
 			select {
 			case <-op.closeCh:
 				logger.Error(fmt.Sprintf("[push]mq closed, push msg cancel"))
 				err = errors.New("rabbitmq connection closed")
 				return
-			case <-timer.C:
+			case <-ticker.C:
 			}
-			logger.Error(fmt.Sprintf("[push] Push failed. Retrying..."))
 			continue
 		}
 		logger.Info("[push] Push msg success.")
@@ -780,8 +774,8 @@ func (op *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (co
 		sig := make(chan os.Signal)
 		signal.Notify(sig, syscall.SIGINT, syscall.SIGKILL)
 
-		timer := time.NewTimer(DefaultRetryWaitTimes)
-		defer timer.Stop()
+		ticker := time.NewTicker(DefaultRetryWaitTimes)
+		defer ticker.Stop()
 	process:
 		resChan, innerErr := op.consumeCore(ctx, param)
 		// Keep retrying when consumption fails
@@ -794,7 +788,7 @@ func (op *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (co
 			case <-op.closeCh:
 				rLogger.Info(fmt.Sprintf("[consume:%s]rabbitmq is closed, exiting...", param.QueueName))
 				return
-			case <-timer.C:
+			case <-ticker.C:
 			}
 			resChan, innerErr = op.consumeCore(ctx, param)
 		}
@@ -831,7 +825,7 @@ func (op *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (co
 				case contents <- item:
 					rLogger.Info(fmt.Sprintf("[consume:%s]recived msg success: msg_id --> %s", param.QueueName, item.MessageId))
 				}
-			case <-timer.C:
+			case <-ticker.C:
 				continue
 			}
 		}
@@ -883,7 +877,7 @@ func (op *RabbitMQOperator) consumeCore(ctx context.Context, param *ConsumeBody)
 	if param.XPriority != 0 {
 		args = amqp.Table{"x-priority": param.XPriority}
 	}
-	contents, err = channel.Consume(param.QueueName, "", false, false, false, false, args)
+	contents, err = channel.Consume(param.QueueName, "", param.AutoAck, false, false, false, args)
 	if err != nil {
 		logger.Error(fmt.Sprintf("The acquisition of the consumption channel is abnormal:%s \n", err))
 		return
