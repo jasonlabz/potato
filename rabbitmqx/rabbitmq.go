@@ -470,7 +470,7 @@ func (op *RabbitMQOperator) pushDelayMessageCore(ctx context.Context, body *Push
 		}
 
 		confirmed := op.confirmOne(confirmCh.(chan amqp.Confirmation))
-		if confirmed {
+		if !confirmed {
 			err = errors.New("push confirmed fail")
 			return
 		}
@@ -497,7 +497,7 @@ func (op *RabbitMQOperator) PushExchange(ctx context.Context, body *ExchangePush
 		}
 		pushErr := op.pushExchangeCore(ctx, body)
 		if pushErr != nil {
-			logger.WithError(pushErr).Warn(fmt.Sprintf("[push] Push failed. after %d seconds and retry...", DefaultRetryWaitTimes))
+			logger.Warn(fmt.Sprintf("[push] Push failed <error:  %s>.  after %d seconds and retry... ", pushErr.Error(), DefaultRetryWaitTimes))
 			select {
 			case <-op.closeCh:
 				logger.Error(fmt.Sprintf("[push]rmq closed, push msg cancel"))
@@ -647,7 +647,7 @@ func (op *RabbitMQOperator) pushQueueCore(ctx context.Context, body *QueuePushBo
 		}
 
 		confirmed := op.confirmOne(confirmCh.(chan amqp.Confirmation))
-		if confirmed {
+		if !confirmed {
 			err = errors.New("push confirmed fail")
 			return
 		}
@@ -744,7 +744,7 @@ func (op *RabbitMQOperator) pushExchangeCore(ctx context.Context, body *Exchange
 		}
 
 		confirmed := op.confirmOne(confirmCh.(chan amqp.Confirmation))
-		if confirmed {
+		if !confirmed {
 			err = errors.New("push confirmed fail")
 			return
 		}
@@ -847,7 +847,7 @@ func (op *RabbitMQOperator) pushCore(ctx context.Context, msg *PushBody) (err er
 		}
 
 		confirmed := op.confirmOne(confirmCh.(chan amqp.Confirmation))
-		if confirmed {
+		if !confirmed {
 			err = errors.New("push confirmed fail")
 			return
 		}
