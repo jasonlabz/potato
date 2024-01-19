@@ -109,6 +109,30 @@ func NewRabbitMQOperator(config *MQConfig) (op *RabbitMQOperator, err error) {
 	return
 }
 
+// 消息确认
+func (op *RabbitMQOperator) confirmOne(confirms <-chan amqp.Confirmation) (ok bool) {
+	logger := log.DefaultLogger().WithField("")
+	sig := make(chan os.Signal)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGKILL)
+
+	select {
+	case s := <-sig:
+		logger.Info(fmt.Sprintf("recived： %v, exiting... ", s))
+		return
+	case <-op.closeCh:
+		logger.Info(fmt.Sprintf("rabbitmq is closed, exiting..."))
+		return
+	case confirmed := <-confirms:
+		if confirmed.Ack {
+			ok = true
+			logger.Info(fmt.Sprintf("confirmed delivery with delivery tag: %d", confirmed.DeliveryTag))
+		} else {
+			logger.Info(fmt.Sprintf("confirmed delivery of delivery tag: %d", confirmed.DeliveryTag))
+		}
+	}
+	return
+}
+
 func handlePanic() {
 	if r := recover(); r != nil {
 		log.DefaultLogger().Errorf("Recovered:", r)
@@ -168,6 +192,7 @@ type Client struct {
 	conn            *amqp.Connection
 	commonCh        *amqp.Channel
 	channelCache    sync.Map
+	pushConfirmCh   sync.Map
 	cacheMu         sync.Mutex
 	closeConnNotify chan *amqp.Error
 }
@@ -229,9 +254,10 @@ func (op *RabbitMQOperator) tryReConnect(daemon bool) (connected bool) {
 	return
 }
 
-func (op *RabbitMQOperator) getChannelForExchange(exchange string) (channel *amqp.Channel, err error) {
-	exchange = exchange + "_exchange:publish"
-	ch, ok := op.client.channelCache.Load(exchange)
+func (op *RabbitMQOperator) getChannelForExchange(exchange string) (key string, channel *amqp.Channel, err error) {
+	key = exchange + "_exchange:publish"
+
+	ch, ok := op.client.channelCache.Load(key)
 	if ok && !ch.(*amqp.Channel).IsClosed() {
 		channel = ch.(*amqp.Channel)
 		return
@@ -240,7 +266,7 @@ func (op *RabbitMQOperator) getChannelForExchange(exchange string) (channel *amq
 	op.client.cacheMu.Lock()
 	defer op.client.cacheMu.Unlock()
 
-	ch, ok = op.client.channelCache.Load(exchange)
+	ch, ok = op.client.channelCache.Load(key)
 	if ok && !ch.(*amqp.Channel).IsClosed() {
 		channel = ch.(*amqp.Channel)
 		return
@@ -256,17 +282,22 @@ func (op *RabbitMQOperator) getChannelForExchange(exchange string) (channel *amq
 	if err != nil {
 		return
 	}
-	op.client.channelCache.Store(exchange, channel)
+	op.client.channelCache.Store(key, channel)
+
+	pushConfirm := make(chan amqp.Confirmation, 1)
+	channel.NotifyPublish(pushConfirm)
+	op.client.pushConfirmCh.Store(key, pushConfirm)
+
 	return
 }
 
-func (op *RabbitMQOperator) getChannelForQueue(isConsume bool, queue string) (channel *amqp.Channel, err error) {
+func (op *RabbitMQOperator) getChannelForQueue(isConsume bool, queue string) (key string, channel *amqp.Channel, err error) {
 	if isConsume {
-		queue += "_queue:consume"
+		key = queue + "_queue:consume"
 	} else {
-		queue += "_queue:publish"
+		key = queue + "_queue:publish"
 	}
-	ch, ok := op.client.channelCache.Load(queue)
+	ch, ok := op.client.channelCache.Load(key)
 	if ok && !ch.(*amqp.Channel).IsClosed() {
 		channel = ch.(*amqp.Channel)
 		return
@@ -275,7 +306,7 @@ func (op *RabbitMQOperator) getChannelForQueue(isConsume bool, queue string) (ch
 	op.client.cacheMu.Lock()
 	defer op.client.cacheMu.Unlock()
 
-	ch, ok = op.client.channelCache.Load(queue)
+	ch, ok = op.client.channelCache.Load(key)
 	if ok && !ch.(*amqp.Channel).IsClosed() {
 		channel = ch.(*amqp.Channel)
 		return
@@ -291,20 +322,26 @@ func (op *RabbitMQOperator) getChannelForQueue(isConsume bool, queue string) (ch
 	if err != nil {
 		return
 	}
-	op.client.channelCache.Store(queue, channel)
+	op.client.channelCache.Store(key, channel)
+
+	if !isConsume {
+		pushConfirm := make(chan amqp.Confirmation, 1)
+		channel.NotifyPublish(pushConfirm)
+		op.client.pushConfirmCh.Store(key, pushConfirm)
+	}
 	return
 }
 
-func (op *RabbitMQOperator) getChannel(isConsume bool, exchange, queue string) (channel *amqp.Channel, err error) {
+func (op *RabbitMQOperator) getChannel(isConsume bool, exchange, queue string) (key string, channel *amqp.Channel, err error) {
 	if isConsume {
-		channel, err = op.getChannelForQueue(isConsume, queue)
+		key, channel, err = op.getChannelForQueue(isConsume, queue)
 		return
 	}
 	if exchange != "" {
-		channel, err = op.getChannelForExchange(exchange)
+		key, channel, err = op.getChannelForExchange(exchange)
 		return
 	}
-	channel, err = op.getChannelForQueue(false, queue)
+	key, channel, err = op.getChannelForQueue(false, queue)
 	return
 }
 
@@ -347,17 +384,19 @@ func (op *RabbitMQOperator) PushDelayMessage(ctx context.Context, body *PushDela
 }
 
 func (op *RabbitMQOperator) pushDelayMessageCore(ctx context.Context, body *PushDelayBody) (err error) {
+	logger := log.GetLogger(ctx).WithField(log.String("msg_id", body.MessageId))
+
 	delayStr := strconv.FormatInt(int64(body.DelayTime), 10)
 	delayQueueName := body.QueueName + "_delay:" + delayStr
 	delayRouteKey := body.RoutingKey + "_delay:" + delayStr
 
-	channel, err := op.getChannelForQueue(false, body.QueueName)
+	key, channel, err := op.getChannelForQueue(false, body.QueueName)
 	if err != nil {
 		return
 	}
 
 	if body.OpenConfirm {
-		err = channel.Confirm(body.ConfirmNoWait)
+		err = channel.Confirm(false)
 		if err != nil {
 			return
 		}
@@ -422,9 +461,24 @@ func (op *RabbitMQOperator) pushDelayMessageCore(ctx context.Context, body *Push
 	if err != nil {
 		return
 	}
+
+	if body.ConfirmedByOrder {
+		confirmCh, ok := op.client.pushConfirmCh.Load(key)
+		if !ok {
+			logger.Warn(fmt.Sprintf("msg pushed, but has no confirm channel, skip confirm ..."))
+			return
+		}
+
+		confirmed := op.confirmOne(confirmCh.(chan amqp.Confirmation))
+		if confirmed {
+			err = errors.New("push confirmed fail")
+			return
+		}
+	}
 	return
 }
 
+// PushExchange 向交换机推送消息
 func (op *RabbitMQOperator) PushExchange(ctx context.Context, body *ExchangePushBody) (err error) {
 	defer handlePanic()
 	if body.MessageId == "" {
@@ -460,6 +514,7 @@ func (op *RabbitMQOperator) PushExchange(ctx context.Context, body *ExchangePush
 	return
 }
 
+// PushQueue 向队列推送消息
 func (op *RabbitMQOperator) PushQueue(ctx context.Context, body *QueuePushBody) (err error) {
 	defer handlePanic()
 	if body.MessageId == "" {
@@ -495,6 +550,7 @@ func (op *RabbitMQOperator) PushQueue(ctx context.Context, body *QueuePushBody) 
 	return
 }
 
+// Push 向交换机或者队列推送消息
 func (op *RabbitMQOperator) Push(ctx context.Context, msg *PushBody) (err error) {
 	defer handlePanic()
 	if msg.MessageId == "" {
@@ -534,13 +590,15 @@ func (op *RabbitMQOperator) Push(ctx context.Context, msg *PushBody) (err error)
 @description: 向队列推送消息
 */
 func (op *RabbitMQOperator) pushQueueCore(ctx context.Context, body *QueuePushBody) (err error) {
-	channel, err := op.getChannelForQueue(false, body.QueueName)
+	logger := log.GetLogger(ctx).WithField(log.String("msg_id", body.MessageId))
+
+	key, channel, err := op.getChannelForQueue(false, body.QueueName)
 	if err != nil {
 		return
 	}
 
 	if body.OpenConfirm {
-		err = channel.Confirm(body.ConfirmNoWait)
+		err = channel.Confirm(false)
 		if err != nil {
 			return
 		}
@@ -580,6 +638,20 @@ func (op *RabbitMQOperator) pushQueueCore(ctx context.Context, body *QueuePushBo
 	if err != nil {
 		return
 	}
+
+	if body.ConfirmedByOrder {
+		confirmCh, ok := op.client.pushConfirmCh.Load(key)
+		if !ok {
+			logger.Warn(fmt.Sprintf("msg pushed, but has no confirm channel, skip confirm ..."))
+			return
+		}
+
+		confirmed := op.confirmOne(confirmCh.(chan amqp.Confirmation))
+		if confirmed {
+			err = errors.New("push confirmed fail")
+			return
+		}
+	}
 	return
 }
 
@@ -589,13 +661,15 @@ func (op *RabbitMQOperator) pushQueueCore(ctx context.Context, body *QueuePushBo
 @description: 向队列推送消息
 */
 func (op *RabbitMQOperator) pushExchangeCore(ctx context.Context, body *ExchangePushBody) (err error) {
-	channel, err := op.getChannelForExchange(body.ExchangeName)
+	logger := log.GetLogger(ctx).WithField(log.String("msg_id", body.MessageId))
+
+	key, channel, err := op.getChannelForExchange(body.ExchangeName)
 	if err != nil {
 		return
 	}
 
 	if body.OpenConfirm {
-		err = channel.Confirm(body.ConfirmNoWait)
+		err = channel.Confirm(false)
 		if err != nil {
 			return
 		}
@@ -661,19 +735,33 @@ func (op *RabbitMQOperator) pushExchangeCore(ctx context.Context, body *Exchange
 	if err != nil {
 		return
 	}
+
+	if body.ConfirmedByOrder {
+		confirmCh, ok := op.client.pushConfirmCh.Load(key)
+		if !ok {
+			logger.Warn(fmt.Sprintf("msg pushed, but has no confirm channel, skip confirm ..."))
+			return
+		}
+
+		confirmed := op.confirmOne(confirmCh.(chan amqp.Confirmation))
+		if confirmed {
+			err = errors.New("push confirmed fail")
+			return
+		}
+	}
 	return
 }
 
 func (op *RabbitMQOperator) pushCore(ctx context.Context, msg *PushBody) (err error) {
 	logger := log.GetLogger(ctx).WithField(log.String("msg_id", msg.MessageId))
-	channel, err := op.getChannel(false, msg.ExchangeName, msg.QueueName)
+	key, channel, err := op.getChannel(false, msg.ExchangeName, msg.QueueName)
 	if err != nil {
 		logger.Error(err.Error())
 		return
 	}
 
 	if msg.OpenConfirm {
-		err = channel.Confirm(msg.ConfirmNoWait)
+		err = channel.Confirm(false)
 		if err != nil {
 			logger.Error(err.Error())
 			return
@@ -750,6 +838,19 @@ func (op *RabbitMQOperator) pushCore(ctx context.Context, msg *PushBody) (err er
 	if err != nil {
 		logger.Error(fmt.Sprintf("MQ task failed to be sent:%s \n", err))
 		return
+	}
+	if msg.ConfirmedByOrder {
+		confirmCh, ok := op.client.pushConfirmCh.Load(key)
+		if !ok {
+			logger.Warn(fmt.Sprintf("msg pushed, but has no confirm channel, skip confirm ..."))
+			return
+		}
+
+		confirmed := op.confirmOne(confirmCh.(chan amqp.Confirmation))
+		if confirmed {
+			err = errors.New("push confirmed fail")
+			return
+		}
 	}
 	return
 }
@@ -841,7 +942,7 @@ func (op *RabbitMQOperator) consumeCore(ctx context.Context, param *ConsumeBody)
 		err = errors.New("connection is not ready")
 		return
 	}
-	channel, err := op.getChannel(true, param.ExchangeName, param.QueueName)
+	_, channel, err := op.getChannel(true, param.ExchangeName, param.QueueName)
 	if err != nil {
 		logger.Error(err.Error())
 		return

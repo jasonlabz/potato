@@ -8,15 +8,15 @@ import (
 
 // PushDelayBody 生产延迟消息body参数设置，兼容交换机和队列两种模式
 type PushDelayBody struct {
-	OpenConfirm   bool
-	ConfirmNoWait bool
-	ExchangeName  string
-	ExchangeType  ExchangeType
-	ExchangeArgs  amqp.Table
-	RoutingKey    string
-	QueueName     string
-	Args          amqp.Table
-	DelayTime     time.Duration
+	OpenConfirm      bool
+	ConfirmedByOrder bool
+	ExchangeName     string
+	ExchangeType     ExchangeType
+	ExchangeArgs     amqp.Table
+	RoutingKey       string
+	QueueName        string
+	Args             amqp.Table
+	DelayTime        time.Duration
 	amqp.Publishing
 }
 
@@ -40,9 +40,9 @@ func (p *PushDelayBody) SetQueueName(queueName string) *PushDelayBody {
 	return p
 }
 
-func (p *PushDelayBody) SetConfirmMode(confirm, noWait bool) *PushDelayBody {
-	p.OpenConfirm = confirm
-	p.ConfirmNoWait = noWait
+func (p *PushDelayBody) OpenConfirmMode(order bool) *PushDelayBody {
+	p.OpenConfirm = true
+	p.ConfirmedByOrder = order
 	return p
 }
 
@@ -71,8 +71,8 @@ func (p *PushDelayBody) SetQueueMaxPriority(priority uint8) *PushDelayBody {
 
 // PushBody 生产消息body参数设置，兼容交换机和队列两种模式
 type PushBody struct {
-	OpenConfirm   bool
-	ConfirmNoWait bool
+	OpenConfirm      bool
+	ConfirmedByOrder bool
 
 	// 交换机模式
 	ExchangeName  string
@@ -162,9 +162,9 @@ func (p *PushBody) SetQueueName(queueName string) *PushBody {
 	return p
 }
 
-func (p *PushBody) SetConfirmMode(confirm, noWait bool) *PushBody {
-	p.OpenConfirm = confirm
-	p.ConfirmNoWait = noWait
+func (p *PushBody) OpenConfirmMode(order bool) *PushBody {
+	p.OpenConfirm = true
+	p.ConfirmedByOrder = order
 	return p
 }
 
@@ -266,15 +266,15 @@ func (p *PushBody) SetQueueMasterLocator(mode string, queues ...string) *PushBod
 
 // ExchangePushBody 交换机模式推送消息
 type ExchangePushBody struct {
-	OpenConfirm   bool
-	ConfirmNoWait bool
-	ExchangeName  string
-	ExchangeType  ExchangeType
-	ExchangeArgs  amqp.Table
-	RoutingKey    string
-	BindingKeyMap map[string]string
-	QueueArgs     map[string]amqp.Table
-	XMaxPriority  uint8
+	OpenConfirm      bool
+	ConfirmedByOrder bool
+	ExchangeName     string
+	ExchangeType     ExchangeType
+	ExchangeArgs     amqp.Table
+	RoutingKey       string
+	BindingKeyMap    map[string]string
+	QueueArgs        map[string]amqp.Table
+	XMaxPriority     uint8
 	amqp.Publishing
 }
 
@@ -402,9 +402,9 @@ func (e *ExchangePushBody) SetRoutingKey(routingKey string) *ExchangePushBody {
 	return e
 }
 
-func (e *ExchangePushBody) SetConfirmMode(open, noWait bool) *ExchangePushBody {
-	e.OpenConfirm = open
-	e.ConfirmNoWait = noWait
+func (e *ExchangePushBody) OpenConfirmMode(order bool) *ExchangePushBody {
+	e.OpenConfirm = true
+	e.ConfirmedByOrder = order
 	return e
 }
 
@@ -419,10 +419,10 @@ func (e *ExchangePushBody) SetMsg(msg []byte) *ExchangePushBody {
 }
 
 type QueuePushBody struct {
-	OpenConfirm   bool
-	ConfirmNoWait bool
-	QueueName     string
-	Args          amqp.Table
+	OpenConfirm      bool
+	ConfirmedByOrder bool
+	QueueName        string
+	Args             amqp.Table
 	amqp.Publishing
 }
 
@@ -512,9 +512,9 @@ func (q *QueuePushBody) SetQueueName(queueName string) *QueuePushBody {
 	return q
 }
 
-func (q *QueuePushBody) SetConfirmMode(open, noWait bool) *QueuePushBody {
-	q.OpenConfirm = open
-	q.ConfirmNoWait = noWait
+func (q *QueuePushBody) OpenConfirmMode(order bool) *QueuePushBody {
+	q.OpenConfirm = true
+	q.ConfirmedByOrder = order
 	return q
 }
 
