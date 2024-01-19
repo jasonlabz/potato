@@ -158,6 +158,7 @@ func NewElasticSearchOperator(config *Config) (op *ElasticSearchOperator, err er
 
 func (op *ElasticSearchOperator) GetIndexList(ctx context.Context) (res []*IndexInfo, err error) {
 	response, err := esapi.CatIndicesRequest{Format: "json"}.Do(ctx, op.typeClient)
+	//indices := op.typeClient.Cat.Indices()
 	if err != nil {
 		return
 	}
@@ -189,12 +190,11 @@ func (op *ElasticSearchOperator) CreateIndex(ctx context.Context, indexName stri
 			return
 		}
 	}
-	cr, crErr := op.typeClient.Indices.Create(indexName).Request(req).Do(ctx)
-	if crErr != nil {
-		log.DefaultLogger().WithError(crErr).Error("index create error: " + cr.Index)
+	_, err = op.typeClient.Indices.Create(indexName).Request(req).Do(ctx)
+	if err != nil {
+		log.DefaultLogger().WithError(err).Error("index create error: " + indexName)
 		return
 	}
-	log.DefaultLogger().Info("index created: " + cr.Index)
 	return
 }
 
@@ -213,7 +213,6 @@ func (op *ElasticSearchOperator) DeleteIndex(ctx context.Context, indexName stri
 		log.DefaultLogger().WithError(crErr).Error("index delete error: " + indexName)
 		return
 	}
-	log.DefaultLogger().Info("index delete success: " + indexName)
 	return
 }
 func (op *ElasticSearchOperator) IsExist(ctx context.Context, indexName string) (isExist bool, err error) {
