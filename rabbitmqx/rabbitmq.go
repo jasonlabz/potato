@@ -254,7 +254,7 @@ func (op *RabbitMQOperator) tryReConnect(daemon bool) (connected bool) {
 	return
 }
 
-func (op *RabbitMQOperator) getChannelForExchange(exchange string) (key string, channel *amqp.Channel, err error) {
+func (op *RabbitMQOperator) getChannelForExchange(exchange string, order bool) (key string, channel *amqp.Channel, err error) {
 	key = exchange + "_exchange:publish"
 
 	ch, ok := op.client.channelCache.Load(key)
@@ -284,14 +284,16 @@ func (op *RabbitMQOperator) getChannelForExchange(exchange string) (key string, 
 	}
 	op.client.channelCache.Store(key, channel)
 
-	pushConfirm := make(chan amqp.Confirmation, 1)
-	channel.NotifyPublish(pushConfirm)
-	op.client.pushConfirmCh.Store(key, pushConfirm)
+	if order {
+		pushConfirm := make(chan amqp.Confirmation, 1)
+		channel.NotifyPublish(pushConfirm)
+		op.client.pushConfirmCh.Store(key, pushConfirm)
+	}
 
 	return
 }
 
-func (op *RabbitMQOperator) getChannelForQueue(isConsume bool, queue string) (key string, channel *amqp.Channel, err error) {
+func (op *RabbitMQOperator) getChannelForQueue(isConsume bool, queue string, order bool) (key string, channel *amqp.Channel, err error) {
 	if isConsume {
 		key = queue + "_queue:consume"
 	} else {
@@ -324,7 +326,7 @@ func (op *RabbitMQOperator) getChannelForQueue(isConsume bool, queue string) (ke
 	}
 	op.client.channelCache.Store(key, channel)
 
-	if !isConsume {
+	if !isConsume && order {
 		pushConfirm := make(chan amqp.Confirmation, 1)
 		channel.NotifyPublish(pushConfirm)
 		op.client.pushConfirmCh.Store(key, pushConfirm)
@@ -332,16 +334,16 @@ func (op *RabbitMQOperator) getChannelForQueue(isConsume bool, queue string) (ke
 	return
 }
 
-func (op *RabbitMQOperator) getChannel(isConsume bool, exchange, queue string) (key string, channel *amqp.Channel, err error) {
+func (op *RabbitMQOperator) getChannel(isConsume bool, exchange, queue string, order bool) (key string, channel *amqp.Channel, err error) {
 	if isConsume {
-		key, channel, err = op.getChannelForQueue(isConsume, queue)
+		key, channel, err = op.getChannelForQueue(isConsume, queue, order)
 		return
 	}
 	if exchange != "" {
-		key, channel, err = op.getChannelForExchange(exchange)
+		key, channel, err = op.getChannelForExchange(exchange, order)
 		return
 	}
-	key, channel, err = op.getChannelForQueue(false, queue)
+	key, channel, err = op.getChannelForQueue(false, queue, order)
 	return
 }
 
@@ -390,7 +392,7 @@ func (op *RabbitMQOperator) pushDelayMessageCore(ctx context.Context, body *Push
 	delayQueueName := body.QueueName + "_delay:" + delayStr
 	delayRouteKey := body.RoutingKey + "_delay:" + delayStr
 
-	key, channel, err := op.getChannelForQueue(false, body.QueueName)
+	key, channel, err := op.getChannelForQueue(false, body.QueueName, body.ConfirmedByOrder)
 	if err != nil {
 		return
 	}
@@ -592,7 +594,7 @@ func (op *RabbitMQOperator) Push(ctx context.Context, msg *PushBody) (err error)
 func (op *RabbitMQOperator) pushQueueCore(ctx context.Context, body *QueuePushBody) (err error) {
 	logger := log.GetLogger(ctx).WithField(log.String("msg_id", body.MessageId))
 
-	key, channel, err := op.getChannelForQueue(false, body.QueueName)
+	key, channel, err := op.getChannelForQueue(false, body.QueueName, body.ConfirmedByOrder)
 	if err != nil {
 		return
 	}
@@ -663,7 +665,7 @@ func (op *RabbitMQOperator) pushQueueCore(ctx context.Context, body *QueuePushBo
 func (op *RabbitMQOperator) pushExchangeCore(ctx context.Context, body *ExchangePushBody) (err error) {
 	logger := log.GetLogger(ctx).WithField(log.String("msg_id", body.MessageId))
 
-	key, channel, err := op.getChannelForExchange(body.ExchangeName)
+	key, channel, err := op.getChannelForExchange(body.ExchangeName, body.ConfirmedByOrder)
 	if err != nil {
 		return
 	}
@@ -754,7 +756,7 @@ func (op *RabbitMQOperator) pushExchangeCore(ctx context.Context, body *Exchange
 
 func (op *RabbitMQOperator) pushCore(ctx context.Context, msg *PushBody) (err error) {
 	logger := log.GetLogger(ctx).WithField(log.String("msg_id", msg.MessageId))
-	key, channel, err := op.getChannel(false, msg.ExchangeName, msg.QueueName)
+	key, channel, err := op.getChannel(false, msg.ExchangeName, msg.QueueName, msg.ConfirmedByOrder)
 	if err != nil {
 		logger.Error(err.Error())
 		return
@@ -942,7 +944,7 @@ func (op *RabbitMQOperator) consumeCore(ctx context.Context, param *ConsumeBody)
 		err = errors.New("connection is not ready")
 		return
 	}
-	_, channel, err := op.getChannel(true, param.ExchangeName, param.QueueName)
+	_, channel, err := op.getChannel(true, param.ExchangeName, param.QueueName, false)
 	if err != nil {
 		logger.Error(err.Error())
 		return
