@@ -79,7 +79,6 @@ func NewRabbitMQOperator(config *MQConfig) (op *RabbitMQOperator, err error) {
 		closeConnNotify: make(chan *amqp.Error, 1),
 	}
 	op.closeCh = make(chan bool)
-	op.notifyAllChan = make(chan bool)
 	op.name = fmt.Sprintf("rmq_%v", rand.Int31())
 
 	// validate config param
@@ -178,23 +177,23 @@ func (c *MQConfig) Addr() string {
 }
 
 type RabbitMQOperator struct {
-	name          string
-	config        *MQConfig
-	client        *Client
-	closeCh       chan bool
-	notifyAllChan chan bool
-	isReady       bool
-	closed        int32
-	mu            sync.Mutex
+	name    string
+	config  *MQConfig
+	client  *Client
+	closeCh chan bool
+	isReady bool
+	closed  int32
+	mu      sync.Mutex
 }
 
 type Client struct {
-	conn            *amqp.Connection
-	commonCh        *amqp.Channel
-	channelCache    sync.Map
-	pushConfirmCh   sync.Map
-	cacheMu         sync.Mutex
-	closeConnNotify chan *amqp.Error
+	conn                *amqp.Connection
+	commonCh            *amqp.Channel
+	channelCache        sync.Map
+	pushConfirmListener sync.Map
+	chCloseListener     sync.Map
+	cacheMu             sync.Mutex
+	closeConnNotify     chan *amqp.Error
 }
 
 func (op *RabbitMQOperator) SetLogger(logger amqp.Logging) {
@@ -237,17 +236,15 @@ func (op *RabbitMQOperator) tryReConnect(daemon bool) (connected bool) {
 
 		select {
 		case s := <-sig:
-			logger.Info(fmt.Sprintf("recived： %v, exiting... ", s))
+			logger.Info(fmt.Sprintf("recived： %v, exiting daemon program... ", s))
 			return
 		case <-op.closeCh:
-			logger.Info(fmt.Sprintf("rabbitmq is closed, exiting..."))
+			logger.Info(fmt.Sprintf("rabbitmq is closed, exiting daemon program..."))
 			return
 		case <-op.client.closeConnNotify:
 			op.isReady = false
 			op.client.channelCache = sync.Map{}
-			// notify all channel retry init
-			close(op.notifyAllChan)
-			op.notifyAllChan = make(chan bool)
+			op.client.chCloseListener = sync.Map{}
 			logger.Error(fmt.Sprintf("rabbitmq is disconnect, retrying..."))
 		}
 	}
@@ -287,7 +284,7 @@ func (op *RabbitMQOperator) getChannelForExchange(exchange string, order bool) (
 	if order {
 		pushConfirm := make(chan amqp.Confirmation, 1)
 		channel.NotifyPublish(pushConfirm)
-		op.client.pushConfirmCh.Store(key, pushConfirm)
+		op.client.pushConfirmListener.Store(key, pushConfirm)
 	}
 
 	return
@@ -329,7 +326,13 @@ func (op *RabbitMQOperator) getChannelForQueue(isConsume bool, queue string, ord
 	if !isConsume && order {
 		pushConfirm := make(chan amqp.Confirmation, 1)
 		channel.NotifyPublish(pushConfirm)
-		op.client.pushConfirmCh.Store(key, pushConfirm)
+		op.client.pushConfirmListener.Store(key, pushConfirm)
+	}
+
+	if isConsume {
+		closeErr := make(chan *amqp.Error, 1)
+		channel.NotifyClose(closeErr)
+		op.client.chCloseListener.Store(key, closeErr)
 	}
 	return
 }
@@ -347,7 +350,7 @@ func (op *RabbitMQOperator) getChannel(isConsume bool, exchange, queue string, o
 	return
 }
 
-func (op *RabbitMQOperator) PushDelayMessage(ctx context.Context, body *PushDelayBody) (err error) {
+func (op *RabbitMQOperator) PushDelayMessage(ctx context.Context, body *PushDelayBody, opts ...OptionFun) (err error) {
 	defer handlePanic()
 	if body.MessageId == "" {
 		body.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
@@ -366,7 +369,7 @@ func (op *RabbitMQOperator) PushDelayMessage(ctx context.Context, body *PushDela
 			err = errors.New("connection is closed")
 			return
 		}
-		pushErr := op.pushDelayMessageCore(ctx, body)
+		pushErr := op.pushDelayMessageCore(ctx, body, opts...)
 		if pushErr != nil {
 			logger.WithError(pushErr).Warn(fmt.Sprintf("[push] Push failed. after %d seconds and retry...", DefaultRetryWaitTimes))
 			select {
@@ -385,14 +388,14 @@ func (op *RabbitMQOperator) PushDelayMessage(ctx context.Context, body *PushDela
 	return
 }
 
-func (op *RabbitMQOperator) pushDelayMessageCore(ctx context.Context, body *PushDelayBody) (err error) {
+func (op *RabbitMQOperator) pushDelayMessageCore(ctx context.Context, body *PushDelayBody, opts ...OptionFun) (err error) {
 	logger := log.GetLogger(ctx).WithField(log.String("msg_id", body.MessageId))
 
-	delayStr := strconv.FormatInt(int64(body.DelayTime), 10)
-	delayQueueName := body.QueueName + "_delay:" + delayStr
-	delayRouteKey := body.RoutingKey + "_delay:" + delayStr
+	delayStr := strconv.FormatInt(body.DelayTime.Milliseconds(), 10)
+	delayQueue := body.ExchangeName + "_delay:" + delayStr
+	//delayRouteKey := body.RoutingKey + "_delay:" + delayStr
 
-	key, channel, err := op.getChannelForQueue(false, body.QueueName, body.ConfirmedByOrder)
+	key, channel, err := op.getChannelForExchange(body.ExchangeName, body.ConfirmedByOrder)
 	if err != nil {
 		return
 	}
@@ -409,29 +412,34 @@ func (op *RabbitMQOperator) pushDelayMessageCore(ctx context.Context, body *Push
 	// 注册交换机
 	// name:交换机名称,kind:交换机类型,durable:是否持久化,队列存盘,true服务重启后信息不会丢失,影响性能;autoDelete:是否自动删除;
 	// noWait:是否非阻塞, true为是,不等待RMQ返回信息;args:参数,传nil即可; internal:是否为内部
-	err = channel.ExchangeDeclare(body.ExchangeName, string(body.ExchangeType), true, false, false, true, body.ExchangeArgs)
-	if err != nil {
-		return
-	}
-
-	// 队列不存在,声明队列
-	// name:队列名称;durable:是否持久化,队列存盘,true服务重启后信息不会丢失,影响性能;autoDelete:是否自动删除;noWait:是否非阻塞,
-	// true为是,不等待RMQ返回信息;args:参数,传nil即可;exclusive:是否设置排他
-	_, err = channel.QueueDeclare(body.QueueName, true, false, false, true, body.Args)
+	err = op.DeclareExchange(body.ExchangeName, string(body.ExchangeType), body.ExchangeArgs, opts...)
 	if err != nil {
 		return
 	}
 
 	// 定义延迟队列(死信队列)
-	_, err = channel.QueueDeclare(delayQueueName, true, false, false, true,
+	_, err = op.DeclareQueue(delayQueue,
 		amqp.Table{
 			"x-dead-letter-exchange": body.ExchangeName, // 指定死信交换机
 			//"x-dead-letter-routing-key": body.RoutingKey,   // 指定死信routing-key
-		})
-	// 延迟队列绑定到exchange
-	err = channel.QueueBind(body.QueueName, body.RoutingKey, body.ExchangeName, true, nil)
-	if err != nil {
-		return err
+		}, opts...)
+
+	// 交换机绑定队列处理
+	for queue, bindingKey := range body.BindingKeyMap {
+		table := body.QueueArgs[queue]
+		// 队列不存在,声明队列
+		// name:队列名称;durable:是否持久化,队列存盘,true服务重启后信息不会丢失,影响性能;autoDelete:是否自动删除;noWait:是否非阻塞,
+		// true为是,不等待RMQ返回信息;args:参数,传nil即可;exclusive:是否设置排他
+		_, err = op.DeclareQueue(queue, table, opts...)
+		if err != nil {
+			return
+		}
+
+		// 队列绑定
+		err = op.BindQueue(body.ExchangeName, bindingKey, queue, nil, opts...)
+		if err != nil {
+			return
+		}
 	}
 
 	publishingMsg := amqp.Publishing{
@@ -459,13 +467,13 @@ func (op *RabbitMQOperator) pushDelayMessageCore(ctx context.Context, body *Push
 		publishingMsg.Expiration = delayStr
 	}
 	// 发送消息，将消息发送到延迟队列，到期后自动路由到正常队列中
-	err = channel.PublishWithContext(ctx, "", delayRouteKey, false, false, publishingMsg)
+	err = channel.PublishWithContext(ctx, "", delayQueue, false, false, publishingMsg)
 	if err != nil {
 		return
 	}
 
 	if body.ConfirmedByOrder {
-		confirmCh, ok := op.client.pushConfirmCh.Load(key)
+		confirmCh, ok := op.client.pushConfirmListener.Load(key)
 		if !ok {
 			logger.Warn(fmt.Sprintf("msg pushed, but has no confirm channel, skip confirm ..."))
 			return
@@ -481,7 +489,7 @@ func (op *RabbitMQOperator) pushDelayMessageCore(ctx context.Context, body *Push
 }
 
 // PushExchange 向交换机推送消息
-func (op *RabbitMQOperator) PushExchange(ctx context.Context, body *ExchangePushBody) (err error) {
+func (op *RabbitMQOperator) PushExchange(ctx context.Context, body *ExchangePushBody, opts ...OptionFun) (err error) {
 	defer handlePanic()
 	if body.MessageId == "" {
 		body.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
@@ -497,7 +505,7 @@ func (op *RabbitMQOperator) PushExchange(ctx context.Context, body *ExchangePush
 			err = errors.New("connection is closed")
 			return
 		}
-		pushErr := op.pushExchangeCore(ctx, body)
+		pushErr := op.pushExchangeCore(ctx, body, opts...)
 		if pushErr != nil {
 			logger.Warn(fmt.Sprintf("[push] Push failed <error:  %s>.  after %d seconds and retry... ", pushErr.Error(), DefaultRetryWaitTimes))
 			select {
@@ -517,7 +525,7 @@ func (op *RabbitMQOperator) PushExchange(ctx context.Context, body *ExchangePush
 }
 
 // PushQueue 向队列推送消息
-func (op *RabbitMQOperator) PushQueue(ctx context.Context, body *QueuePushBody) (err error) {
+func (op *RabbitMQOperator) PushQueue(ctx context.Context, body *QueuePushBody, opts ...OptionFun) (err error) {
 	defer handlePanic()
 	if body.MessageId == "" {
 		body.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
@@ -533,7 +541,7 @@ func (op *RabbitMQOperator) PushQueue(ctx context.Context, body *QueuePushBody) 
 			err = errors.New("connection is closed")
 			return
 		}
-		pushErr := op.pushQueueCore(ctx, body)
+		pushErr := op.pushQueueCore(ctx, body, opts...)
 		if pushErr != nil {
 			logger.WithError(pushErr).Warn(fmt.Sprintf("[push] Push failed. after %d seconds and retry...", DefaultRetryWaitTimes))
 			select {
@@ -553,12 +561,12 @@ func (op *RabbitMQOperator) PushQueue(ctx context.Context, body *QueuePushBody) 
 }
 
 // Push 向交换机或者队列推送消息
-func (op *RabbitMQOperator) Push(ctx context.Context, msg *PushBody) (err error) {
+func (op *RabbitMQOperator) Push(ctx context.Context, body *PushBody, opts ...OptionFun) (err error) {
 	defer handlePanic()
-	if msg.MessageId == "" {
-		msg.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
+	if body.MessageId == "" {
+		body.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
 	}
-	logger := log.GetLogger(ctx).WithField(log.String("msg_id", msg.MessageId))
+	logger := log.GetLogger(ctx).WithField(log.String("msg_id", body.MessageId))
 	ticker := time.NewTicker(DefaultRetryWaitTimes)
 	defer ticker.Stop()
 	for i := 0; i < RetryTimes; i++ {
@@ -567,7 +575,7 @@ func (op *RabbitMQOperator) Push(ctx context.Context, msg *PushBody) (err error)
 			err = errors.New("connection is closed")
 			return
 		}
-		pushErr := op.pushCore(ctx, msg)
+		pushErr := op.pushCore(ctx, body, opts...)
 		if pushErr != nil {
 			logger.WithError(pushErr).Warn(fmt.Sprintf("[push] Push failed. Retrying..."))
 			select {
@@ -582,7 +590,7 @@ func (op *RabbitMQOperator) Push(ctx context.Context, msg *PushBody) (err error)
 		logger.Info("[push] Push msg success.")
 		return
 	}
-	logger.Info("[push] Push msg failed. msg: " + string(msg.Body))
+	logger.Info("[push] Push msg failed. msg: " + string(body.Body))
 	return
 }
 
@@ -591,7 +599,7 @@ func (op *RabbitMQOperator) Push(ctx context.Context, msg *PushBody) (err error)
 @arg: QueuePushBody ->  Args是队列的参数设置，例如优先级队列为amqp.Table{"x-max-priority":10}
 @description: 向队列推送消息
 */
-func (op *RabbitMQOperator) pushQueueCore(ctx context.Context, body *QueuePushBody) (err error) {
+func (op *RabbitMQOperator) pushQueueCore(ctx context.Context, body *QueuePushBody, opts ...OptionFun) (err error) {
 	logger := log.GetLogger(ctx).WithField(log.String("msg_id", body.MessageId))
 
 	key, channel, err := op.getChannelForQueue(false, body.QueueName, body.ConfirmedByOrder)
@@ -609,7 +617,7 @@ func (op *RabbitMQOperator) pushQueueCore(ctx context.Context, body *QueuePushBo
 	// 队列不存在,声明队列
 	// name:队列名称;durable:是否持久化,队列存盘,true服务重启后信息不会丢失,影响性能;autoDelete:是否自动删除;noWait:是否非阻塞,
 	// true为是,不等待RMQ返回信息;args:参数,传nil即可;exclusive:是否设置排他
-	_, err = channel.QueueDeclare(body.QueueName, true, false, false, true, body.Args)
+	_, err = op.DeclareQueue(body.QueueName, body.Args, opts...)
 	if err != nil {
 		return
 	}
@@ -642,7 +650,7 @@ func (op *RabbitMQOperator) pushQueueCore(ctx context.Context, body *QueuePushBo
 	}
 
 	if body.ConfirmedByOrder {
-		confirmCh, ok := op.client.pushConfirmCh.Load(key)
+		confirmCh, ok := op.client.pushConfirmListener.Load(key)
 		if !ok {
 			logger.Warn(fmt.Sprintf("msg pushed, but has no confirm channel, skip confirm ..."))
 			return
@@ -662,7 +670,7 @@ func (op *RabbitMQOperator) pushQueueCore(ctx context.Context, body *QueuePushBo
 @arg: ExchangePushBody ->  Args是交换机和队列的参数设置，例如优先级队列为amqp.Table{"x-max-priority":10}
 @description: 向队列推送消息
 */
-func (op *RabbitMQOperator) pushExchangeCore(ctx context.Context, body *ExchangePushBody) (err error) {
+func (op *RabbitMQOperator) pushExchangeCore(ctx context.Context, body *ExchangePushBody, opts ...OptionFun) (err error) {
 	logger := log.GetLogger(ctx).WithField(log.String("msg_id", body.MessageId))
 
 	key, channel, err := op.getChannelForExchange(body.ExchangeName, body.ConfirmedByOrder)
@@ -688,7 +696,7 @@ func (op *RabbitMQOperator) pushExchangeCore(ctx context.Context, body *Exchange
 	// 注册交换机
 	// name:交换机名称,kind:交换机类型,durable:是否持久化,队列存盘,true服务重启后信息不会丢失,影响性能;autoDelete:是否自动删除;
 	// noWait:是否非阻塞, true为是,不等待RMQ返回信息;args:参数,传nil即可; internal:是否为内部
-	err = channel.ExchangeDeclare(body.ExchangeName, string(body.ExchangeType), true, false, false, true, body.ExchangeArgs)
+	err = op.DeclareExchange(body.ExchangeName, string(body.ExchangeType), body.ExchangeArgs, opts...)
 	if err != nil {
 		return
 	}
@@ -699,13 +707,13 @@ func (op *RabbitMQOperator) pushExchangeCore(ctx context.Context, body *Exchange
 		// 队列不存在,声明队列
 		// name:队列名称;durable:是否持久化,队列存盘,true服务重启后信息不会丢失,影响性能;autoDelete:是否自动删除;noWait:是否非阻塞,
 		// true为是,不等待RMQ返回信息;args:参数,传nil即可;exclusive:是否设置排他
-		_, err = channel.QueueDeclare(queue, true, false, false, true, table)
+		_, err = op.DeclareQueue(queue, table, opts...)
 		if err != nil {
 			return
 		}
 
 		// 队列绑定
-		err = channel.QueueBind(queue, bindingKey, body.ExchangeName, true, nil)
+		err = op.BindQueue(body.ExchangeName, bindingKey, queue, nil, opts...)
 		if err != nil {
 			return
 		}
@@ -739,7 +747,7 @@ func (op *RabbitMQOperator) pushExchangeCore(ctx context.Context, body *Exchange
 	}
 
 	if body.ConfirmedByOrder {
-		confirmCh, ok := op.client.pushConfirmCh.Load(key)
+		confirmCh, ok := op.client.pushConfirmListener.Load(key)
 		if !ok {
 			logger.Warn(fmt.Sprintf("msg pushed, but has no confirm channel, skip confirm ..."))
 			return
@@ -754,15 +762,15 @@ func (op *RabbitMQOperator) pushExchangeCore(ctx context.Context, body *Exchange
 	return
 }
 
-func (op *RabbitMQOperator) pushCore(ctx context.Context, msg *PushBody) (err error) {
-	logger := log.GetLogger(ctx).WithField(log.String("msg_id", msg.MessageId))
-	key, channel, err := op.getChannel(false, msg.ExchangeName, msg.QueueName, msg.ConfirmedByOrder)
+func (op *RabbitMQOperator) pushCore(ctx context.Context, body *PushBody, opts ...OptionFun) (err error) {
+	logger := log.GetLogger(ctx).WithField(log.String("msg_id", body.MessageId))
+	key, channel, err := op.getChannel(false, body.ExchangeName, body.QueueName, body.ConfirmedByOrder)
 	if err != nil {
 		logger.Error(err.Error())
 		return
 	}
 
-	if msg.OpenConfirm {
+	if body.OpenConfirm {
 		err = channel.Confirm(false)
 		if err != nil {
 			logger.Error(err.Error())
@@ -770,44 +778,44 @@ func (op *RabbitMQOperator) pushCore(ctx context.Context, msg *PushBody) (err er
 		}
 	}
 
-	msg.Validate()
+	body.Validate()
 
-	if msg.ExchangeName != "" {
+	if body.ExchangeName != "" {
 		// 注册交换机
 		// name:交换机名称,kind:交换机类型,durable:是否持久化,队列存盘,true服务重启后信息不会丢失,影响性能;autoDelete:是否自动删除;
 		// noWait:是否非阻塞, true为是,不等待RMQ返回信息;args:参数,传nil即可; internal:是否为内部
-		err = channel.ExchangeDeclare(msg.ExchangeName, string(msg.ExchangeType), true, false, false, true, msg.ExchangeArgs)
+		err = op.DeclareExchange(body.ExchangeName, string(body.ExchangeType), body.ExchangeArgs, opts...)
 		if err != nil {
 			logger.Error(fmt.Sprintf("MQ failed to declare the exchange:%s \n", err))
 			return
 		}
 
 		// 交换机绑定队列处理
-		for queue, bindingKey := range msg.BindingKeyMap {
-			table := msg.QueueArgs[queue]
+		for queue, bindingKey := range body.BindingKeyMap {
+			table := body.QueueArgs[queue]
 			// 队列不存在,声明队列
 			// name:队列名称;durable:是否持久化,队列存盘,true服务重启后信息不会丢失,影响性能;autoDelete:是否自动删除;noWait:是否非阻塞,
 			// true为是,不等待RMQ返回信息;args:参数,传nil即可;exclusive:是否设置排他
-			_, err = channel.QueueDeclare(queue, true, false, false, true, table)
+			_, err = op.DeclareQueue(queue, table, opts...)
 			if err != nil {
-				logger.Error(fmt.Sprintf("MQ declare queue failed:%s \n", err))
+				logger.Error(fmt.Sprintf("MQ declare queue failed:%s \n", err.Error()))
 				return
 			}
 
 			// 队列绑定
-			err = channel.QueueBind(queue, bindingKey, msg.ExchangeName, true, nil)
+			err = op.BindQueue(body.ExchangeName, bindingKey, queue, nil, opts...)
 			if err != nil {
-				logger.Error(fmt.Sprintf("MQ binding queue failed:%s \n", err))
+				logger.Error(fmt.Sprintf("MQ binding queue failed:%s \n", err.Error()))
 				return
 			}
 		}
 	}
 
-	if msg.QueueName != "" {
+	if body.QueueName != "" {
 		// 队列不存在,声明队列
 		// name:队列名称;durable:是否持久化,队列存盘,true服务重启后信息不会丢失,影响性能;autoDelete:是否自动删除;noWait:是否非阻塞,
 		// true为是,不等待RMQ返回信息;args:参数,传nil即可;exclusive:是否设置排他
-		_, err = channel.QueueDeclare(msg.QueueName, true, false, false, true, msg.Args)
+		_, err = op.DeclareQueue(body.QueueName, body.Args, opts...)
 		if err != nil {
 			logger.Error(fmt.Sprintf("MQ declare queue failed:%s \n", err))
 			return
@@ -816,33 +824,33 @@ func (op *RabbitMQOperator) pushCore(ctx context.Context, msg *PushBody) (err er
 
 	publishingMsg := amqp.Publishing{
 		Timestamp:       times.Now(),
-		Body:            msg.Body,
-		Headers:         msg.Headers,
-		ContentEncoding: msg.ContentEncoding,
-		ReplyTo:         msg.ReplyTo,
-		Expiration:      msg.Expiration,
-		MessageId:       msg.MessageId,
-		Type:            msg.Type,
-		UserId:          msg.UserId,
-		AppId:           msg.AppId,
+		Body:            body.Body,
+		Headers:         body.Headers,
+		ContentEncoding: body.ContentEncoding,
+		ReplyTo:         body.ReplyTo,
+		Expiration:      body.Expiration,
+		MessageId:       body.MessageId,
+		Type:            body.Type,
+		UserId:          body.UserId,
+		AppId:           body.AppId,
 	}
-	if msg.Priority > 0 {
-		publishingMsg.Priority = msg.Priority
+	if body.Priority > 0 {
+		publishingMsg.Priority = body.Priority
 	}
-	if msg.DeliveryMode == 0 {
+	if body.DeliveryMode == 0 {
 		publishingMsg.DeliveryMode = amqp.Persistent
 	}
-	if msg.ContentType == "" {
+	if body.ContentType == "" {
 		publishingMsg.ContentType = "text/plain"
 	}
 	// 发送任务消息
-	err = channel.PublishWithContext(ctx, msg.ExchangeName, msg.RoutingKey, false, false, publishingMsg)
+	err = channel.PublishWithContext(ctx, body.ExchangeName, body.RoutingKey, false, false, publishingMsg)
 	if err != nil {
 		logger.Error(fmt.Sprintf("MQ task failed to be sent:%s \n", err))
 		return
 	}
-	if msg.ConfirmedByOrder {
-		confirmCh, ok := op.client.pushConfirmCh.Load(key)
+	if body.ConfirmedByOrder {
+		confirmCh, ok := op.client.pushConfirmListener.Load(key)
 		if !ok {
 			logger.Warn(fmt.Sprintf("msg pushed, but has no confirm channel, skip confirm ..."))
 			return
@@ -857,14 +865,14 @@ func (op *RabbitMQOperator) pushCore(ctx context.Context, msg *PushBody) (err er
 	return
 }
 
-func (op *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (contents chan amqp.Delivery, err error) {
+func (op *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-chan amqp.Delivery, error) {
 	logger := log.GetLogger(ctx)
 	if !op.isReady {
 		logger.Error("rabbitmq connection is not ready, consume cancel")
-		err = errors.New("connection is not ready")
-		return
+		err := errors.New("connection is not ready")
+		return nil, err
 	}
-	contents = make(chan amqp.Delivery, 3)
+	contents := make(chan amqp.Delivery, 3)
 
 	go func() {
 		rLogger := log.GetLogger(context.Background())
@@ -880,7 +888,7 @@ func (op *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (co
 		ticker := time.NewTicker(DefaultRetryWaitTimes)
 		defer ticker.Stop()
 	process:
-		resChan, innerErr := op.consumeCore(ctx, param)
+		resChan, key, innerErr := op.consumeCore(ctx, param)
 		// Keep retrying when consumption fails
 		for innerErr != nil {
 			rLogger.Error(fmt.Sprintf("[consume:%s]consume msg error: %s, retrying ...", param.QueueName, innerErr.Error()))
@@ -893,11 +901,15 @@ func (op *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (co
 				return
 			case <-ticker.C:
 			}
-			resChan, innerErr = op.consumeCore(ctx, param)
+			resChan, key, innerErr = op.consumeCore(ctx, param)
 		}
 
 		// Circular consumption of data
-		allChan := op.notifyAllChan
+		listenCh, ok := op.client.chCloseListener.Load(key)
+		if !ok {
+			rLogger.Warn(fmt.Sprintf("[consume:%s] has no listen channel, retring...", param.QueueName))
+			goto process
+		}
 		for {
 			select {
 			case s := <-sig:
@@ -906,9 +918,8 @@ func (op *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (co
 			case <-op.closeCh:
 				rLogger.Info(fmt.Sprintf("[consume:%s]rabbitmq is closed, exiting...", param.QueueName))
 				return
-			case <-allChan:
-				allChan = op.notifyAllChan
-				rLogger.Warn(fmt.Sprintf("[consume:%s]rabbitmq is reconnected, reconsume...", param.QueueName))
+			case <-listenCh.(chan *amqp.Error):
+				rLogger.Warn(fmt.Sprintf("[consume:%s]rmq channel is closed, reconsume...", param.QueueName))
 				goto process
 			case item := <-resChan:
 				if len(item.Body) == 0 {
@@ -921,9 +932,8 @@ func (op *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (co
 				case <-op.closeCh:
 					rLogger.Info(fmt.Sprintf("[consume:%s]rabbitmq is closed, exiting...", param.QueueName))
 					return
-				case <-allChan:
-					allChan = op.notifyAllChan
-					rLogger.Warn(fmt.Sprintf("[consume:%s]rabbitmq is reconnected, reconsume...", param.QueueName))
+				case <-listenCh.(chan *amqp.Error):
+					rLogger.Warn(fmt.Sprintf("[consume:%s]rmq channel is closed, reconsume...", param.QueueName))
 					goto process
 				case contents <- item:
 					rLogger.Info(fmt.Sprintf("[consume:%s]recived msg success: msg_id --> %s", param.QueueName, item.MessageId))
@@ -934,17 +944,18 @@ func (op *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (co
 		}
 
 	}()
-	return
+	return contents, nil
 }
 
-func (op *RabbitMQOperator) consumeCore(ctx context.Context, param *ConsumeBody) (contents <-chan amqp.Delivery, err error) {
+func (op *RabbitMQOperator) consumeCore(ctx context.Context, param *ConsumeBody, opts ...OptionFun) (contents <-chan amqp.Delivery, key string, err error) {
 	logger := log.GetLogger(ctx)
 	if !op.isReady {
 		logger.Error("rabbitmq connection is not ready, push cancel")
 		err = errors.New("connection is not ready")
 		return
 	}
-	_, channel, err := op.getChannel(true, param.ExchangeName, param.QueueName, false)
+	var channel *amqp.Channel
+	key, channel, err = op.getChannel(true, param.ExchangeName, param.QueueName, false)
 	if err != nil {
 		logger.Error(err.Error())
 		return
@@ -956,14 +967,17 @@ func (op *RabbitMQOperator) consumeCore(ctx context.Context, param *ConsumeBody)
 	// 队列不存在,声明队列
 	// name:队列名称;durable:是否持久化,队列存盘,true服务重启后信息不会丢失,影响性能;autoDelete:是否自动删除;noWait:是否非阻塞,
 	// true为是,不等待RMQ返回信息;args:参数,传nil即可;exclusive:是否设置排他
-	_, err = channel.QueueDeclare(param.QueueName, true, false, false, true, param.QueueArgs)
+	_, err = op.DeclareQueue(param.QueueName, param.QueueArgs, opts...)
+	if err != nil {
+		return
+	}
 	if err != nil {
 		logger.Error(fmt.Sprintf("MQ declare queue failed:%s \n", err))
 		return
 	}
 	if param.ExchangeName != "" {
 		// 绑定任务
-		err = channel.QueueBind(param.QueueName, param.RoutingKey, param.ExchangeName, true, nil)
+		err = op.BindQueue(param.ExchangeName, param.RoutingKey, param.QueueName, nil, opts...)
 		if err != nil {
 			logger.Error(fmt.Sprintf("binding queue failed:%s \n", err))
 			return
@@ -1000,42 +1014,113 @@ func (op *RabbitMQOperator) releaseExchangeChannel(exchangeName string) (err err
 		}
 		op.client.channelCache.Delete(exchangeName)
 	}
+	op.client.pushConfirmListener.Delete(exchangeName)
+
 	return
 }
 
-func (op *RabbitMQOperator) DeclareExchange(exchangeName, exchangeType string, args amqp.Table) (err error) {
+func (op *RabbitMQOperator) DeclareExchange(exchangeName, exchangeType string, args amqp.Table, opts ...OptionFun) (err error) {
 	channel, err := op.getCommonChannel()
 	if err != nil {
 		return
 	}
-
-	err = channel.ExchangeDeclare(exchangeName, exchangeType, true, false, false, false, args)
+	options := &Options{
+		durable:    true,
+		autoDelete: false,
+		internal:   false,
+		noWait:     true,
+	}
+	for _, opt := range opts {
+		opt(options)
+	}
+	err = channel.ExchangeDeclare(exchangeName, exchangeType, options.durable, options.autoDelete, options.internal, options.noWait, args)
 	if err != nil {
 		return err
 	}
 	return
 }
 
-func (op *RabbitMQOperator) DeclareQueue(queueName string, args amqp.Table) (err error) {
+type Options struct {
+	durable    bool
+	autoDelete bool
+	exclusive  bool
+	noWait     bool
+	internal   bool
+	ifUnUsed   bool
+	ifEmpty    bool
+}
+
+type OptionFun func(*Options)
+
+func WithDeclareOptionDurable(durable bool) OptionFun {
+	return func(options *Options) {
+		options.durable = durable
+	}
+}
+func WithDeclareOptionAutoDelete(autoDelete bool) OptionFun {
+	return func(options *Options) {
+		options.autoDelete = autoDelete
+	}
+}
+func WithDeclareOptionExclusive(exclusive bool) OptionFun {
+	return func(options *Options) {
+		options.exclusive = exclusive
+	}
+}
+func WithDeclareOptionNoWait(noWait bool) OptionFun {
+	return func(options *Options) {
+		options.noWait = noWait
+	}
+}
+func WithDelOptionInternal(internal bool) OptionFun {
+	return func(options *Options) {
+		options.internal = internal
+	}
+}
+func WithDelOptionIfEmpty(ifUnUsed bool) OptionFun {
+	return func(options *Options) {
+		options.ifUnUsed = ifUnUsed
+	}
+}
+func WithOptionIfUnused(ifUnUsed bool) OptionFun {
+	return func(options *Options) {
+		options.ifUnUsed = ifUnUsed
+	}
+}
+
+func (op *RabbitMQOperator) DeclareQueue(queueName string, args amqp.Table, opts ...OptionFun) (queue amqp.Queue, err error) {
 	channel, err := op.getCommonChannel()
 	if err != nil {
 		return
 	}
-
-	_, err = channel.QueueDeclare(queueName, true, false, false, true, args)
+	options := &Options{
+		durable:    true,
+		autoDelete: false,
+		exclusive:  false,
+		noWait:     true,
+	}
+	for _, opt := range opts {
+		opt(options)
+	}
+	queue, err = channel.QueueDeclare(queueName, options.durable, options.autoDelete, options.exclusive, options.noWait, args)
 	if err != nil {
-		return err
+		return
 	}
 	return
 }
 
-func (op *RabbitMQOperator) BindQueue(exchangeName, queueName, routingKey string, args amqp.Table) (err error) {
+func (op *RabbitMQOperator) BindQueue(exchangeName, routingKey, queueName string, args amqp.Table, opts ...OptionFun) (err error) {
 	channel, err := op.getCommonChannel()
 	if err != nil {
 		return
 	}
-
-	err = channel.QueueBind(queueName, routingKey, exchangeName, false, args)
+	options := &Options{
+		noWait: true,
+	}
+	for _, opt := range opts {
+		opt(options)
+	}
+	err = channel.QueueBind(queueName, routingKey, exchangeName, options.noWait, args)
 	if err != nil {
 		return err
 	}
@@ -1055,13 +1140,19 @@ func (op *RabbitMQOperator) UnBindQueue(exchangeName, queueName, routingKey stri
 	return
 }
 
-func (op *RabbitMQOperator) DeleteExchange(exchangeName string) (err error) {
+func (op *RabbitMQOperator) DeleteExchange(exchangeName string, opts ...OptionFun) (err error) {
 	channel, err := op.getCommonChannel()
 	if err != nil {
 		return
 	}
-
-	err = channel.ExchangeDelete(exchangeName, false, false)
+	options := &Options{
+		ifUnUsed: true,
+		noWait:   true,
+	}
+	for _, opt := range opts {
+		opt(options)
+	}
+	err = channel.ExchangeDelete(exchangeName, options.ifUnUsed, options.noWait)
 	if err != nil {
 		return err
 	}
@@ -1071,13 +1162,20 @@ func (op *RabbitMQOperator) DeleteExchange(exchangeName string) (err error) {
 	return
 }
 
-func (op *RabbitMQOperator) DeleteQueue(queueName string) (err error) {
+func (op *RabbitMQOperator) DeleteQueue(queueName string, opts ...OptionFun) (err error) {
 	channel, err := op.getCommonChannel()
 	if err != nil {
 		return
 	}
-
-	_, err = channel.QueueDelete(queueName, false, false, false)
+	options := &Options{
+		ifUnUsed: true,
+		ifEmpty:  true,
+		noWait:   true,
+	}
+	for _, opt := range opts {
+		opt(options)
+	}
+	_, err = channel.QueueDelete(queueName, options.ifUnUsed, options.ifEmpty, options.noWait)
 	if err != nil {
 		return err
 	}
@@ -1090,26 +1188,45 @@ func (op *RabbitMQOperator) DeleteQueue(queueName string) (err error) {
 func (op *RabbitMQOperator) releaseQueueChannel(queueName string) (err error) {
 	op.client.cacheMu.Lock()
 	defer op.client.cacheMu.Unlock()
-	value, ok := op.client.channelCache.Load(queueName + "_queue:publish")
-	if ok {
-		err = value.(*amqp.Channel).Close()
+
+	publishQueue := queueName + "_queue:publish"
+	value1, ok1 := op.client.channelCache.Load(publishQueue)
+	if ok1 {
+		err = value1.(*amqp.Channel).Close()
 		if err != nil {
 			return
 		}
-		op.client.channelCache.Delete(queueName + "_queue:publish")
+		op.client.channelCache.Delete(publishQueue)
 	}
-	value, ok = op.client.channelCache.Load(queueName + "_queue:consume")
-	if ok {
-		err = value.(*amqp.Channel).Close()
+	op.client.pushConfirmListener.Delete(publishQueue)
+
+	consumeQueue := queueName + "_queue:consume"
+	value2, ok2 := op.client.channelCache.Load(consumeQueue)
+	if ok2 {
+		err = value2.(*amqp.Channel).Close()
 		if err != nil {
 			return
 		}
-		op.client.channelCache.Delete(queueName + "__consume__")
+		op.client.channelCache.Delete(consumeQueue)
 	}
+	op.client.chCloseListener.Delete(consumeQueue)
+
 	return
 }
 
 func (op *RabbitMQOperator) getCommonChannel() (channel *amqp.Channel, err error) {
+	var getErr error
+	for i := 0; i < RetryTimes; i++ {
+		channel, getErr = op.getCommonChannelCore()
+		if getErr == nil {
+			break
+		}
+	}
+	err = getErr
+	return
+}
+
+func (op *RabbitMQOperator) getCommonChannelCore() (channel *amqp.Channel, err error) {
 	if !op.client.commonCh.IsClosed() {
 		channel = op.client.commonCh
 		return
@@ -1157,13 +1274,11 @@ func (op *RabbitMQOperator) Close() (err error) {
 
 	atomic.StoreInt32(&op.closed, Closed)
 	close(op.closeCh)
-	close(op.notifyAllChan)
-
 	op.isReady = false
 	return
 }
 
-func (op *RabbitMQOperator) Ack(ctx context.Context, msg *amqp.Delivery) {
+func (op *RabbitMQOperator) Ack(ctx context.Context, msg amqp.Delivery) {
 	logger := log.GetLogger(ctx).WithField(log.String("msg_id", msg.MessageId))
 	ch := make(chan bool, 1)
 	defer close(ch)
@@ -1190,7 +1305,7 @@ func (op *RabbitMQOperator) Ack(ctx context.Context, msg *amqp.Delivery) {
 	}
 }
 
-func (op *RabbitMQOperator) Nack(ctx context.Context, msg *amqp.Delivery) {
+func (op *RabbitMQOperator) Nack(ctx context.Context, msg amqp.Delivery) {
 	logger := log.GetLogger(ctx).WithField(log.String("msg_id", msg.MessageId))
 	ch := make(chan bool, 1)
 	defer close(ch)

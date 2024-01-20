@@ -8,16 +8,89 @@ import (
 
 // PushDelayBody 生产延迟消息body参数设置，兼容交换机和队列两种模式
 type PushDelayBody struct {
-	OpenConfirm      bool
-	ConfirmedByOrder bool
-	ExchangeName     string
-	ExchangeType     ExchangeType
-	ExchangeArgs     amqp.Table
-	RoutingKey       string
-	QueueName        string
-	Args             amqp.Table
-	DelayTime        time.Duration
+	ExchangePushBody
 	amqp.Publishing
+	DelayTime time.Duration
+}
+
+func (p *PushDelayBody) setArgs(key string, value any, queues ...string) *PushDelayBody {
+	if p.QueueArgs == nil {
+		p.QueueArgs = make(map[string]amqp.Table)
+	}
+	for _, queue := range queues {
+		table, ok := p.QueueArgs[queue]
+		if !ok {
+			table = amqp.Table{}
+		}
+		table[key] = value
+		p.QueueArgs[queue] = table
+	}
+	return p
+}
+
+// SetXMaxPriority 设置该队列中的消息的优先级最大值.发布消息的时候,可以指定消息的优先级,优先级高的先被消费.
+// 如果没有设置该参数,那么该队列不支持消息优先级功能. 也就是说,就算发布消息的时候传入了优先级的值,也不会起什么作用.可设置0-255,一般设置为10即可
+func (p *PushDelayBody) SetXMaxPriority(priority int, queues ...string) *PushDelayBody {
+	return p.setArgs("x-max-priority", priority, queues...)
+}
+
+// SetXMaxLength 队列存放最大就绪消息数量，超过限制时，从头部丢弃消息
+//
+//	默认最大数量限制与操作系统有关。
+func (p *PushDelayBody) SetXMaxLength(length int, queues ...string) *PushDelayBody {
+	return p.setArgs("x-max-length", length, queues...)
+}
+
+// SetXMaxLengthBytes 队列存放的所有消息总大小，超过限制时，从头部丢弃消息
+func (p *PushDelayBody) SetXMaxLengthBytes(size int, queues ...string) *PushDelayBody {
+	return p.setArgs("x-max-length-bytes", size, queues...)
+}
+
+// SetOverFlowMode
+// 队列溢出行为，这将决定当队列达到设置的最大长度或者最大的存储空间时发送到消息队列的消息的处理方式；
+// 有效的值是：
+// 　　drop-head（删除queue头部的消息）、
+// 　　reject-publish（最近发来的消息将被丢弃）、
+// 　　reject-publish-dlx（拒绝发送消息到死信交换器）
+// 类型为quorum 的queue只支持drop-head;
+func (p *PushDelayBody) SetOverFlowMode(mode string, queues ...string) *PushDelayBody {
+	return p.setArgs("x-overflow", mode, queues...)
+}
+
+// SetDeadLetterRoutingKey 设置死信交换机的路由键名称。如果未设置，将使用消息的原始路由密钥。
+func (p *PushDelayBody) SetDeadLetterRoutingKey(routingKey string, queues ...string) *PushDelayBody {
+	return p.setArgs("x-dead-letter-routing-key", routingKey, queues...)
+}
+
+// SetDeadLetterExchange 设置死信交换机的名称
+func (p *PushDelayBody) SetDeadLetterExchange(exchange string, queues ...string) *PushDelayBody {
+	return p.setArgs("x-dead-letter-exchange", exchange, queues...)
+}
+
+// SetMsgTTL 发送到队列的消息可以存活多长时间（毫秒）。简单来说,就是队列中消息的过期时间
+func (p *PushDelayBody) SetMsgTTL(duration time.Duration, queues ...string) *PushDelayBody {
+	return p.setArgs("x-message-ttl", duration, queues...)
+}
+
+// SetQueueMode {"x-queue-mode","lazy" }设置队列为懒人模式.
+// 该模式下的队列会先将交换机推送过来的消息(尽可能多的)保存在磁盘上,以减少内存的占用.
+// 当消费者开始消费的时候才加载到内存中;如果没有设置懒人模式,队列则会直接利用内存缓存,以最快的速度传递消息.
+func (p *PushDelayBody) SetQueueMode(mode string, queues ...string) *PushDelayBody {
+	return p.setArgs("x-queue-mode", mode, queues...)
+}
+
+// SetExpireTime 队列在被自动删除（毫秒）之前可以存活多长时间。简单来说,就是队列的过期时间
+func (p *PushDelayBody) SetExpireTime(expire time.Duration, queues ...string) *PushDelayBody {
+	return p.setArgs("x-expires", expire, queues...)
+}
+
+// SetQueueMasterLocator 将队列设置为主位置模式，确定在节点集群上声明时队列主机所在的规则。
+//
+//	min-masters - 选择承载最小绑定主机数量的节点
+//	client-local - 选择客户机声明队列连接到的节点
+//	random  - 随机选择一个节点
+func (p *PushDelayBody) SetQueueMasterLocator(mode string, queues ...string) *PushDelayBody {
+	return p.setArgs("x-queue-master-locator", mode, queues...)
 }
 
 func (p *PushDelayBody) SetExchangeName(exchangeName string) *PushDelayBody {
@@ -30,13 +103,19 @@ func (p *PushDelayBody) SetExchangeType(exchangeType ExchangeType) *PushDelayBod
 	return p
 }
 
-func (p *PushDelayBody) SetRoutingKey(routingKey string) *PushDelayBody {
-	p.RoutingKey = routingKey
+func (p *PushDelayBody) BindQueue(queueName, bindingKey string) *PushDelayBody {
+	if p.BindingKeyMap == nil {
+		p.BindingKeyMap = map[string]string{}
+	}
+	if bindingKey == "" {
+		bindingKey = queueName
+	}
+	p.BindingKeyMap[queueName] = bindingKey
 	return p
 }
 
-func (p *PushDelayBody) SetQueueName(queueName string) *PushDelayBody {
-	p.QueueName = queueName
+func (p *PushDelayBody) SetRoutingKey(routingKey string) *PushDelayBody {
+	p.RoutingKey = routingKey
 	return p
 }
 
@@ -51,21 +130,13 @@ func (p *PushDelayBody) SetDeliveryMode(deliveryMode uint8) *PushDelayBody {
 	return p
 }
 
-func (p *PushDelayBody) SetExpireTime(expire time.Duration) *PushDelayBody {
-	p.DelayTime = expire
-	return p
-}
-
 func (p *PushDelayBody) SetMsg(msg []byte) *PushDelayBody {
 	p.Body = msg
 	return p
 }
 
-func (p *PushDelayBody) SetQueueMaxPriority(priority uint8) *PushDelayBody {
-	if p.Args == nil {
-		p.Args = amqp.Table{}
-	}
-	p.Args["x-max-priority"] = priority
+func (p *PushDelayBody) SetDelayTime(delay time.Duration) *PushDelayBody {
+	p.DelayTime = delay
 	return p
 }
 
@@ -274,7 +345,6 @@ type ExchangePushBody struct {
 	RoutingKey       string
 	BindingKeyMap    map[string]string
 	QueueArgs        map[string]amqp.Table
-	XMaxPriority     uint8
 	amqp.Publishing
 }
 
@@ -537,6 +607,11 @@ type ConsumeBody struct {
 	QueueArgs    amqp.Table
 	FetchCount   int
 	XPriority    uint8
+}
+
+func (c *ConsumeBody) SetPrefetchCount(fetchCount int) *ConsumeBody {
+	c.FetchCount = fetchCount
+	return c
 }
 
 func (c *ConsumeBody) SetXPriority(xPriority uint8) *ConsumeBody {
