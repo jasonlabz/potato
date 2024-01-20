@@ -392,7 +392,7 @@ func (op *RabbitMQOperator) pushDelayMessageCore(ctx context.Context, body *Push
 	logger := log.GetLogger(ctx).WithField(log.String("msg_id", body.MessageId))
 
 	delayStr := strconv.FormatInt(body.DelayTime.Milliseconds(), 10)
-	delayQueue := body.ExchangeName + "_delay:" + delayStr
+	delayQueue := "potato_delay_queue:" + body.ExchangeName
 	//delayRouteKey := body.RoutingKey + "_delay:" + delayStr
 
 	key, channel, err := op.getChannelForExchange(body.ExchangeName, body.ConfirmedByOrder)
@@ -420,9 +420,9 @@ func (op *RabbitMQOperator) pushDelayMessageCore(ctx context.Context, body *Push
 	// 定义延迟队列(死信队列)
 	_, err = op.DeclareQueue(delayQueue,
 		amqp.Table{
-			"x-dead-letter-exchange": body.ExchangeName, // 指定死信交换机
-			//"x-dead-letter-routing-key": body.RoutingKey,   // 指定死信routing-key
-		}, opts...)
+			"x-dead-letter-exchange":    body.ExchangeName, // 指定死信交换机
+			"x-dead-letter-routing-key": body.RoutingKey,   // 指定死信routing-key
+		})
 
 	// 交换机绑定队列处理
 	for queue, bindingKey := range body.BindingKeyMap {
