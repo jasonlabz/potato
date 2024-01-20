@@ -28,7 +28,7 @@ const (
 
 func handlePanic() {
 	if r := recover(); r != nil {
-		log.DefaultLogger().Errorf("Recovered:", r)
+		log.DefaultLogger().Errorf("Recovered: %+v", r)
 	}
 }
 
