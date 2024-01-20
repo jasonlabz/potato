@@ -11,7 +11,7 @@ import (
 	"github.com/jasonlabz/potato/core/utils"
 )
 
-var logField = []string{consts.ContextTraceID, consts.ContextUserID, consts.ContextRemoteAddr}
+var logField = []string{consts.ContextTraceID, consts.ContextUserID}
 
 type loggerWrapper struct {
 	logger *zap.Logger

@@ -66,18 +66,18 @@ func RequestMiddleware() gin.HandlerFunc {
 		start := time.Now() // Start timer
 
 		logger.Info("	[GIN] request",
-			"method", c.Request.Method,
 			"agent", c.Request.UserAgent(),
 			"body", string(requestBodyLogBytes),
 			"client_ip", c.ClientIP(),
-			"path", c.Request.URL.RawPath)
+			"method", c.Request.Method,
+			"path", c.Request.URL.Path)
 
 		c.Next()
 
 		logger.Info("	[GIN] response",
 			"error_message", c.Errors.ByType(gin.ErrorTypePrivate).String(),
 			"body", bodyLog.body.String(),
-			"path", c.Request.URL.RawPath,
+			"path", c.Request.URL.Path,
 			"status_code", c.Writer.Status(),
 			"cost", fmt.Sprintf("%dms", time.Now().Sub(start).Milliseconds()))
 	}
