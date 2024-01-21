@@ -3,6 +3,8 @@ package es
 import (
 	"context"
 	"crypto/tls"
+	"github.com/elastic/go-elasticsearch/v8/typedapi/cat/count"
+	"github.com/elastic/go-elasticsearch/v8/typedapi/core/search"
 	"io"
 	"net/http"
 	"strings"
@@ -215,6 +217,7 @@ func (op *ElasticSearchOperator) DeleteIndex(ctx context.Context, indexName stri
 	}
 	return
 }
+
 func (op *ElasticSearchOperator) IsExist(ctx context.Context, indexName string) (isExist bool, err error) {
 	isExist, err = op.typeClient.Indices.Exists(indexName).IsSuccess(ctx)
 	return
@@ -233,6 +236,28 @@ func (op *ElasticSearchOperator) GetDocument(ctx context.Context, indexName, doc
 	response, err = op.typeClient.Get(indexName, docID).Do(ctx)
 	if err != nil {
 		log.DefaultLogger().WithError(err).Error("get doc info error: " + docID)
+		return
+	}
+	return
+}
+
+func (op *ElasticSearchOperator) GetDocumentCount(ctx context.Context, indexName string) (response count.Response, err error) {
+	response, err = op.typeClient.Cat.Count().Index(indexName).Do(ctx)
+	if err != nil {
+		log.DefaultLogger().WithError(err).Error("get doc count error: " + indexName)
+		return
+	}
+	return
+}
+
+func (op *ElasticSearchOperator) SearchDocuments(ctx context.Context, indexName string, request *XRequest) (response *search.Response, err error) {
+	searchDoc := op.typeClient.Search().Index(indexName)
+	if request != nil {
+		searchDoc.Request(request.Build())
+	}
+	response, err = searchDoc.Do(ctx)
+	if err != nil {
+		log.DefaultLogger().WithError(err).Error("search doc error, queryStr : " + indexName)
 		return
 	}
 	return
