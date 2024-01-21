@@ -25,7 +25,7 @@ func TestES(t *testing.T) {
 	if err != nil {
 		return
 	}
-	response, err := cli.SearchDocuments(ctx, "test1", "")
+	response, err := cli.SearchDocuments(ctx, "test1", nil)
 	if err != nil {
 		return
 	}
@@ -35,7 +35,7 @@ func TestES(t *testing.T) {
 }
 
 func TestES1(t *testing.T) {
-	body := NewQueryBody()
+	body := QueryBuilder()
 	match := body.QueryMatchBoost("hello", "world", 1.0)
 	fmt.Println(match)
 }
