@@ -151,17 +151,19 @@ func InitLogger(opts ...Option) {
 		return zapcore.AddSync(os.Stdout)
 	}(), lowPriority)
 
-	highLevelFileCore := zapcore.NewCore(encoder, func() zapcore.WriteSyncer {
-		if writeFile {
-			return zapcore.NewMultiWriteSyncer(highLevelFileWriteSyncer, zapcore.AddSync(os.Stdout))
-		}
-		return zapcore.AddSync(os.Stdout)
-	}(), highPriority)
-
 	//lowLevelFileCore 和 highLevelFileCore 加入core切片
 	var coreArr []zapcore.Core
 	coreArr = append(coreArr, lowLevelFileCore)
-	coreArr = append(coreArr, highLevelFileCore)
+
+	if writeFile {
+		highLevelFileCore := zapcore.NewCore(encoder, func() zapcore.WriteSyncer {
+			if writeFile {
+				return zapcore.NewMultiWriteSyncer(highLevelFileWriteSyncer, zapcore.AddSync(os.Stdout))
+			}
+			return zapcore.AddSync(os.Stdout)
+		}(), highPriority)
+		coreArr = append(coreArr, highLevelFileCore)
+	}
 
 	//生成logger
 	zapLogger = zap.New(zapcore.NewTee(coreArr...), zap.AddCaller(), zap.AddCallerSkip(1)) //zap.AddCaller() 显示文件名 和 行号
