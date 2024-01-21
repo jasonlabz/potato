@@ -157,10 +157,7 @@ func InitLogger(opts ...Option) {
 
 	if writeFile {
 		highLevelFileCore := zapcore.NewCore(encoder, func() zapcore.WriteSyncer {
-			if writeFile {
-				return zapcore.NewMultiWriteSyncer(highLevelFileWriteSyncer, zapcore.AddSync(os.Stdout))
-			}
-			return zapcore.AddSync(os.Stdout)
+			return zapcore.AddSync(highLevelFileWriteSyncer)
 		}(), highPriority)
 		coreArr = append(coreArr, highLevelFileCore)
 	}
