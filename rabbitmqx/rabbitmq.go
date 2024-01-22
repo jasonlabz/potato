@@ -350,7 +350,7 @@ func (op *RabbitMQOperator) getChannel(isConsume bool, exchange, queue string, o
 	return
 }
 
-func (op *RabbitMQOperator) PushDelayMessage(ctx context.Context, body *PushDelayBody, opts ...OptionFun) (err error) {
+func (op *RabbitMQOperator) PushDelayMessage(ctx context.Context, body *PushDelayBody, opts ...OptionFunc) (err error) {
 	defer handlePanic()
 	if body.MessageId == "" {
 		body.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
@@ -388,7 +388,7 @@ func (op *RabbitMQOperator) PushDelayMessage(ctx context.Context, body *PushDela
 	return
 }
 
-func (op *RabbitMQOperator) pushDelayMessageCore(ctx context.Context, body *PushDelayBody, opts ...OptionFun) (err error) {
+func (op *RabbitMQOperator) pushDelayMessageCore(ctx context.Context, body *PushDelayBody, opts ...OptionFunc) (err error) {
 	logger := log.GetLogger(ctx).WithField(log.String("msg_id", body.MessageId))
 
 	delayStr := strconv.FormatInt(body.DelayTime.Milliseconds(), 10)
@@ -489,7 +489,7 @@ func (op *RabbitMQOperator) pushDelayMessageCore(ctx context.Context, body *Push
 }
 
 // PushExchange 向交换机推送消息
-func (op *RabbitMQOperator) PushExchange(ctx context.Context, body *ExchangePushBody, opts ...OptionFun) (err error) {
+func (op *RabbitMQOperator) PushExchange(ctx context.Context, body *ExchangePushBody, opts ...OptionFunc) (err error) {
 	defer handlePanic()
 	if body.MessageId == "" {
 		body.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
@@ -525,7 +525,7 @@ func (op *RabbitMQOperator) PushExchange(ctx context.Context, body *ExchangePush
 }
 
 // PushQueue 向队列推送消息
-func (op *RabbitMQOperator) PushQueue(ctx context.Context, body *QueuePushBody, opts ...OptionFun) (err error) {
+func (op *RabbitMQOperator) PushQueue(ctx context.Context, body *QueuePushBody, opts ...OptionFunc) (err error) {
 	defer handlePanic()
 	if body.MessageId == "" {
 		body.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
@@ -561,7 +561,7 @@ func (op *RabbitMQOperator) PushQueue(ctx context.Context, body *QueuePushBody, 
 }
 
 // Push 向交换机或者队列推送消息
-func (op *RabbitMQOperator) Push(ctx context.Context, body *PushBody, opts ...OptionFun) (err error) {
+func (op *RabbitMQOperator) Push(ctx context.Context, body *PushBody, opts ...OptionFunc) (err error) {
 	defer handlePanic()
 	if body.MessageId == "" {
 		body.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
@@ -599,7 +599,7 @@ func (op *RabbitMQOperator) Push(ctx context.Context, body *PushBody, opts ...Op
 @arg: QueuePushBody ->  Args是队列的参数设置，例如优先级队列为amqp.Table{"x-max-priority":10}
 @description: 向队列推送消息
 */
-func (op *RabbitMQOperator) pushQueueCore(ctx context.Context, body *QueuePushBody, opts ...OptionFun) (err error) {
+func (op *RabbitMQOperator) pushQueueCore(ctx context.Context, body *QueuePushBody, opts ...OptionFunc) (err error) {
 	logger := log.GetLogger(ctx).WithField(log.String("msg_id", body.MessageId))
 
 	key, channel, err := op.getChannelForQueue(false, body.QueueName, body.ConfirmedByOrder)
@@ -670,7 +670,7 @@ func (op *RabbitMQOperator) pushQueueCore(ctx context.Context, body *QueuePushBo
 @arg: ExchangePushBody ->  Args是交换机和队列的参数设置，例如优先级队列为amqp.Table{"x-max-priority":10}
 @description: 向队列推送消息
 */
-func (op *RabbitMQOperator) pushExchangeCore(ctx context.Context, body *ExchangePushBody, opts ...OptionFun) (err error) {
+func (op *RabbitMQOperator) pushExchangeCore(ctx context.Context, body *ExchangePushBody, opts ...OptionFunc) (err error) {
 	logger := log.GetLogger(ctx).WithField(log.String("msg_id", body.MessageId))
 
 	key, channel, err := op.getChannelForExchange(body.ExchangeName, body.ConfirmedByOrder)
@@ -762,7 +762,7 @@ func (op *RabbitMQOperator) pushExchangeCore(ctx context.Context, body *Exchange
 	return
 }
 
-func (op *RabbitMQOperator) pushCore(ctx context.Context, body *PushBody, opts ...OptionFun) (err error) {
+func (op *RabbitMQOperator) pushCore(ctx context.Context, body *PushBody, opts ...OptionFunc) (err error) {
 	logger := log.GetLogger(ctx).WithField(log.String("msg_id", body.MessageId))
 	key, channel, err := op.getChannel(false, body.ExchangeName, body.QueueName, body.ConfirmedByOrder)
 	if err != nil {
@@ -947,7 +947,7 @@ func (op *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-
 	return contents, nil
 }
 
-func (op *RabbitMQOperator) consumeCore(ctx context.Context, param *ConsumeBody, opts ...OptionFun) (contents <-chan amqp.Delivery, key string, err error) {
+func (op *RabbitMQOperator) consumeCore(ctx context.Context, param *ConsumeBody, opts ...OptionFunc) (contents <-chan amqp.Delivery, key string, err error) {
 	logger := log.GetLogger(ctx)
 	if !op.isReady {
 		logger.Error("rabbitmq connection is not ready, push cancel")
@@ -1012,15 +1012,15 @@ func (op *RabbitMQOperator) releaseExchangeChannel(exchangeName string) (err err
 		if err != nil {
 			return
 		}
-		op.client.channelCache.Delete(exchangeName)
 	}
+	op.client.channelCache.Delete(exchangeName)
 	op.client.pushConfirmListener.Delete(exchangeName)
 
 	return
 }
 
-func (op *RabbitMQOperator) DeclareExchange(exchangeName, exchangeType string, args amqp.Table, opts ...OptionFun) (err error) {
-	channel, err := op.getCommonChannel()
+func (op *RabbitMQOperator) DeclareExchange(exchangeName, exchangeType string, args amqp.Table, opts ...OptionFunc) (err error) {
+	err = op.checkCommonChannel()
 	if err != nil {
 		return
 	}
@@ -1033,7 +1033,7 @@ func (op *RabbitMQOperator) DeclareExchange(exchangeName, exchangeType string, a
 	for _, opt := range opts {
 		opt(options)
 	}
-	err = channel.ExchangeDeclare(exchangeName, exchangeType, options.durable, options.autoDelete, options.internal, options.noWait, args)
+	err = op.client.commonCh.ExchangeDeclare(exchangeName, exchangeType, options.durable, options.autoDelete, options.internal, options.noWait, args)
 	if err != nil {
 		return err
 	}
@@ -1050,46 +1050,46 @@ type Options struct {
 	ifEmpty    bool
 }
 
-type OptionFun func(*Options)
+type OptionFunc func(*Options)
 
-func WithDeclareOptionDurable(durable bool) OptionFun {
+func WithDeclareOptionDurable(durable bool) OptionFunc {
 	return func(options *Options) {
 		options.durable = durable
 	}
 }
-func WithDeclareOptionAutoDelete(autoDelete bool) OptionFun {
+func WithDeclareOptionAutoDelete(autoDelete bool) OptionFunc {
 	return func(options *Options) {
 		options.autoDelete = autoDelete
 	}
 }
-func WithDeclareOptionExclusive(exclusive bool) OptionFun {
+func WithDeclareOptionExclusive(exclusive bool) OptionFunc {
 	return func(options *Options) {
 		options.exclusive = exclusive
 	}
 }
-func WithDeclareOptionNoWait(noWait bool) OptionFun {
+func WithDeclareOptionNoWait(noWait bool) OptionFunc {
 	return func(options *Options) {
 		options.noWait = noWait
 	}
 }
-func WithDelOptionInternal(internal bool) OptionFun {
+func WithDeclareOptionInternal(internal bool) OptionFunc {
 	return func(options *Options) {
 		options.internal = internal
 	}
 }
-func WithDelOptionIfEmpty(ifUnUsed bool) OptionFun {
+func WithDelOptionIfEmpty(ifUnUsed bool) OptionFunc {
 	return func(options *Options) {
 		options.ifUnUsed = ifUnUsed
 	}
 }
-func WithOptionIfUnused(ifUnUsed bool) OptionFun {
+func WithDelOptionIfUnused(ifUnUsed bool) OptionFunc {
 	return func(options *Options) {
 		options.ifUnUsed = ifUnUsed
 	}
 }
 
-func (op *RabbitMQOperator) DeclareQueue(queueName string, args amqp.Table, opts ...OptionFun) (queue amqp.Queue, err error) {
-	channel, err := op.getCommonChannel()
+func (op *RabbitMQOperator) DeclareQueue(queueName string, args amqp.Table, opts ...OptionFunc) (queue amqp.Queue, err error) {
+	err = op.checkCommonChannel()
 	if err != nil {
 		return
 	}
@@ -1102,15 +1102,15 @@ func (op *RabbitMQOperator) DeclareQueue(queueName string, args amqp.Table, opts
 	for _, opt := range opts {
 		opt(options)
 	}
-	queue, err = channel.QueueDeclare(queueName, options.durable, options.autoDelete, options.exclusive, options.noWait, args)
+	queue, err = op.client.commonCh.QueueDeclare(queueName, options.durable, options.autoDelete, options.exclusive, options.noWait, args)
 	if err != nil {
 		return
 	}
 	return
 }
 
-func (op *RabbitMQOperator) BindQueue(exchangeName, routingKey, queueName string, args amqp.Table, opts ...OptionFun) (err error) {
-	channel, err := op.getCommonChannel()
+func (op *RabbitMQOperator) BindQueue(exchangeName, routingKey, queueName string, args amqp.Table, opts ...OptionFunc) (err error) {
+	err = op.checkCommonChannel()
 	if err != nil {
 		return
 	}
@@ -1120,7 +1120,7 @@ func (op *RabbitMQOperator) BindQueue(exchangeName, routingKey, queueName string
 	for _, opt := range opts {
 		opt(options)
 	}
-	err = channel.QueueBind(queueName, routingKey, exchangeName, options.noWait, args)
+	err = op.client.commonCh.QueueBind(queueName, routingKey, exchangeName, options.noWait, args)
 	if err != nil {
 		return err
 	}
@@ -1128,23 +1128,19 @@ func (op *RabbitMQOperator) BindQueue(exchangeName, routingKey, queueName string
 }
 
 func (op *RabbitMQOperator) UnBindQueue(exchangeName, queueName, routingKey string, args amqp.Table) (err error) {
-	channel, err := op.getCommonChannel()
+	err = op.checkCommonChannel()
 	if err != nil {
 		return
 	}
 
-	err = channel.QueueUnbind(queueName, routingKey, exchangeName, args)
+	err = op.client.commonCh.QueueUnbind(queueName, routingKey, exchangeName, args)
 	if err != nil {
 		return err
 	}
 	return
 }
 
-func (op *RabbitMQOperator) DeleteExchange(exchangeName string, opts ...OptionFun) (err error) {
-	channel, err := op.getCommonChannel()
-	if err != nil {
-		return
-	}
+func (op *RabbitMQOperator) DeleteExchange(exchangeName string, opts ...OptionFunc) (err error) {
 	options := &Options{
 		ifUnUsed: true,
 		noWait:   true,
@@ -1152,7 +1148,12 @@ func (op *RabbitMQOperator) DeleteExchange(exchangeName string, opts ...OptionFu
 	for _, opt := range opts {
 		opt(options)
 	}
-	err = channel.ExchangeDelete(exchangeName, options.ifUnUsed, options.noWait)
+
+	err = op.checkCommonChannel()
+	if err != nil {
+		return
+	}
+	err = op.client.commonCh.ExchangeDelete(exchangeName, options.ifUnUsed, options.noWait)
 	if err != nil {
 		return err
 	}
@@ -1162,11 +1163,7 @@ func (op *RabbitMQOperator) DeleteExchange(exchangeName string, opts ...OptionFu
 	return
 }
 
-func (op *RabbitMQOperator) DeleteQueue(queueName string, opts ...OptionFun) (err error) {
-	channel, err := op.getCommonChannel()
-	if err != nil {
-		return
-	}
+func (op *RabbitMQOperator) DeleteQueue(queueName string, opts ...OptionFunc) (err error) {
 	options := &Options{
 		ifUnUsed: true,
 		ifEmpty:  true,
@@ -1175,7 +1172,12 @@ func (op *RabbitMQOperator) DeleteQueue(queueName string, opts ...OptionFun) (er
 	for _, opt := range opts {
 		opt(options)
 	}
-	_, err = channel.QueueDelete(queueName, options.ifUnUsed, options.ifEmpty, options.noWait)
+
+	err = op.checkCommonChannel()
+	if err != nil {
+		return
+	}
+	_, err = op.client.commonCh.QueueDelete(queueName, options.ifUnUsed, options.ifEmpty, options.noWait)
 	if err != nil {
 		return err
 	}
@@ -1191,44 +1193,41 @@ func (op *RabbitMQOperator) releaseQueueChannel(queueName string) (err error) {
 
 	publishQueue := queueName + "_queue:publish"
 	value1, ok1 := op.client.channelCache.Load(publishQueue)
-	if ok1 {
+	if ok1 && !value1.(*amqp.Channel).IsClosed() {
 		err = value1.(*amqp.Channel).Close()
 		if err != nil {
 			return
 		}
-		op.client.channelCache.Delete(publishQueue)
 	}
+	op.client.channelCache.Delete(publishQueue)
 	op.client.pushConfirmListener.Delete(publishQueue)
 
 	consumeQueue := queueName + "_queue:consume"
 	value2, ok2 := op.client.channelCache.Load(consumeQueue)
-	if ok2 {
+	if ok2 && !value2.(*amqp.Channel).IsClosed() {
 		err = value2.(*amqp.Channel).Close()
 		if err != nil {
 			return
 		}
-		op.client.channelCache.Delete(consumeQueue)
 	}
+	op.client.channelCache.Delete(consumeQueue)
 	op.client.chCloseListener.Delete(consumeQueue)
 
 	return
 }
 
-func (op *RabbitMQOperator) getCommonChannel() (channel *amqp.Channel, err error) {
-	var getErr error
+func (op *RabbitMQOperator) checkCommonChannel() (err error) {
 	for i := 0; i < RetryTimes; i++ {
-		channel, getErr = op.getCommonChannelCore()
-		if getErr == nil {
+		err = op.checkCommonChannelCore()
+		if err == nil {
 			break
 		}
 	}
-	err = getErr
 	return
 }
 
-func (op *RabbitMQOperator) getCommonChannelCore() (channel *amqp.Channel, err error) {
+func (op *RabbitMQOperator) checkCommonChannelCore() (err error) {
 	if !op.client.commonCh.IsClosed() {
-		channel = op.client.commonCh
 		return
 	}
 
@@ -1242,17 +1241,16 @@ func (op *RabbitMQOperator) getCommonChannelCore() (channel *amqp.Channel, err e
 	op.mu.Lock()
 	defer op.mu.Unlock()
 	op.client.commonCh, err = op.client.conn.Channel()
-	channel = op.client.commonCh
 	return
 }
 
 func (op *RabbitMQOperator) GetMessageCount(queueName string) (count int, err error) {
-	channel, err := op.getCommonChannel()
+	err = op.checkCommonChannel()
 	if err != nil {
 		return
 	}
 
-	queue, err := channel.QueueInspect(queueName)
+	queue, err := op.client.commonCh.QueueInspect(queueName)
 	if err != nil {
 		return
 	}
