@@ -3,19 +3,19 @@ package es
 import (
 	"context"
 	"crypto/tls"
+	"github.com/bytedance/sonic"
+	"github.com/elastic/go-elasticsearch/v8"
+	"github.com/elastic/go-elasticsearch/v8/esapi"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/cat/count"
+	core_get "github.com/elastic/go-elasticsearch/v8/typedapi/core/get"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/core/search"
+	"github.com/elastic/go-elasticsearch/v8/typedapi/indices/create"
+	indices_get "github.com/elastic/go-elasticsearch/v8/typedapi/indices/get"
+	"github.com/elastic/go-elasticsearch/v8/typedapi/types"
 	"io"
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/bytedance/sonic"
-	"github.com/elastic/go-elasticsearch/v8"
-	"github.com/elastic/go-elasticsearch/v8/esapi"
-	core_get "github.com/elastic/go-elasticsearch/v8/typedapi/core/get"
-	"github.com/elastic/go-elasticsearch/v8/typedapi/indices/create"
-	indices_get "github.com/elastic/go-elasticsearch/v8/typedapi/indices/get"
 
 	"github.com/jasonlabz/potato/core/config/application"
 	log "github.com/jasonlabz/potato/log/zapx"
@@ -174,8 +174,61 @@ func (op *ElasticSearchOperator) GetIndexList(ctx context.Context) (res []*Index
 	return
 }
 
-func (op *ElasticSearchOperator) CreateIndex(ctx context.Context, indexName string, mappingJson string) (err error) {
-	exists, err := op.IsExist(ctx, indexName)
+func (op *ElasticSearchOperator) CreateAlias(ctx context.Context, indexName, aliasName string, isWriteIndex bool) (err error) {
+	exists, err := op.AliasExist(ctx, aliasName)
+	if err != nil {
+		log.DefaultLogger().WithError(err).Error("create alias error: " + indexName)
+		return
+	}
+	if exists {
+		return
+	}
+	_, err = op.typeClient.Indices.PutAlias(indexName, aliasName).IsWriteIndex(isWriteIndex).Do(ctx)
+	if err != nil {
+		log.DefaultLogger().WithError(err).Error("alias create error: " + aliasName)
+		return
+	}
+	return
+}
+
+func (op *ElasticSearchOperator) DeleteAlias(ctx context.Context, indexName, aliasName string) (err error) {
+	exists, err := op.AliasExist(ctx, aliasName)
+	if err != nil {
+		log.DefaultLogger().WithError(err).Error("create alias error: " + indexName)
+		return
+	}
+	if !exists {
+		return
+	}
+	_, err = op.typeClient.Indices.DeleteAlias(indexName, aliasName).Do(ctx)
+	if err != nil {
+		log.DefaultLogger().WithError(err).Error("alias delete error: " + aliasName)
+		return
+	}
+	return
+}
+
+// CreateIndex 创建索引
+/** mappingJson 格式
+{
+	"aliases": {
+		"alias_name": {
+			"is_write_index": true
+		}
+	},
+	"settings": {
+		"number_of_shards": 6,
+		"number_of_replicas": 0
+	},
+	"mappings": {
+		"index": {
+			"properties": {}
+		}
+	}
+}
+*/
+func (op *ElasticSearchOperator) CreateIndex(ctx context.Context, indexName, mappingJson string) (err error) {
+	exists, err := op.IndexExist(ctx, indexName)
 	if err != nil {
 		log.DefaultLogger().WithError(err).Error("create index error: " + indexName)
 		return
@@ -185,7 +238,7 @@ func (op *ElasticSearchOperator) CreateIndex(ctx context.Context, indexName stri
 	if exists {
 		return
 	}
-	req := &create.Request{}
+	req := create.NewRequest()
 	if mappingJson != "" {
 		req, err = req.FromJSON(mappingJson)
 		if err != nil {
@@ -201,7 +254,7 @@ func (op *ElasticSearchOperator) CreateIndex(ctx context.Context, indexName stri
 }
 
 func (op *ElasticSearchOperator) DeleteIndex(ctx context.Context, indexName string) (err error) {
-	exists, err := op.IsExist(ctx, indexName)
+	exists, err := op.IndexExist(ctx, indexName)
 	if err != nil {
 		log.DefaultLogger().WithError(err).Error("delete index error: " + indexName)
 		return
@@ -218,8 +271,18 @@ func (op *ElasticSearchOperator) DeleteIndex(ctx context.Context, indexName stri
 	return
 }
 
-func (op *ElasticSearchOperator) IsExist(ctx context.Context, indexName string) (isExist bool, err error) {
+func (op *ElasticSearchOperator) IndexExist(ctx context.Context, indexName string) (isExist bool, err error) {
 	isExist, err = op.typeClient.Indices.Exists(indexName).IsSuccess(ctx)
+	return
+}
+
+func (op *ElasticSearchOperator) AliasExist(ctx context.Context, aliasName string) (isExist bool, err error) {
+	isExist, err = op.typeClient.Indices.ExistsAlias(aliasName).Do(ctx)
+	return
+}
+
+func (op *ElasticSearchOperator) GetAlias(ctx context.Context, indexNames ...string) (aliasMap map[string]types.IndexAliases, err error) {
+	aliasMap, err = op.typeClient.Indices.GetAlias().Index(strings.Join(indexNames, ",")).Do(ctx)
 	return
 }
 
