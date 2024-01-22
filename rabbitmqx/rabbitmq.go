@@ -83,7 +83,6 @@ func NewRabbitMQOperator(config *MQConfig) (op *RabbitMQOperator, err error) {
 
 	// validate config param
 	if err = config.Validate(); err != nil {
-		logger.Error(fmt.Sprintf("init rabbitmq client error: %v", err))
 		return
 	}
 	op.config = config
@@ -91,17 +90,24 @@ func NewRabbitMQOperator(config *MQConfig) (op *RabbitMQOperator, err error) {
 	// ready connect rmq
 	ticker := time.NewTicker(DefaultRetryWaitTimes)
 	defer ticker.Stop()
-	for {
+	for i := 0; i < RetryTimes; i++ {
 		op.client.conn, err = amqp.DialTLS(config.Addr(), &tls.Config{InsecureSkipVerify: true})
-		if err == nil {
-			op.isReady = true
-			op.client.commonCh, err = op.client.conn.Channel()
-			logger.Info(fmt.Sprintf("rabbitmq init success[addr:%s]", config.Addr()))
-			break
+		if err != nil {
+			<-ticker.C
+			logger.Warn(fmt.Sprintf("wait %ss for retry to connect...", DefaultRetryWaitTimes))
 		}
-		<-ticker.C
-		logger.Warn(fmt.Sprintf("wait %ss for retry to connect...", DefaultRetryWaitTimes))
 	}
+	if err != nil {
+		return
+	}
+
+	op.client.commonCh, err = op.client.conn.Channel()
+	if err != nil {
+		op.Close()
+		return
+	}
+	op.isReady = true
+	logger.Info(fmt.Sprintf("rabbitmq init success[addr:%s]", config.Addr()))
 	// a new goroutine for check disconnect
 	go op.tryReConnect(true)
 
@@ -1265,9 +1271,11 @@ func (op *RabbitMQOperator) Close() (err error) {
 		return
 	}
 
-	err = op.client.conn.Close()
-	if err != nil {
-		return err
+	if !op.client.conn.IsClosed() {
+		err = op.client.conn.Close()
+		if err != nil {
+			return
+		}
 	}
 
 	atomic.StoreInt32(&op.closed, Closed)
