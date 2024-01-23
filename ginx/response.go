@@ -78,7 +78,7 @@ func prepareResponse(c *gin.Context, version string, data interface{}, err error
 			errMessage = err.Error()
 			errTrace = err.Error()
 		}
-		log.GetLogger(c).Error(errTrace, map[string]any{"err_code": errCode, "err_message": errMessage})
+		log.GetLogger(c).WithField("err_code", errCode, "err_message", errMessage).Error(errTrace)
 	}
 	// 组装响应结果
 	resp := &Response{

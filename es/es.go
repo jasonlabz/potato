@@ -39,7 +39,7 @@ func init() {
 			CloudID:   appConf.ES.CloudId,
 		})
 		if err != nil {
-			log.DefaultLogger().WithError(err).Errorf("init ES Client error, skipping ...")
+			log.DefaultLogger().WithError(err).Error("init ES Client error, skipping ...")
 		}
 	}
 }
@@ -135,12 +135,12 @@ func NewElasticSearchOperator(config *Config) (op *ElasticSearchOperator, err er
 	}
 	ok, err := typedClient.Ping().IsSuccess(context.Background())
 	if err != nil {
-		log.DefaultLogger().WithError(err).Error("typedClient ping失败")
+		log.DefaultLogger().WithError(err).Error("typedClient ping fail")
 	}
 	if !ok {
-		log.DefaultLogger().WithError(err).Error("connect to ES server fail!")
+		log.DefaultLogger().WithError(err).Error("connect to es server fail")
 	} else {
-		log.DefaultLogger().Info("------- ES connected success")
+		log.DefaultLogger().Info("------- es connected success")
 	}
 	//client, err := elasticsearch.NewClient(esConfig)
 	//if err != nil {

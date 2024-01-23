@@ -109,27 +109,27 @@ func InitLogger(opts ...Option) {
 	jsonLog := config.GetBool(DefaultZapConfigName, "log.json_log")
 	// 优先程序配置
 	if options.Level != "" {
-		levelConfig = levelConfig
+		levelConfig = options.Level
 	}
-	var loglevel zapcore.Level
+	var logLevel zapcore.Level
 	switch levelConfig {
 	case "info":
-		loglevel = zapcore.InfoLevel
+		logLevel = zapcore.InfoLevel
 	case "warn":
-		loglevel = zapcore.WarnLevel
+		logLevel = zapcore.WarnLevel
 	case "debug":
-		loglevel = zapcore.DebugLevel
+		logLevel = zapcore.DebugLevel
 	case "error":
-		loglevel = zapcore.ErrorLevel
+		logLevel = zapcore.ErrorLevel
 	default:
-		loglevel = zapcore.InfoLevel
+		logLevel = zapcore.InfoLevel
 	}
 	//日志级别
 	highPriority := zap.LevelEnablerFunc(func(lev zapcore.Level) bool { //error级别
 		return lev >= zap.ErrorLevel
 	})
 	lowPriority := zap.LevelEnablerFunc(func(lev zapcore.Level) bool { //info和debug级别,debug级别是最低的
-		return lev >= loglevel
+		return lev >= logLevel
 	})
 
 	//lowLevel文件WriteSyncer

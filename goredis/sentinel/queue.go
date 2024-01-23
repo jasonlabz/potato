@@ -28,7 +28,7 @@ const (
 
 func handlePanic() {
 	if r := recover(); r != nil {
-		log.DefaultLogger().Errorf("Recovered: %+v", r)
+		log.DefaultLogger().Error("Recovered: %+v", r)
 	}
 }
 
@@ -80,7 +80,7 @@ func (op *RedisOperator) tryMigrationDaemon(ctx context.Context) {
 
 		select {
 		case s := <-sig:
-			logger.Info(fmt.Sprintf("recived： %v, exiting... ", s))
+			logger.Info("recived： %v, exiting redis daemon... ", s)
 			return
 		case <-timer.C:
 			op.delayQueues.Range(func(key, value interface{}) bool {

@@ -1,8 +1,6 @@
 package poolx
 
 import (
-	"context"
-
 	"github.com/panjf2000/ants/v2"
 
 	log "github.com/jasonlabz/potato/log/zapx"
@@ -24,9 +22,9 @@ func GetFixedPool(size int) (pool *ants.Pool, err error) {
 }
 
 // Submit 提交任务
-func Submit(ctx context.Context, task func()) {
+func Submit(task func()) {
 	err := goPool.Submit(task)
 	if err != nil {
-		log.GetLogger(ctx).Error(err.Error())
+		log.DefaultLogger().Error(err.Error())
 	}
 }

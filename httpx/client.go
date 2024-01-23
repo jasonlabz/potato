@@ -61,7 +61,7 @@ func (c *Client) GetRestyClient() (cli *resty.Client) {
 // Get get request and json response
 func (c *Client) Get(ctx context.Context, url string, result interface{}) (err error) {
 	logger := log.GetLogger(ctx)
-	logger.Info(fmt.Sprintf("HTTP Request [method:%s] [URL:%s]", http.MethodGet, url))
+	logger.Info("HTTP Request [method:%s] [URL:%s]", http.MethodGet, url)
 	res, err := c.client.R().
 		SetResult(result).
 		SetHeader("Accept", "application/json").
@@ -70,7 +70,7 @@ func (c *Client) Get(ctx context.Context, url string, result interface{}) (err e
 		logger.Error(err.Error())
 		return
 	}
-	logger.Info(fmt.Sprintf("Http Response [Code]:%d [Body]:%s [Cost]:%v", res.StatusCode(), string(res.Body()), res.Time()))
+	logger.Info("Http Response [Code]:%d [Body]:%s [Cost]:%v", res.StatusCode(), string(res.Body()), res.Time())
 
 	return
 }
@@ -116,7 +116,7 @@ func (c *Client) HeadForm(ctx context.Context, url string, formData map[string]s
 // requestForm send formData and response json
 func (c *Client) requestForm(ctx context.Context, url, method string, formData map[string]string, result interface{}) (res *resty.Response, err error) {
 	logger := log.GetLogger(ctx)
-	logger.Info(fmt.Sprintf("HTTP Request [method:%s] [URL:%s] [Form-Data:%s]", method, url, func() string {
+	logger.Info("HTTP Request [method:%s] [URL:%s] [Form-Data:%s]", method, url, func() string {
 		if len(formData) == 0 {
 			return ""
 		}
@@ -125,7 +125,7 @@ func (c *Client) requestForm(ctx context.Context, url, method string, formData m
 			strList = append(strList, fmt.Sprintf("%s=%s", key, val))
 		}
 		return strings.Join(strList, "&")
-	}()))
+	}())
 	req := c.client.R().
 		SetHeader("Content-Type", "application/x-www-form-urlencoded").
 		SetHeader("Accept", "application/json").
@@ -152,7 +152,7 @@ func (c *Client) requestForm(ctx context.Context, url, method string, formData m
 		logger.Error(err.Error())
 		return
 	}
-	logger.Info(fmt.Sprintf("Http Response [Code]:%d [Body]:%s [Cost]:%v", res.StatusCode(), string(res.Body()), res.Time()))
+	logger.Info("Http Response [Code]:%d [Body]:%s [Cost]:%v", res.StatusCode(), string(res.Body()), res.Time())
 
 	return res, err
 }
@@ -160,13 +160,13 @@ func (c *Client) requestForm(ctx context.Context, url, method string, formData m
 // requestJson send json and response json
 func (c *Client) requestJson(ctx context.Context, url, method string, body interface{}, result interface{}) (res *resty.Response, err error) {
 	logger := log.GetLogger(ctx)
-	logger.Info(fmt.Sprintf("HTTP Request [method:%s] [URL:%s] [Body:%s]", method, url, func() string {
+	logger.Info("HTTP Request [method:%s] [URL:%s] [Body:%s]", method, url, func() string {
 		marshal, marErr := sonic.Marshal(body)
 		if marErr != nil {
 			return ""
 		}
 		return string(marshal)
-	}()))
+	}())
 	req := c.client.R().
 		SetHeader("Content-Type", "application/json").
 		SetHeader("Accept", "application/json").
@@ -194,7 +194,7 @@ func (c *Client) requestJson(ctx context.Context, url, method string, body inter
 		logger.Error(err.Error())
 		return
 	}
-	logger.Info(fmt.Sprintf("Http Response [Code]:%d [Body]:%s [Cost]:%v", res.StatusCode(), string(res.Body()), res.Time()))
+	logger.Info("Http Response [Code]:%d [Body]:%s [Cost]:%v", res.StatusCode(), string(res.Body()), res.Time())
 
 	return
 }
