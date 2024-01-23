@@ -377,7 +377,7 @@ func (op *RabbitMQOperator) PushDelayMessage(ctx context.Context, body *PushDela
 		}
 		pushErr := op.pushDelayMessageCore(ctx, body, opts...)
 		if pushErr != nil {
-			logger.WithError(pushErr).Warn(fmt.Sprintf("[push] Push failed. after %d seconds and retry...", DefaultRetryWaitTimes))
+			logger.WithError(pushErr).Warn(fmt.Sprintf("[push] Push failed. after %f seconds and retry...", DefaultRetryWaitTimes.Seconds()))
 			select {
 			case <-op.closeCh:
 				logger.Error(fmt.Sprintf("[push]rmq closed, push msg cancel"))
@@ -513,7 +513,7 @@ func (op *RabbitMQOperator) PushExchange(ctx context.Context, body *ExchangePush
 		}
 		pushErr := op.pushExchangeCore(ctx, body, opts...)
 		if pushErr != nil {
-			logger.Warn(fmt.Sprintf("[push] Push failed <error:  %s>.  after %d seconds and retry... ", pushErr.Error(), DefaultRetryWaitTimes))
+			logger.Warn(fmt.Sprintf("[push] Push failed <error:  %s>.  after %f seconds and retry... ", pushErr.Error(), DefaultRetryWaitTimes.Seconds()))
 			select {
 			case <-op.closeCh:
 				logger.Error(fmt.Sprintf("[push]rmq closed, push msg cancel"))
@@ -549,7 +549,7 @@ func (op *RabbitMQOperator) PushQueue(ctx context.Context, body *QueuePushBody, 
 		}
 		pushErr := op.pushQueueCore(ctx, body, opts...)
 		if pushErr != nil {
-			logger.WithError(pushErr).Warn(fmt.Sprintf("[push] Push failed. after %d seconds and retry...", DefaultRetryWaitTimes))
+			logger.WithError(pushErr).Warn(fmt.Sprintf("[push] Push failed. after %f seconds and retry...", DefaultRetryWaitTimes.Seconds()))
 			select {
 			case <-op.closeCh:
 				logger.Error(fmt.Sprintf("[push]mq closed, push msg cancel"))
@@ -873,15 +873,15 @@ func (op *RabbitMQOperator) pushCore(ctx context.Context, body *PushBody, opts .
 
 func (op *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-chan amqp.Delivery, error) {
 	logger := log.GetLogger(ctx)
-	if !op.isReady {
-		logger.Error("rabbitmq connection is not ready, consume cancel")
-		err := errors.New("connection is not ready")
+	resChan, key, err := op.consumeCore(ctx, param)
+	if err != nil {
 		return nil, err
 	}
 	contents := make(chan amqp.Delivery, 3)
 
 	go func() {
-		rLogger := log.GetLogger(context.Background())
+		ctxBack := context.Background()
+		rLogger := log.GetLogger(ctxBack)
 		defer func() {
 			if e := recover(); e != nil {
 				logger.Error(fmt.Sprintf("recover_panic: %v", e))
@@ -893,21 +893,28 @@ func (op *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-
 
 		ticker := time.NewTicker(DefaultRetryWaitTimes)
 		defer ticker.Stop()
+		var innerErr error
+		var innerConsume bool
+
 	process:
-		resChan, key, innerErr := op.consumeCore(ctx, param)
-		// Keep retrying when consumption fails
-		for innerErr != nil {
-			rLogger.Error(fmt.Sprintf("[consume:%s]consume msg error: %s, retrying ...", param.QueueName, innerErr.Error()))
-			select {
-			case s := <-sig:
-				rLogger.Info(fmt.Sprintf("[consume:%s]recived： %v, exiting... ", param.QueueName, s))
-				return
-			case <-op.closeCh:
-				rLogger.Info(fmt.Sprintf("[consume:%s]rabbitmq is closed, exiting...", param.QueueName))
-				return
-			case <-ticker.C:
+		if innerConsume {
+			resChan, key, innerErr = op.consumeCore(ctxBack, param)
+			// Keep retrying when consumption fails
+			for innerErr != nil {
+				rLogger.Error(fmt.Sprintf("[consume:%s]consume msg error: %s, retrying ...", param.QueueName, innerErr.Error()))
+				select {
+				case s := <-sig:
+					rLogger.Info(fmt.Sprintf("[consume:%s]recived： %v, exiting... ", param.QueueName, s))
+					return
+				case <-op.closeCh:
+					rLogger.Info(fmt.Sprintf("[consume:%s]rabbitmq is closed, exiting...", param.QueueName))
+					return
+				case <-ticker.C:
+				}
+				resChan, key, innerErr = op.consumeCore(ctxBack, param)
 			}
-			resChan, key, innerErr = op.consumeCore(ctx, param)
+		} else {
+			innerConsume = true
 		}
 
 		// Circular consumption of data
@@ -956,7 +963,6 @@ func (op *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-
 func (op *RabbitMQOperator) consumeCore(ctx context.Context, param *ConsumeBody, opts ...OptionFunc) (contents <-chan amqp.Delivery, key string, err error) {
 	logger := log.GetLogger(ctx)
 	if !op.isReady {
-		logger.Error("rabbitmq connection is not ready, push cancel")
 		err = errors.New("connection is not ready")
 		return
 	}
@@ -1025,27 +1031,6 @@ func (op *RabbitMQOperator) releaseExchangeChannel(exchangeName string) (err err
 	return
 }
 
-func (op *RabbitMQOperator) DeclareExchange(exchangeName, exchangeType string, args amqp.Table, opts ...OptionFunc) (err error) {
-	err = op.checkCommonChannel()
-	if err != nil {
-		return
-	}
-	options := &Options{
-		durable:    true,
-		autoDelete: false,
-		internal:   false,
-		noWait:     true,
-	}
-	for _, opt := range opts {
-		opt(options)
-	}
-	err = op.client.commonCh.ExchangeDeclare(exchangeName, exchangeType, options.durable, options.autoDelete, options.internal, options.noWait, args)
-	if err != nil {
-		return err
-	}
-	return
-}
-
 type Options struct {
 	durable    bool
 	autoDelete bool
@@ -1094,6 +1079,27 @@ func WithDelOptionIfUnused(ifUnUsed bool) OptionFunc {
 	}
 }
 
+func (op *RabbitMQOperator) DeclareExchange(exchangeName, exchangeType string, args amqp.Table, opts ...OptionFunc) (err error) {
+	err = op.checkCommonChannel()
+	if err != nil {
+		return
+	}
+	options := &Options{
+		durable:    true,
+		autoDelete: false,
+		internal:   false,
+		noWait:     false,
+	}
+	for _, opt := range opts {
+		opt(options)
+	}
+	err = op.client.commonCh.ExchangeDeclare(exchangeName, exchangeType, options.durable, options.autoDelete, options.internal, options.noWait, args)
+	if err != nil {
+		return err
+	}
+	return
+}
+
 func (op *RabbitMQOperator) DeclareQueue(queueName string, args amqp.Table, opts ...OptionFunc) (queue amqp.Queue, err error) {
 	err = op.checkCommonChannel()
 	if err != nil {
@@ -1103,7 +1109,7 @@ func (op *RabbitMQOperator) DeclareQueue(queueName string, args amqp.Table, opts
 		durable:    true,
 		autoDelete: false,
 		exclusive:  false,
-		noWait:     true,
+		noWait:     false,
 	}
 	for _, opt := range opts {
 		opt(options)
@@ -1121,7 +1127,7 @@ func (op *RabbitMQOperator) BindQueue(exchangeName, routingKey, queueName string
 		return
 	}
 	options := &Options{
-		noWait: true,
+		noWait: false,
 	}
 	for _, opt := range opts {
 		opt(options)
