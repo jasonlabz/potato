@@ -1079,10 +1079,6 @@ func WithDelOptionIfUnused(ifUnUsed bool) OptionFunc {
 }
 
 func (op *RabbitMQOperator) DeclareExchange(exchangeName, exchangeType string, args amqp.Table, opts ...OptionFunc) (err error) {
-	err = op.checkCommonChannel()
-	if err != nil {
-		return
-	}
 	options := &Options{
 		durable:    true,
 		autoDelete: false,
@@ -1092,18 +1088,28 @@ func (op *RabbitMQOperator) DeclareExchange(exchangeName, exchangeType string, a
 	for _, opt := range opts {
 		opt(options)
 	}
+
+	err = op.checkCommonChannel()
+	if err != nil {
+		return
+	}
+	err = op.client.commonCh.ExchangeDeclarePassive(exchangeName, exchangeType, options.durable, options.autoDelete, options.internal, options.noWait, args)
+	if err == nil {
+		return
+	}
+
+	err = op.checkCommonChannel()
+	if err != nil {
+		return
+	}
 	err = op.client.commonCh.ExchangeDeclare(exchangeName, exchangeType, options.durable, options.autoDelete, options.internal, options.noWait, args)
 	if err != nil {
-		return err
+		return
 	}
 	return
 }
 
 func (op *RabbitMQOperator) DeclareQueue(queueName string, args amqp.Table, opts ...OptionFunc) (queue amqp.Queue, err error) {
-	err = op.checkCommonChannel()
-	if err != nil {
-		return
-	}
 	options := &Options{
 		durable:    true,
 		autoDelete: false,
@@ -1112,6 +1118,20 @@ func (op *RabbitMQOperator) DeclareQueue(queueName string, args amqp.Table, opts
 	}
 	for _, opt := range opts {
 		opt(options)
+	}
+
+	err = op.checkCommonChannel()
+	if err != nil {
+		return
+	}
+	queue, err = op.client.commonCh.QueueDeclarePassive(queueName, options.durable, options.autoDelete, options.exclusive, options.noWait, args)
+	if err == nil {
+		return
+	}
+
+	err = op.checkCommonChannel()
+	if err != nil {
+		return
 	}
 	queue, err = op.client.commonCh.QueueDeclare(queueName, options.durable, options.autoDelete, options.exclusive, options.noWait, args)
 	if err != nil {
