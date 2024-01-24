@@ -184,6 +184,7 @@ func (c *MQConfig) Addr() string {
 type RabbitMQOperator struct {
 	name    string
 	config  *MQConfig
+	opCache sync.Map
 	client  *Client
 	closeCh chan bool
 	isReady bool
@@ -1089,12 +1090,21 @@ func (op *RabbitMQOperator) DeclareExchange(exchangeName, exchangeType string, a
 		opt(options)
 	}
 
+	opKey := fmt.Sprintf("declare_exchange:%s", exchangeName)
+	_, ok := op.opCache.Load(opKey)
+	if ok {
+		options.noWait = true
+	}
+
 	err = op.checkCommonChannel()
 	if err != nil {
 		return
 	}
 	err = op.client.commonCh.ExchangeDeclarePassive(exchangeName, exchangeType, options.durable, options.autoDelete, options.internal, options.noWait, args)
 	if err == nil {
+		if !ok {
+			op.opCache.Store(opKey, true)
+		}
 		return
 	}
 
@@ -1105,6 +1115,10 @@ func (op *RabbitMQOperator) DeclareExchange(exchangeName, exchangeType string, a
 	err = op.client.commonCh.ExchangeDeclare(exchangeName, exchangeType, options.durable, options.autoDelete, options.internal, options.noWait, args)
 	if err != nil {
 		return
+	}
+
+	if !ok {
+		op.opCache.Store(opKey, true)
 	}
 	return
 }
@@ -1120,12 +1134,21 @@ func (op *RabbitMQOperator) DeclareQueue(queueName string, args amqp.Table, opts
 		opt(options)
 	}
 
+	opKey := fmt.Sprintf("declare_queue:%s", queueName)
+	_, ok := op.opCache.Load(opKey)
+	if ok {
+		options.noWait = true
+	}
+
 	err = op.checkCommonChannel()
 	if err != nil {
 		return
 	}
 	queue, err = op.client.commonCh.QueueDeclarePassive(queueName, options.durable, options.autoDelete, options.exclusive, options.noWait, args)
 	if err == nil {
+		if !ok {
+			op.opCache.Store(opKey, true)
+		}
 		return
 	}
 
@@ -1136,6 +1159,10 @@ func (op *RabbitMQOperator) DeclareQueue(queueName string, args amqp.Table, opts
 	queue, err = op.client.commonCh.QueueDeclare(queueName, options.durable, options.autoDelete, options.exclusive, options.noWait, args)
 	if err != nil {
 		return
+	}
+
+	if !ok {
+		op.opCache.Store(opKey, true)
 	}
 	return
 }
@@ -1148,12 +1175,23 @@ func (op *RabbitMQOperator) BindQueue(exchangeName, routingKey, queueName string
 	options := &Options{
 		noWait: false,
 	}
+
+	opKey := fmt.Sprintf("bind_queue:%s_%s", exchangeName, queueName)
+	_, ok := op.opCache.Load(opKey)
+	if ok {
+		options.noWait = true
+	}
+
 	for _, opt := range opts {
 		opt(options)
 	}
 	err = op.client.commonCh.QueueBind(queueName, routingKey, exchangeName, options.noWait, args)
 	if err != nil {
 		return err
+	}
+
+	if !ok {
+		op.opCache.Store(opKey, true)
 	}
 	return
 }
@@ -1168,6 +1206,9 @@ func (op *RabbitMQOperator) UnBindQueue(exchangeName, queueName, routingKey stri
 	if err != nil {
 		return err
 	}
+
+	opKey := fmt.Sprintf("bind_queue:%s_%s", exchangeName, queueName)
+	op.opCache.Delete(opKey)
 	return
 }
 
@@ -1189,6 +1230,8 @@ func (op *RabbitMQOperator) DeleteExchange(exchangeName string, opts ...OptionFu
 		return err
 	}
 	go func() {
+		opKey := fmt.Sprintf("declare_exchange:%s", exchangeName)
+		op.opCache.Delete(opKey)
 		_ = op.releaseExchangeChannel(exchangeName)
 	}()
 	return
@@ -1213,6 +1256,8 @@ func (op *RabbitMQOperator) DeleteQueue(queueName string, opts ...OptionFunc) (e
 		return err
 	}
 	go func() {
+		opKey := fmt.Sprintf("declare_queue:%s", queueName)
+		op.opCache.Delete(opKey)
 		_ = op.releaseQueueChannel(queueName)
 	}()
 	return
