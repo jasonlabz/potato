@@ -1,10 +1,17 @@
 package rabbitmqx
 
 import (
+	"os"
+	"strconv"
+	"sync/atomic"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
+
+var consumerSeq uint64
+
+const consumerTagLengthMax = 0xFF // see writeShortstr
 
 // PushDelayBody 生产延迟消息body参数设置，兼容交换机和队列两种模式
 type PushDelayBody struct {
@@ -710,4 +717,20 @@ func (c *ConsumeBody) SetQueueName(queueName string) *ConsumeBody {
 func (c *ConsumeBody) SetAckMode(autoAck bool) *ConsumeBody {
 	c.AutoAck = autoAck
 	return c
+}
+
+func uniqueConsumerTag() string {
+	return commandNameBasedUniqueConsumerTag(os.Args[0])
+}
+
+func commandNameBasedUniqueConsumerTag(commandName string) string {
+	tagPrefix := "ctag-"
+	tagInfix := commandName
+	tagSuffix := "-" + strconv.FormatUint(atomic.AddUint64(&consumerSeq, 1), 10)
+
+	if len(tagPrefix)+len(tagInfix)+len(tagSuffix) > consumerTagLengthMax {
+		tagInfix = "streadway/amqp"
+	}
+
+	return tagPrefix + tagInfix + tagSuffix
 }

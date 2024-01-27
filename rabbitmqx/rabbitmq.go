@@ -198,6 +198,7 @@ type Client struct {
 	channelCache        sync.Map
 	pushConfirmListener sync.Map
 	chCloseListener     sync.Map
+	cancelChan          sync.Map
 	cacheMu             sync.Mutex
 	closeConnNotify     chan *amqp.Error
 }
@@ -873,7 +874,7 @@ func (op *RabbitMQOperator) pushCore(ctx context.Context, body *PushBody, opts .
 
 func (op *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-chan amqp.Delivery, error) {
 	logger := log.GetLogger(ctx)
-	resChan, key, err := op.consumeCore(ctx, param)
+	resChan, key, channel, consumerTag, err := op.consumeCore(ctx, param)
 	if err != nil {
 		return nil, err
 	}
@@ -888,6 +889,18 @@ func (op *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-
 			}
 		}()
 
+		valueCh, exist := op.client.cancelChan.Load(param.QueueName)
+		if !exist {
+			op.client.cacheMu.Lock()
+			valueCh, exist = op.client.cancelChan.Load(param.QueueName)
+
+			if !exist {
+				valueCh = make(chan bool)
+				op.client.cancelChan.Store(param.QueueName, valueCh)
+			}
+			op.client.cacheMu.Unlock()
+		}
+
 		sig := make(chan os.Signal)
 		signal.Notify(sig, syscall.SIGINT, syscall.SIGKILL)
 
@@ -898,7 +911,7 @@ func (op *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-
 
 	process:
 		if innerConsume {
-			resChan, key, innerErr = op.consumeCore(ctxBack, param)
+			resChan, key, channel, consumerTag, innerErr = op.consumeCore(ctxBack, param)
 			// Keep retrying when consumption fails
 			for innerErr != nil {
 				rLogger.WithError(innerErr).Error("[consume:%s] consume msg error, retrying ...", param.QueueName)
@@ -909,9 +922,12 @@ func (op *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-
 				case <-op.closeCh:
 					rLogger.Info("[consume:%s] rabbitmq is closed, exiting...", param.QueueName)
 					return
+				case <-valueCh.(chan bool):
+					rLogger.Info("[consume:%s] consume cancel, exiting...", param.QueueName)
+					return
 				case <-ticker.C:
 				}
-				resChan, key, innerErr = op.consumeCore(ctxBack, param)
+				resChan, key, channel, consumerTag, innerErr = op.consumeCore(ctxBack, param)
 			}
 		} else {
 			innerConsume = true
@@ -930,6 +946,14 @@ func (op *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-
 				return
 			case <-op.closeCh:
 				rLogger.Info("[consume:%s] rabbitmq is closed, exiting...", param.QueueName)
+				return
+			case <-valueCh.(chan bool):
+				rLogger.Info("[consume:%s] consume cancel, exiting...", param.QueueName)
+				cancelErr := channel.Cancel(consumerTag, false)
+				if cancelErr != nil {
+					rLogger.WithError(cancelErr).Error("[consume:%s] consume cancel error, exiting...", param.QueueName)
+				}
+				op.client.cancelChan.Delete(param.QueueName)
 				return
 			case <-listenCh.(chan *amqp.Error):
 				rLogger.Warn("[consume:%s] rmq channel is closed, reconsume...", param.QueueName)
@@ -960,13 +984,13 @@ func (op *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-
 	return contents, nil
 }
 
-func (op *RabbitMQOperator) consumeCore(ctx context.Context, param *ConsumeBody, opts ...OptionFunc) (contents <-chan amqp.Delivery, key string, err error) {
+func (op *RabbitMQOperator) consumeCore(ctx context.Context, param *ConsumeBody, opts ...OptionFunc) (contents <-chan amqp.Delivery, key string,
+	channel *amqp.Channel, consumerTag string, err error) {
 	logger := log.GetLogger(ctx)
 	if !op.isReady {
 		err = errors.New("connection is not ready")
 		return
 	}
-	var channel *amqp.Channel
 	key, channel, err = op.getChannel(true, param.ExchangeName, param.QueueName, false)
 	if err != nil {
 		logger.Error(err.Error())
@@ -1006,7 +1030,8 @@ func (op *RabbitMQOperator) consumeCore(ctx context.Context, param *ConsumeBody,
 	if param.XPriority != 0 {
 		args = amqp.Table{"x-priority": param.XPriority}
 	}
-	contents, err = channel.Consume(param.QueueName, "", param.AutoAck, false, false, false, args)
+	consumerTag = uniqueConsumerTag()
+	contents, err = channel.Consume(param.QueueName, consumerTag, param.AutoAck, false, false, false, args)
 	if err != nil {
 		logger.WithError(err).Error("The acquisition of the consumption channel is abnormal")
 		return
@@ -1068,9 +1093,9 @@ func WithDeclareOptionInternal(internal bool) OptionFunc {
 		options.internal = internal
 	}
 }
-func WithDelOptionIfEmpty(ifUnUsed bool) OptionFunc {
+func WithDelOptionIfEmpty(ifEmpty bool) OptionFunc {
 	return func(options *Options) {
-		options.ifUnUsed = ifUnUsed
+		options.ifEmpty = ifEmpty
 	}
 }
 func WithDelOptionIfUnused(ifUnUsed bool) OptionFunc {
@@ -1167,6 +1192,26 @@ func (op *RabbitMQOperator) DeclareQueue(queueName string, args amqp.Table, opts
 	return
 }
 
+func (op *RabbitMQOperator) CancelQueue(queueName string) (err error) {
+	chanVal, ok := op.client.cancelChan.Load(queueName)
+	if !ok {
+		return
+	}
+
+	close(chanVal.(chan bool))
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+	for i := 0; i < 5; i++ {
+		_, ok = op.client.cancelChan.Load(queueName)
+		if !ok {
+			return
+		}
+		<-ticker.C
+	}
+	log.DefaultLogger().Warn("cancel consumer timeout：%s", queueName)
+	return
+}
+
 func (op *RabbitMQOperator) BindQueue(exchangeName, routingKey, queueName string, args amqp.Table, opts ...OptionFunc) (err error) {
 	err = op.checkCommonChannel()
 	if err != nil {
@@ -1215,7 +1260,7 @@ func (op *RabbitMQOperator) UnBindQueue(exchangeName, queueName, routingKey stri
 func (op *RabbitMQOperator) DeleteExchange(exchangeName string, opts ...OptionFunc) (err error) {
 	options := &Options{
 		ifUnUsed: true,
-		noWait:   true,
+		noWait:   false,
 	}
 	for _, opt := range opts {
 		opt(options)
@@ -1241,7 +1286,7 @@ func (op *RabbitMQOperator) DeleteQueue(queueName string, opts ...OptionFunc) (e
 	options := &Options{
 		ifUnUsed: true,
 		ifEmpty:  true,
-		noWait:   true,
+		noWait:   false,
 	}
 	for _, opt := range opts {
 		opt(options)
