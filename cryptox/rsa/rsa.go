@@ -9,7 +9,11 @@ import (
 	"encoding/asn1"
 	"encoding/base64"
 	"encoding/pem"
+	"errors"
+	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 )
 
 var rsaCrypto *CryptoRSA
@@ -21,39 +25,59 @@ const (
 	AlgorithmSign    = crypto.SHA256
 )
 
+func init() {
+	curDir, _ := os.Getwd()
+	var err error
+	rsaCrypto, err = NewCryptoRSAWithFile(filepath.Join(curDir, ".rsa", "public.pem"), filepath.Join(curDir, ".rsa", "private.pem"))
+	if err != nil {
+		fmt.Println("rsa init fail, skipping...")
+	}
+}
+
 func SetRSACrypto(cryptoRSA *CryptoRSA) {
 	rsaCrypto = cryptoRSA
 }
 
-func NewCryptoRSA(publicKey []byte, privateKey []byte) *CryptoRSA {
+func NewCryptoRSAWithFile(publicFile string, privateFile string) (crypto *CryptoRSA, err error) {
+	publicKey, err := os.ReadFile(publicFile)
+	if err != nil {
+		return nil, err
+	}
+
+	privateKey, err := os.ReadFile(privateFile)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewCryptoRSA(publicKey, privateKey)
+}
+
+func NewCryptoRSA(publicKey []byte, privateKey []byte) (crypto *CryptoRSA, err error) {
 	block, _ := pem.Decode(publicKey)
 	if block == nil {
-		panic("public key error")
+		return nil, fmt.Errorf("create public key error")
 	}
 	pubInterface, err := x509.ParsePKIXPublicKey(block.Bytes)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	pub, ok1 := pubInterface.(*rsa.PublicKey)
 	if !ok1 {
-		panic("public key not supported")
+		return nil, fmt.Errorf("public key not supported")
 	}
 	block, _ = pem.Decode(privateKey)
 	if block == nil {
-		panic("private key error!")
+		return nil, fmt.Errorf("private key error")
 	}
 	private, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	pri, ok2 := private.(*rsa.PrivateKey)
 	if !ok2 {
-		panic("private key not supported")
+		return nil, fmt.Errorf("private key not supported")
 	}
-	return &CryptoRSA{
-		publicKey:  pub,
-		privateKey: pri,
-	}
+	return &CryptoRSA{publicKey: pub, privateKey: pri}, nil
 }
 
 type CryptoRSA struct {
@@ -62,14 +86,14 @@ type CryptoRSA struct {
 }
 
 // Encrypt  公钥加密
-func (c *CryptoRSA) Encrypt(plainText string) (encryptText string, err error) {
+func (c *CryptoRSA) Encrypt(src []byte) (encryptText string, err error) {
 	partLen := c.publicKey.N.BitLen()/8 - 11
-	chunks := split([]byte(plainText), partLen)
+	chunks := split(src, partLen)
 	buffer := bytes.NewBufferString("")
 	for _, chunk := range chunks {
-		bytes, err := rsa.EncryptPKCS1v15(rand.Reader, c.publicKey, chunk)
-		if err != nil {
-			return "", err
+		bytes, encErr := rsa.EncryptPKCS1v15(rand.Reader, c.publicKey, chunk)
+		if encErr != nil {
+			return "", encErr
 		}
 		buffer.Write(bytes)
 	}
@@ -77,24 +101,22 @@ func (c *CryptoRSA) Encrypt(plainText string) (encryptText string, err error) {
 }
 
 // Decrypt 私钥解密
-func (c *CryptoRSA) Decrypt(encryptText string) (plainText string, err error) {
+func (c *CryptoRSA) Decrypt(encryptText string) (src []byte, err error) {
 	partLen := c.publicKey.N.BitLen() / 8
 	raw, err := base64.RawURLEncoding.DecodeString(encryptText)
 	if err != nil {
-		return
+		return nil, err
 	}
 	chunks := split(raw, partLen)
 	buffer := bytes.NewBufferString("")
 	for _, chunk := range chunks {
 		decrypted, deErr := rsa.DecryptPKCS1v15(rand.Reader, c.privateKey, chunk)
 		if deErr != nil {
-			err = deErr
-			return
+			return nil, deErr
 		}
 		buffer.Write(decrypted)
 	}
-	plainText = buffer.String()
-	return
+	return buffer.Bytes(), nil
 }
 
 // Sign 数据加签
@@ -161,8 +183,13 @@ func CreateKeys(keyLength int) (publicKeyPath, privateKeyPath string) {
 		Type:  "PRIVATE KEY",
 		Bytes: derStream,
 	}
-	privateKeyPath = currentDir + "/conf/private.pem"
-	privateKeyWriter, err := os.Create(privateKeyPath)
+
+	privateKeyPath = filepath.Join(currentDir, ".rsa")
+	if !isExist(privateKeyPath) {
+		_ = os.MkdirAll(privateKeyPath, 0644)
+	}
+
+	privateKeyWriter, err := os.OpenFile(filepath.Join(privateKeyPath, "private.pem"), os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0644)
 	if err != nil {
 		panic(err)
 	}
@@ -180,8 +207,9 @@ func CreateKeys(keyLength int) (publicKeyPath, privateKeyPath string) {
 		Type:  "PUBLIC KEY",
 		Bytes: derPkix,
 	}
-	publicKeyPath = currentDir + "/conf/public.pem"
-	publicKeyWriter, err := os.Create(publicKeyPath)
+	publicKeyPath = filepath.Join(currentDir, ".rsa", "public.pem")
+
+	publicKeyWriter, err := os.OpenFile(publicKeyPath, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0644)
 	if err != nil {
 		panic(err)
 	}
@@ -192,10 +220,19 @@ func CreateKeys(keyLength int) (publicKeyPath, privateKeyPath string) {
 	return
 }
 
-func Encrypt(plainText string) (encryptText string, err error) {
-	return rsaCrypto.Encrypt(plainText)
+// IsExist 判断所给路径文件/文件夹是否存在
+func isExist(path string) bool {
+	_, err := os.Stat(path) //os.Stat获取文件信息
+	if err != nil {
+		return errors.Is(err, fs.ErrExist)
+	}
+	return true
 }
 
-func Decrypt(encryptText string) (plainText string, err error) {
+func Encrypt(src []byte) (encryptText string, err error) {
+	return rsaCrypto.Encrypt(src)
+}
+
+func Decrypt(encryptText string) (src []byte, err error) {
 	return rsaCrypto.Decrypt(encryptText)
 }

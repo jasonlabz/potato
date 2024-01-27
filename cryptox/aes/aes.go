@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
-	"encoding/hex"
+	"encoding/base64"
 )
 
 // defaultAESKey aes默认秘钥，建议使用配置文件方式
@@ -44,25 +44,24 @@ type CryptoAES struct {
 }
 
 // Encrypt 加密
-func (c *CryptoAES) Encrypt(plainText string) (encryptText string, err error) {
-	blockSize := c.block.BlockSize() //AES的分组大小为16位
-	src := []byte(plainText)
+func (c *CryptoAES) Encrypt(src []byte) (encryptText string, err error) {
+	blockSize := c.block.BlockSize()  //AES的分组大小为16位
 	src = zeroPadding(src, blockSize) //填充
 	out := make([]byte, len(src))
 	c.encryptedMode.CryptBlocks(out, src) //对src进行加密，加密结果放到dst里
-	return hex.EncodeToString(out), nil
+	return base64.RawURLEncoding.EncodeToString(out), nil
 }
 
 // Decrypt 解密
-func (c *CryptoAES) Decrypt(encryptText string) (plainText string, err error) {
-	src, err := hex.DecodeString(encryptText) //转为[]byte
+func (c *CryptoAES) Decrypt(encryptText string) (src []byte, err error) {
+	baseSrc, err := base64.RawURLEncoding.DecodeString(encryptText)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	out := make([]byte, len(src))
-	c.decryptedMode.CryptBlocks(out, src) //对src进行解密，解密结果放到dst里
-	out = zeroUnPadding(out)              //反填充
-	return string(out), nil
+	out := make([]byte, len(baseSrc))
+	c.decryptedMode.CryptBlocks(out, baseSrc) //对src进行解密，解密结果放到dst里
+	out = zeroUnPadding(out)                  //反填充
+	return out, nil
 }
 
 // zeroPadding 填充零
@@ -94,10 +93,10 @@ func pkcs7UnPadding(origData []byte) []byte {
 	return origData[:(length - unpadding)]
 }
 
-func Encrypt(plainText string) (encryptText string, err error) {
-	return crypto.Encrypt(plainText)
+func Encrypt(src []byte) (encryptText string, err error) {
+	return crypto.Encrypt(src)
 }
 
-func Decrypt(encryptText string) (plainText string, err error) {
+func Decrypt(encryptText string) (src []byte, err error) {
 	return crypto.Decrypt(encryptText)
 }

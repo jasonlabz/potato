@@ -6,76 +6,76 @@ import (
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/sha512"
-	"encoding/hex"
+	"encoding/base64"
 )
 
-// DefaultHmacKey Hmac默认秘钥，建议使用配置文件方式
-var DefaultHmacKey = "wVPDRAZsOEKZu4s4"
-var crypto *CryptoHmac
+// DefaultHMACKey HMAC默认秘钥，建议使用配置文件方式
+var DefaultHMACKey = "wVPDRAZsOEKZu4s4"
+var crypto *CryptoHMAC
 
 func init() {
-	crypto = NewHmacCrypto([]byte(DefaultHmacKey))
+	crypto = NewHMACCrypto([]byte(DefaultHMACKey))
 }
 
-func SetHmacCrypto(hmacCrypto *CryptoHmac) {
+func SetHMACCrypto(hmacCrypto *CryptoHMAC) {
 	crypto = hmacCrypto
 }
 
-// NewHmacCrypto key随意设置
-func NewHmacCrypto(key []byte) *CryptoHmac {
-	return &CryptoHmac{
+// NewHMACCrypto key随意设置
+func NewHMACCrypto(key []byte) *CryptoHMAC {
+	return &CryptoHMAC{
 		key: key,
 	}
 }
 
-type CryptoHmac struct {
+type CryptoHMAC struct {
 	key []byte
 }
 
-// Hmac 加密
-func (c *CryptoHmac) Hmac(src string) string {
+// HMAC 加密
+func (c *CryptoHMAC) HMAC(src string) string {
 	hash := hmac.New(md5.New, c.key) // 创建对应的md5哈希加密算法
 	hash.Write([]byte(src))
-	return hex.EncodeToString(hash.Sum([]byte("")))
+	return base64.RawURLEncoding.EncodeToString(hash.Sum([]byte("")))
 }
 
-// HmacSHA256 加密
-func (c *CryptoHmac) HmacSHA256(src string) string {
+// HMACSHA256 加密
+func (c *CryptoHMAC) HMACSHA256(src string) string {
 	m := hmac.New(sha256.New, c.key)
 	m.Write([]byte(src))
-	return hex.EncodeToString(m.Sum(nil))
+	return base64.RawURLEncoding.EncodeToString(m.Sum(nil))
 }
 
-// HmacSHA512 加密
-func (c *CryptoHmac) HmacSHA512(src string) string {
+// HMACSHA512 加密
+func (c *CryptoHMAC) HMACSHA512(src string) string {
 	m := hmac.New(sha512.New, c.key)
 	m.Write([]byte(src))
-	return hex.EncodeToString(m.Sum(nil))
+	return base64.RawURLEncoding.EncodeToString(m.Sum(nil))
 }
 
-// HmacSha1 加密
-func (c *CryptoHmac) HmacSha1(src string) string {
+// HMACSha1 加密
+func (c *CryptoHMAC) HMACSha1(src string) string {
 	m := hmac.New(sha1.New, c.key)
 	m.Write([]byte(src))
-	return hex.EncodeToString(m.Sum(nil))
+	return base64.RawURLEncoding.EncodeToString(m.Sum(nil))
 }
 
-// Hmac 加密
-func Hmac(src string) string {
-	return crypto.Hmac(src)
+// HMAC 加密
+func HMAC(src string) string {
+	return crypto.HMAC(src)
 }
 
-// HmacSHA256 加密
-func HmacSHA256(src string) string {
-	return crypto.HmacSHA256(src)
+// HMACSHA256 加密
+func HMACSHA256(src string) string {
+	return crypto.HMACSHA256(src)
 }
 
-// HmacSHA512 加密
-func HmacSHA512(src string) string {
-	return crypto.HmacSHA512(src)
+// HMACSHA512 加密
+func HMACSHA512(src string) string {
+	return crypto.HMACSHA512(src)
 }
 
-// HmacSHA1 加密
-func HmacSHA1(src string) string {
-	return crypto.HmacSha1(src)
+// HMACSHA1 加密
+func HMACSHA1(src string) string {
+	return crypto.HMACSha1(src)
 }

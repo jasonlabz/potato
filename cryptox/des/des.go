@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"crypto/cipher"
 	"crypto/des"
-	"encoding/hex"
+	"encoding/base64"
 )
 
 // defaultDESKey des默认秘钥，建议使用配置文件方式
@@ -43,25 +43,24 @@ type CryptoDES struct {
 }
 
 // Encrypt  DES加密,秘钥必须是64位，所以key必须是长度为8的byte数组
-func (c *CryptoDES) Encrypt(plainText string) (encryptText string, err error) {
-	src := []byte(plainText)
+func (c *CryptoDES) Encrypt(src []byte) (encryptText string, err error) {
 	blockSize := c.block.BlockSize()      //分组的大小，blockSize = 8
 	src = zeroPadding(src, blockSize)     //填充
 	out := make([]byte, len(src))         //密文和明文的长度一致
 	c.encryptedMode.CryptBlocks(out, src) //对src进行加密，加密结果放到out里
-	return hex.EncodeToString(out), nil
+	return base64.RawURLEncoding.EncodeToString(out), nil
 }
 
 // Decrypt 解密
-func (c *CryptoDES) Decrypt(encryptText string) (plainText string, err error) {
-	src, err := hex.DecodeString(encryptText) //转成[]byte
+func (c *CryptoDES) Decrypt(encryptText string) (src []byte, err error) {
+	baseSrc, err := base64.RawURLEncoding.DecodeString(encryptText)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	out := make([]byte, len(src))         //密文和明文长度一致
-	c.decryptedMode.CryptBlocks(out, src) //对src进行解密，解密结果放到out里
-	out = zeroUnPadding(out)              //反填充
-	return string(out), nil
+	out := make([]byte, len(baseSrc))         //密文和明文长度一致
+	c.decryptedMode.CryptBlocks(out, baseSrc) //对src进行解密，解密结果放到out里
+	out = zeroUnPadding(out)                  //反填充
+	return out, nil
 }
 
 // zeroPadding 填充零
@@ -89,14 +88,14 @@ func pkcs7Padding(ciphertext []byte, blocksize int) []byte {
 // pkcs7UnPadding 去码
 func pkcs7UnPadding(origData []byte) []byte {
 	length := len(origData)
-	unpadding := int(origData[length-1])
-	return origData[:(length - unpadding)]
+	unPadding := int(origData[length-1])
+	return origData[:(length - unPadding)]
 }
 
-func Encrypt(plainText string) (encryptText string, err error) {
-	return crypto.Encrypt(plainText)
+func Encrypt(src []byte) (encryptText string, err error) {
+	return crypto.Encrypt(src)
 }
 
-func Decrypt(encryptText string) (plainText string, err error) {
+func Decrypt(encryptText string) (src []byte, err error) {
 	return crypto.Decrypt(encryptText)
 }

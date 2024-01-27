@@ -5,14 +5,25 @@ import (
 )
 
 // Encrypt 编码
-func Encrypt(plainText string) (encryptText string) {
-	encryptText = base64.StdEncoding.EncodeToString([]byte(plainText))
+func Encrypt(src []byte) (encryptedText string) {
+	encryptedText = base64.StdEncoding.EncodeToString(src)
 	return
 }
 
 // Decrypt 解码
-func Decrypt(encryptText string) (plainText string, err error) {
-	plainTextBytes, err := base64.StdEncoding.DecodeString(encryptText)
-	plainText = string(plainTextBytes)
+func Decrypt(encryptText string) (src []byte, err error) {
+	src, err = base64.StdEncoding.DecodeString(encryptText)
+	return
+}
+
+// EncryptURL 编码
+func EncryptURL(src []byte) (encryptedText string) {
+	encryptedText = base64.URLEncoding.EncodeToString(src)
+	return
+}
+
+// DecryptURL 解码
+func DecryptURL(encryptText string) (src []byte, err error) {
+	src, err = base64.URLEncoding.DecodeString(encryptText)
 	return
 }

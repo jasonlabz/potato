@@ -2,24 +2,24 @@ package md5
 
 import (
 	"crypto/md5"
-	"encoding/hex"
+	"encoding/base64"
 	"io"
 	"strings"
 )
 
-func EncodeMD5(data string) string {
+func EncodeMD5(src []byte) string {
 	h := md5.New()
-	h.Write([]byte(data))
-	return hex.EncodeToString(h.Sum(nil))
+	h.Write(src)
+	return base64.RawURLEncoding.EncodeToString(h.Sum(nil))
 }
 
 func FileMD5(file io.Reader) string {
 	hash := md5.New()
 	_, _ = io.Copy(hash, file)
-	return hex.EncodeToString(hash.Sum(nil))
+	return base64.RawURLEncoding.EncodeToString(hash.Sum(nil))
 }
 
-func CheckMD5(content, encrypted string) bool {
+func CheckMD5(content []byte, encrypted string) bool {
 	return strings.EqualFold(EncodeMD5(content), encrypted)
 }
 
