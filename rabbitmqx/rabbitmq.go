@@ -92,15 +92,19 @@ func NewRabbitMQOperator(config *MQConfig) (op *RabbitMQOperator, err error) {
 	defer ticker.Stop()
 	for i := 0; i < RetryTimes; i++ {
 		op.client.conn, err = amqp.DialTLS(config.Addr(), &tls.Config{InsecureSkipVerify: true})
-		if err != nil {
-			<-ticker.C
-			logger.Warn("wait %f seconds for retry to connect...", DefaultRetryWaitTimes.Seconds())
+		if err == nil {
+			break
 		}
+		<-ticker.C
+		logger.Warn("wait %f seconds for retry to connect...", DefaultRetryWaitTimes.Seconds())
 	}
+
 	if err != nil {
 		return
 	}
 
+	op.client.closeConnNotify = make(chan *amqp.Error, 1)
+	op.client.conn.NotifyClose(op.client.closeConnNotify)
 	op.client.commonCh, err = op.client.conn.Channel()
 	if err != nil {
 		op.Close()
@@ -216,10 +220,11 @@ func (op *RabbitMQOperator) tryReConnect(daemon bool) (connected bool) {
 	defer ticker.Stop()
 
 	for {
+		var err error
 		if !op.isReady && atomic.LoadInt32(&op.closed) != Closed {
-			conn, err := amqp.DialTLS(op.config.Addr(), &tls.Config{InsecureSkipVerify: true})
+			op.client.conn, err = amqp.DialTLS(op.config.Addr(), &tls.Config{InsecureSkipVerify: true})
 			if err == nil {
-				op.client.conn = conn
+				op.client.closeConnNotify = make(chan *amqp.Error, 1)
 				op.client.conn.NotifyClose(op.client.closeConnNotify)
 				op.isReady = true
 				logger.Info("rabbitmq reconnect success[addr:%s]", op.config.Addr())
