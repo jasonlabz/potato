@@ -3,7 +3,7 @@ package poolx
 import (
 	"github.com/panjf2000/ants/v2"
 
-	log "github.com/jasonlabz/potato/log/zapx"
+	"github.com/jasonlabz/potato/log"
 )
 
 var poolSize = 500
