@@ -11,7 +11,7 @@ import (
 
 	"github.com/jasonlabz/potato/core/consts"
 	"github.com/jasonlabz/potato/core/utils"
-	log "github.com/jasonlabz/potato/log/zapx"
+	"github.com/jasonlabz/potato/log"
 )
 
 const (
