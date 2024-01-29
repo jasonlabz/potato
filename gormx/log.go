@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	log "github.com/jasonlabz/potato/log/zapx"
 	gormLogger "gorm.io/gorm/logger"
+
+	"github.com/jasonlabz/potato/log"
 )
 
 var (
