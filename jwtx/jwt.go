@@ -7,7 +7,7 @@ import (
 
 	"github.com/dgrijalva/jwt-go"
 
-	log "github.com/jasonlabz/potato/log/zapx"
+	"github.com/jasonlabz/potato/log"
 )
 
 var AppSecret = "wVPDRAZsOEKZu4s4"
