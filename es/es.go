@@ -3,6 +3,11 @@ package es
 import (
 	"context"
 	"crypto/tls"
+	"io"
+	"net/http"
+	"strings"
+	"time"
+
 	"github.com/bytedance/sonic"
 	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/elastic/go-elasticsearch/v8/esapi"
@@ -12,13 +17,8 @@ import (
 	"github.com/elastic/go-elasticsearch/v8/typedapi/indices/create"
 	indices_get "github.com/elastic/go-elasticsearch/v8/typedapi/indices/get"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/types"
-	"io"
-	"net/http"
-	"strings"
-	"time"
-
 	"github.com/jasonlabz/potato/core/config/application"
-	log "github.com/jasonlabz/potato/log/zapx"
+	"github.com/jasonlabz/potato/log"
 )
 
 var operator *ElasticSearchOperator

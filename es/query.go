@@ -7,7 +7,7 @@ import (
 	"github.com/elastic/go-elasticsearch/v8/typedapi/types"
 
 	"github.com/jasonlabz/potato/core/utils"
-	log "github.com/jasonlabz/potato/log/zapx"
+	"github.com/jasonlabz/potato/log"
 )
 
 type XQuery struct {
