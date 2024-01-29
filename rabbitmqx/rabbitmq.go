@@ -21,7 +21,7 @@ import (
 	"github.com/jasonlabz/potato/core/config/application"
 	"github.com/jasonlabz/potato/core/times"
 	"github.com/jasonlabz/potato/core/utils"
-	log "github.com/jasonlabz/potato/log/zapx"
+	"github.com/jasonlabz/potato/log"
 )
 
 var operator *RabbitMQOperator

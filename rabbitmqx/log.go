@@ -3,8 +3,10 @@ package rabbitmqx
 import (
 	"context"
 	"fmt"
-	log "github.com/jasonlabz/potato/log/zapx"
+
 	amqp "github.com/rabbitmq/amqp091-go"
+
+	"github.com/jasonlabz/potato/log"
 )
 
 type LoggerInterface interface {
