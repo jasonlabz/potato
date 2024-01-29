@@ -9,7 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	errors2 "github.com/jasonlabz/potato/errors"
-	log "github.com/jasonlabz/potato/log/zapx"
+	"github.com/jasonlabz/potato/log"
 	"github.com/jasonlabz/potato/page"
 )
 
