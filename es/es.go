@@ -12,10 +12,10 @@ import (
 	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/elastic/go-elasticsearch/v8/esapi"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/cat/count"
-	core_get "github.com/elastic/go-elasticsearch/v8/typedapi/core/get"
+	coreget "github.com/elastic/go-elasticsearch/v8/typedapi/core/get"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/core/search"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/indices/create"
-	indices_get "github.com/elastic/go-elasticsearch/v8/typedapi/indices/get"
+	indicesget "github.com/elastic/go-elasticsearch/v8/typedapi/indices/get"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/types"
 	"github.com/jasonlabz/potato/core/config/application"
 	"github.com/jasonlabz/potato/log"
@@ -286,7 +286,7 @@ func (op *ElasticSearchOperator) GetAlias(ctx context.Context, indexNames ...str
 	return
 }
 
-func (op *ElasticSearchOperator) GetIndexInfo(ctx context.Context, indexName string) (response indices_get.Response, err error) {
+func (op *ElasticSearchOperator) GetIndexInfo(ctx context.Context, indexName string) (response indicesget.Response, err error) {
 	response, err = op.typeClient.Indices.Get(indexName).Do(ctx)
 	if err != nil {
 		log.DefaultLogger().WithError(err).Error("get index info error: " + indexName)
@@ -295,7 +295,7 @@ func (op *ElasticSearchOperator) GetIndexInfo(ctx context.Context, indexName str
 	return
 }
 
-func (op *ElasticSearchOperator) GetDocument(ctx context.Context, indexName, docID string) (response *core_get.Response, err error) {
+func (op *ElasticSearchOperator) GetDocument(ctx context.Context, indexName, docID string) (response *coreget.Response, err error) {
 	response, err = op.typeClient.Get(indexName, docID).Do(ctx)
 	if err != nil {
 		log.DefaultLogger().WithError(err).Error("get doc info error: " + docID)
