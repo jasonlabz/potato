@@ -12,6 +12,16 @@ import (
 	"path/filepath"
 )
 
+var client *kubernetes.Clientset
+
+func init() {
+	client = initClient()
+}
+
+func GetKubeClient() *kubernetes.Clientset {
+	return client
+}
+
 // k8sRestConfig 读取kubeconfig 配置文件
 func k8sRestConfig() *rest.Config {
 	kubeConfigFilePath := filepath.Join(os.Getenv("HOME"), ".kube", "config")

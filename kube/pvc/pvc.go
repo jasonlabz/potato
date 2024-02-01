@@ -1,11 +1,14 @@
-package kube
+package pvc
 
 import (
 	"context"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
+
+	"github.com/jasonlabz/potato/kube"
 )
 
 type ListOptionFunc func(options *metav1.ListOptions)
@@ -52,29 +55,27 @@ func WithSendInitialEvents(sendInitialEvents bool) ListOptionFunc {
 }
 
 func GetPVCList(ctx context.Context, namespace string, opts ...ListOptionFunc) (pvcList *corev1.PersistentVolumeClaimList, err error) {
-	apiV1 := GetKubeClient().CoreV1()
 	listOptions := metav1.ListOptions{}
 	for _, opt := range opts {
 		opt(&listOptions)
 	}
-	pvcList, err = apiV1.PersistentVolumeClaims(namespace).List(ctx, listOptions)
+	pvcList, err = kube.GetKubeClient().CoreV1().PersistentVolumeClaims(namespace).List(ctx, listOptions)
 	return
 }
 
 type GetOptionFunc func(options *metav1.GetOptions)
 
 func GetPVCInfo(ctx context.Context, namespace string, pvcName string) (pvcInfo *corev1.PersistentVolumeClaim, err error) {
-	apiV1 := GetKubeClient().CoreV1()
 	getOptions := metav1.GetOptions{}
-	pvcInfo, err = apiV1.PersistentVolumeClaims(namespace).Get(ctx, pvcName, getOptions)
+	pvcInfo, err = kube.GetKubeClient().CoreV1().PersistentVolumeClaims(namespace).Get(ctx, pvcName, getOptions)
 	return
 }
 
-func TransPVCInfo(pvcList *corev1.PersistentVolumeClaimList) (infoList []*PVCInfo) {
-	infoList = make([]*PVCInfo, 0)
+func TransPVCInfo(pvcList *corev1.PersistentVolumeClaimList) (infoList []*kube.PVCInfo) {
+	infoList = make([]*kube.PVCInfo, 0)
 	for _, pvc := range pvcList.Items {
 		quantity := pvc.Spec.Resources.Requests[corev1.ResourceStorage]
-		infoList = append(infoList, &PVCInfo{
+		infoList = append(infoList, &kube.PVCInfo{
 			Name:     pvc.Name,
 			Status:   string(pvc.Status.Phase),
 			Capacity: quantity.String(),
@@ -84,12 +85,11 @@ func TransPVCInfo(pvcList *corev1.PersistentVolumeClaimList) (infoList []*PVCInf
 }
 
 func WatchPVC(ctx context.Context, namespace string, opts ...ListOptionFunc) (watcher watch.Interface, err error) {
-	apiV1 := GetKubeClient().CoreV1()
 	listOptions := metav1.ListOptions{}
 	for _, opt := range opts {
 		opt(&listOptions)
 	}
-	watcher, err = apiV1.PersistentVolumeClaims(namespace).
+	watcher, err = kube.GetKubeClient().CoreV1().PersistentVolumeClaims(namespace).
 		Watch(ctx, listOptions)
 	if err != nil {
 		return
@@ -125,7 +125,7 @@ func CreatePVC(ctx context.Context, request CreatePVCRequest) (pvcInfo *corev1.P
 
 	options := metav1.CreateOptions{}
 	//创建pvc
-	pvcInfo, err = GetKubeClient().CoreV1().PersistentVolumeClaims(request.NamespaceName).Create(ctx, pvcSrc, options)
+	pvcInfo, err = kube.GetKubeClient().CoreV1().PersistentVolumeClaims(request.NamespaceName).Create(ctx, pvcSrc, options)
 	if err != nil {
 		return nil, err
 	}

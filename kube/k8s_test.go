@@ -2,6 +2,7 @@ package kube
 
 import (
 	"context"
+	"github.com/jasonlabz/potato/kube/pvc"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/watch"
@@ -10,7 +11,7 @@ import (
 )
 
 func TestPVC(t *testing.T) {
-	watcher, err := WatchPVC(context.Background(), "hello")
+	watcher, err := pvc.WatchPVC(context.Background(), "hello")
 	if err != nil {
 		panic(err)
 	}
