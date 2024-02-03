@@ -2,6 +2,7 @@ package pvc
 
 import (
 	"context"
+	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -9,52 +10,10 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 
 	"github.com/jasonlabz/potato/kube"
+	"github.com/jasonlabz/potato/kube/options"
 )
 
-type ListOptionFunc func(options *metav1.ListOptions)
-
-func WithLabelSelector(label string) ListOptionFunc {
-	return func(options *metav1.ListOptions) {
-		options.LabelSelector = label
-	}
-}
-
-func WithFieldSelector(field string) ListOptionFunc {
-	return func(options *metav1.ListOptions) {
-		options.FieldSelector = field
-	}
-}
-func WithLimitCount(limit int64) ListOptionFunc {
-	return func(options *metav1.ListOptions) {
-		options.Limit = limit
-	}
-}
-
-func WithContinues(continues string) ListOptionFunc {
-	return func(options *metav1.ListOptions) {
-		options.Continue = continues
-	}
-}
-
-func WithWatch(watch bool) ListOptionFunc {
-	return func(options *metav1.ListOptions) {
-		options.Watch = watch
-	}
-}
-
-func WithResourceVersion(version string) ListOptionFunc {
-	return func(options *metav1.ListOptions) {
-		options.ResourceVersion = version
-	}
-}
-
-func WithSendInitialEvents(sendInitialEvents bool) ListOptionFunc {
-	return func(options *metav1.ListOptions) {
-		options.SendInitialEvents = &sendInitialEvents
-	}
-}
-
-func GetPVCList(ctx context.Context, namespace string, opts ...ListOptionFunc) (pvcList *corev1.PersistentVolumeClaimList, err error) {
+func GetPVCList(ctx context.Context, namespace string, opts ...options.ListOptionFunc) (pvcList *corev1.PersistentVolumeClaimList, err error) {
 	listOptions := metav1.ListOptions{}
 	for _, opt := range opts {
 		opt(&listOptions)
@@ -71,6 +30,12 @@ func GetPVCInfo(ctx context.Context, namespace string, pvcName string) (pvcInfo 
 	return
 }
 
+func DelPVCInfo(ctx context.Context, namespace string, pvcName string) (err error) {
+	delOptions := metav1.DeleteOptions{}
+	err = kube.GetKubeClient().CoreV1().PersistentVolumeClaims(namespace).Delete(ctx, pvcName, delOptions)
+	return
+}
+
 func TransPVCInfo(pvcList *corev1.PersistentVolumeClaimList) (infoList []*kube.PVCInfo) {
 	infoList = make([]*kube.PVCInfo, 0)
 	for _, pvc := range pvcList.Items {
@@ -84,7 +49,7 @@ func TransPVCInfo(pvcList *corev1.PersistentVolumeClaimList) (infoList []*kube.P
 	return
 }
 
-func WatchPVC(ctx context.Context, namespace string, opts ...ListOptionFunc) (watcher watch.Interface, err error) {
+func WatchPVC(ctx context.Context, namespace string, opts ...options.ListOptionFunc) (watcher watch.Interface, err error) {
 	listOptions := metav1.ListOptions{}
 	for _, opt := range opts {
 		opt(&listOptions)
@@ -98,26 +63,66 @@ func WatchPVC(ctx context.Context, namespace string, opts ...ListOptionFunc) (wa
 }
 
 type CreatePVCRequest struct {
-	NamespaceName    string                              `json:"namespace_name"`
-	PvcName          string                              `json:"pvc_name"`
-	AccessModes      []corev1.PersistentVolumeAccessMode `json:"access_modes"`
-	StorageSize      int64                               `json:"storage_size"`
-	StorageClassName string                              `json:"storage_class_name"`
+	Namespace            string                              `json:"namespace"`
+	PvcName              string                              `json:"pvc_name"`
+	PvcLabels            map[string]string                   `json:"pvc_labels"`
+	AccessModes          []corev1.PersistentVolumeAccessMode `json:"access_modes"`
+	Storage              string                              `json:"storage"`
+	StorageClassName     string                              `json:"storage_class_name"`
+	VolumeName           string                              `json:"volume_name"`
+	PersistentVolumeMode *corev1.PersistentVolumeMode        `json:"persistent_volume_mode"`
 }
 
-func CreatePVC(ctx context.Context, request CreatePVCRequest) (pvcInfo *corev1.PersistentVolumeClaim, err error) {
-
-	pvcSrc := new(corev1.PersistentVolumeClaim)
-	pvcSrc.ObjectMeta.Name = request.PvcName
-	pvcSrc.Spec.AccessModes = request.AccessModes
-
-	//设置存储大小
-	var resourceQuantity resource.Quantity
-	resourceQuantity.Set(request.StorageSize * 1000 * 1000 * 1000)
-	pvcSrc.Spec.Resources.Requests = corev1.ResourceList{
-		"storage": resourceQuantity,
+func (c *CreatePVCRequest) checkParameters() error {
+	if c.Namespace == "" {
+		return fmt.Errorf("namespace is required")
 	}
 
+	if c.PvcName == "" {
+		return fmt.Errorf("pvc name is required")
+	}
+
+	if len(c.PvcLabels) == 0 {
+		c.PvcLabels = map[string]string{
+			"pvc": c.PvcName,
+		}
+	}
+
+	if len(c.AccessModes) == 0 {
+		c.AccessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany}
+	}
+	return nil
+}
+
+// CreatePVC 创建PVC
+// https://blog.csdn.net/qq_20042935/article/details/129587144
+func CreatePVC(ctx context.Context, request CreatePVCRequest) (pvcInfo *corev1.PersistentVolumeClaim, err error) {
+	err = request.checkParameters()
+	if err != nil {
+		return nil, err
+	}
+	pvcSrc := &corev1.PersistentVolumeClaim{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "PersistentVolumeClaim",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: request.PvcName,
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes: request.AccessModes,
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{
+					"storage": resource.MustParse(request.Storage), //设置存储大小
+				},
+			},
+			VolumeName: request.VolumeName,
+			VolumeMode: request.PersistentVolumeMode,
+		},
+	}
+	for labelKey, labelVal := range request.PvcLabels {
+		pvcSrc.ObjectMeta.Labels[labelKey] = labelVal
+	}
 	//使用存储卷名字
 	if len(request.StorageClassName) != 0 {
 		pvcSrc.Spec.StorageClassName = &request.StorageClassName
@@ -125,7 +130,7 @@ func CreatePVC(ctx context.Context, request CreatePVCRequest) (pvcInfo *corev1.P
 
 	options := metav1.CreateOptions{}
 	//创建pvc
-	pvcInfo, err = kube.GetKubeClient().CoreV1().PersistentVolumeClaims(request.NamespaceName).Create(ctx, pvcSrc, options)
+	pvcInfo, err = kube.GetKubeClient().CoreV1().PersistentVolumeClaims(request.Namespace).Create(ctx, pvcSrc, options)
 	if err != nil {
 		return nil, err
 	}
