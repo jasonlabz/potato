@@ -1,69 +1,131 @@
 package charset
 
-const (
-	UTF8    Charset = "UTF-8"
-	UTF16           = "UTF-16"
-	UTF16BE         = "UTF-16BE"
-	UTF16LE         = "UTF-16LE"
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"golang.org/x/text/encoding"
+	"golang.org/x/text/encoding/ianaindex"
+	"golang.org/x/text/transform"
+	"io"
 )
 
+type Charset string
+
+// ascii
 const (
-	GBK     Charset = "GBK"
-	GB18030         = "GB18030"
-	Big5            = "Big5"
+	US_ASCII        Charset = "US-ASCII"
+	ANSI_X3_4_1968          = "ANSI_X3.4-1968"
+	ANSI_X3_4_1986          = "ANSI_X3.4-1986"
+	ISO_646_irv1991         = "ISO-646.irv1991"
+	ISO646_US               = "ISO646-US"
+	IBM367                  = "IBM367"
+	cp367                   = "cp367"
+	CS_ASCII                = "csASCII"
 )
 
+// 中文
 const (
-	EUCJP     Charset = "EUC-JP"
-	ISO2022JP         = "ISO-2022-JP"
-	ShiftJIS          = "Shift_JIS"
+	GBK             Charset = "GBK"
+	GB18030                 = "GB18030"
+	GB2312                  = "GB2312"
+	Big5                    = "Big5"
+	ISO_8859_1_1987         = "ISO_8859-1:1987"
+	ISO_8859_1              = "ISO_8859-1"
+	IBM819                  = "IBM819"
+	CP819                   = "CP819"
+	ISO_8859_2              = "ISO_8859-2"
+	ISO_8859_3              = "ISO_8859-3"
+	ISO_8859_4              = "ISO_8859-4"
 )
 
-const EUCKR Charset = "EUC-KR"
-
+// 日文
 const (
-	Macintosh   Charset = "macintosh"
-	IBM037              = "IBM037"
-	IBM437              = "IBM437"
-	IBM850              = "IBM850"
-	IBM852              = "IBM852"
-	IBM855              = "IBM855"
-	IBM00858            = "IBM00858"
-	IBM860              = "IBM860"
-	IBM862              = "IBM862"
-	IBM863              = "IBM863"
-	IBM865              = "IBM865"
-	IBM866              = "IBM866"
-	IBM1047             = "IBM1047"
-	IBM01140            = "IBM01140"
-	ISO88591            = "ISO-8859-1"
-	ISO88592            = "ISO-8859-2"
-	ISO88593            = "ISO-8859-3"
-	ISO88594            = "ISO-8859-4"
-	ISO88595            = "ISO-8859-5"
-	ISO88596            = "ISO-8859-6"
-	ISO88596E           = "ISO-8859-6-E"
-	ISO88596I           = "ISO-8859-6-I"
-	ISO88597            = "ISO-8859-7"
-	ISO88598            = "ISO-8859-8"
-	ISO88598E           = "ISO-8859-8-E"
-	ISO88598I           = "ISO-8859-8-I"
-	ISO88599            = "ISO-8859-9"
-	ISO885910           = "ISO-8859-10"
-	ISO885913           = "ISO-8859-13"
-	ISO885914           = "ISO-8859-14"
-	ISO885915           = "ISO-8859-15"
-	ISO885916           = "ISO-8859-16"
-	KOI8R               = "KOI8-R"
-	KOI8U               = "KOI8-U"
-	Windows874          = "Windows-874"
-	Windows1250         = "Windows-1250"
-	Windows1251         = "Windows-1251"
-	Windows1252         = "Windows-1252"
-	Windows1253         = "Windows-1253"
-	Windows1254         = "Windows-1254"
-	Windows1255         = "Windows-1255"
-	Windows1256         = "Windows-1256"
-	Windows1257         = "Windows-1257"
-	Windows1258         = "Windows-1258"
+	EUCJP     Charset = "EUCJP"
+	ISO2022JP         = "ISO2022JP"
+	ShiftJIS          = "ShiftJIS"
 )
+
+// 韩文
+const (
+	EUCKR Charset = "EUCKR"
+)
+
+// Unicode
+const (
+	UTF_8    Charset = "UTF-8"
+	UTF_16           = "UTF-16"
+	UTF_16BE         = "UTF-16BE"
+	UTF_16LE         = "UTF-16LE"
+)
+
+// 其他编码
+const (
+	Macintosh Charset = "macintosh"
+	IBM               = "IBM*"
+	Windows           = "Windows*"
+	ISO               = "ISO-*"
+)
+
+var charsetAlias = map[string]string{
+	"HZGB2312": "HZ-GB-2312",
+	"hzgb2312": "HZ-GB-2312",
+	"GB2312":   "HZ-GB-2312",
+	"gb2312":   "HZ-GB-2312",
+}
+
+func Convert(src string, srcCharset Charset, dstCharset Charset) (dst string, err error) {
+	if dstCharset == srcCharset {
+		return src, nil
+	}
+	dst = src
+	// Converting <src> to UTF-8.
+	if srcCharset != "UTF-8" {
+		if e := getEncoding(srcCharset); e != nil {
+			tmp, err := io.ReadAll(
+				transform.NewReader(bytes.NewReader([]byte(src)), e.NewDecoder()),
+			)
+			if err != nil {
+				return "", fmt.Errorf("%s to utf8 failed. %v", srcCharset, err)
+			}
+			src = string(tmp)
+		} else {
+			return dst, errors.New(fmt.Sprintf("unsupport srcCharset: %s", srcCharset))
+		}
+	}
+	// Do the converting from UTF-8 to <dstCharset>.
+	if dstCharset != "UTF-8" {
+		if e := getEncoding(dstCharset); e != nil {
+			tmp, err := io.ReadAll(
+				transform.NewReader(bytes.NewReader([]byte(src)), e.NewEncoder()),
+			)
+			if err != nil {
+				return "", fmt.Errorf("utf to %s failed. %v", dstCharset, err)
+			}
+			dst = string(tmp)
+		} else {
+			return dst, errors.New(fmt.Sprintf("unsupport dstCharset: %s", dstCharset))
+		}
+	} else {
+		dst = src
+	}
+	return dst, nil
+}
+
+func ToUTF8(srcCharset Charset, src string) (dst string, err error) {
+	return Convert(src, srcCharset, "UTF-8")
+}
+
+func UTF8To(dstCharset Charset, src string) (dst string, err error) {
+	return Convert(src, "UTF-8", dstCharset)
+}
+
+func getEncoding(charset Charset) encoding.Encoding {
+	if c, ok := charsetAlias[string(charset)]; ok {
+		charset = Charset(c)
+	}
+	if e, err := ianaindex.MIB.Encoding(string(charset)); err == nil && e != nil {
+		return e
+	}
+	return nil
+}
