@@ -8,9 +8,9 @@ import (
 )
 
 var defaultConfig = &Config{
-	MaxOpenConn:     300,              // 最大连接数
-	MaxIdleConn:     5,                // 最大空闲连接数
-	ConnMaxLifeTime: 10 * time.Minute, // 连接最大存活时间
+	MaxOpenConn:     100,             // 最大连接数
+	MaxIdleConn:     10,              // 最大空闲连接数
+	ConnMaxLifeTime: 5 * time.Minute, // 连接最大存活时间
 }
 
 // Config Database configuration
