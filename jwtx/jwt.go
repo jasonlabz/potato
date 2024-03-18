@@ -10,8 +10,12 @@ import (
 	"github.com/jasonlabz/potato/log"
 )
 
-var AppSecret = "wVPDRAZsOEKZu4s4"
+var secretKey = "wVPDRAZsOEKZu4s4"
 var AppIss = "github.com/jasonlabz/potato"
+
+func SetJWTSecretKey(key string) {
+	secretKey = key
+}
 
 /**
 type StandardClaims struct {
@@ -31,9 +35,10 @@ type userStdClaims struct {
 }
 
 type User struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Audience string `json:"audience"`
+	ID        string            `json:"id"`
+	Name      string            `json:"name"`
+	Audience  string            `json:"audience"`
+	ExtraInfo map[string]string `json:"extra_info"`
 }
 
 // Valid 实现 `type Claims interface` 的 `Valid() error` 方法,自定义校验内容
@@ -67,7 +72,7 @@ func GenerateJWTToken(m *User, d time.Duration) (string, error) {
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, uClaims)
 	// Sign and get the complete encoded token as a string using the secret
-	tokenString, err := token.SignedString([]byte(AppSecret))
+	tokenString, err := token.SignedString([]byte(secretKey))
 	if err != nil {
 		log.DefaultLogger().WithError(err).Fatal("config is wrong, can not generate jwt")
 	}
@@ -85,7 +90,7 @@ func ParseJWTToken(tokenString string) (*User, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
-		return []byte(AppSecret), nil
+		return []byte(secretKey), nil
 	})
 	if err != nil {
 		return nil, err
