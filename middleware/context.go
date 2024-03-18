@@ -59,7 +59,7 @@ func SetContext(opts ...Option) gin.HandlerFunc {
 		ctx.Set(consts.ContextToken, authorization)
 		ctx.Set(consts.ContextUserID, userID)
 		ctx.Set(consts.ContextTraceID, traceID)
-		ctx.Set(consts.ContextRemoteAddr, remote)
+		ctx.Set(consts.ContextClientAddr, remote)
 
 		ctx.Next()
 	}
