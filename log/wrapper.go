@@ -7,52 +7,41 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/jasonlabz/potato/core/consts"
 	"github.com/jasonlabz/potato/core/utils"
 )
 
-var logField = []string{consts.ContextTraceID, consts.ContextUserID}
-
 type loggerWrapper struct {
-	logger *zap.Logger
+	logField []string
+	logger   *zap.Logger
 }
 
 var defaultLogger *loggerWrapper
 var once sync.Once
 
-func zapField(ctx context.Context, contextKey ...string) (fields []zap.Field) {
-	for _, key := range contextKey {
-		value := utils.GetString(ctx.Value(key))
-		if value == "" {
-			continue
-		}
-		fields = append(fields, zap.String(key, value))
+func init() {
+	once.Do(func() {
+		defaultLogger = newLogger()
+	})
+	if defaultLogger == nil {
+		panic("init logger fail!")
 	}
-	return
 }
 
 func DefaultLogger() *loggerWrapper {
-	if defaultLogger == nil {
-		once.Do(func() {
-			defaultLogger = &loggerWrapper{
-				logger: logger(),
-			}
-		})
-	}
 	return defaultLogger
 }
 
 func GetLogger(ctx context.Context) *loggerWrapper {
-	return &loggerWrapper{
-		logger: logger().With(zapField(ctx, logField...)...),
-	}
+	return defaultLogger.WithField(zapField(ctx, defaultLogger.logField...)...)
 }
 
 func GormLogger(ctx context.Context) *loggerWrapper {
-	return &loggerWrapper{
-		logger: logger().WithOptions(zap.AddCallerSkip(3)).
-			With(zapField(ctx, logField...)...),
-	}
+	return defaultLogger.WithOptions(zap.AddCallerSkip(3)).
+		WithField(zapField(ctx, defaultLogger.logField...)...)
+}
+
+func (l *loggerWrapper) ZapLogger() *zap.Logger {
+	return l.logger
 }
 
 func (l *loggerWrapper) WithError(err error) *loggerWrapper {
@@ -60,12 +49,17 @@ func (l *loggerWrapper) WithError(err error) *loggerWrapper {
 	return l
 }
 
-func (l *loggerWrapper) WithOption(opt zap.Option) *loggerWrapper {
-	l.logger = l.logger.WithOptions(opt)
+func (l *loggerWrapper) WithOptions(opt ...zap.Option) *loggerWrapper {
+	l.logger = l.logger.WithOptions(opt...)
 	return l
 }
 
-func (l *loggerWrapper) WithField(fields ...any) *loggerWrapper {
+func (l *loggerWrapper) WithField(fields ...zap.Field) *loggerWrapper {
+	l.logger = l.logger.With(fields...)
+	return l
+}
+
+func (l *loggerWrapper) WithAny(fields ...any) *loggerWrapper {
 	l.logger = l.logger.With(l.checkFields(fields)...)
 	return l
 }
@@ -175,4 +169,15 @@ func Float64(key string, val float64) zap.Field {
 
 func Float32(key string, val float32) zap.Field {
 	return zap.Float32(key, val)
+}
+
+func zapField(ctx context.Context, contextKey ...string) (fields []zap.Field) {
+	for _, key := range contextKey {
+		value := utils.GetString(ctx.Value(key))
+		if value == "" {
+			continue
+		}
+		fields = append(fields, zap.String(key, value))
+	}
+	return
 }

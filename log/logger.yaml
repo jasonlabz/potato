@@ -1,13 +1,14 @@
 log:
   # 是否写入文件
   write_file: true
-  # true|false
-  json_log: true
-  # error|warn|info|debug
+  # json|console
+  format: console
+  # error|warn|info|debug|fatal
   log_level: debug
   # 文件配置
   log_file_conf:
-    log_file_path: ./log/lg_server.log
+    base_path: ./log
+    file_name: lg_server.log
     max_size: 10
     max_age: 28
     max_backups: 100
