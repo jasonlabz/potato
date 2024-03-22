@@ -186,13 +186,14 @@ func getEncoder(options *Options) zapcore.Encoder {
 
 // core 三个参数之  日志输出路径
 func getLowLevelWriterSyncer(options *Options) zapcore.WriteSyncer {
+	fileName := filepath.Join(options.basePath, options.fileName)
 	//引入第三方库 Lumberjack 加入日志切割功能
 	infoLumberIO := &lumberjack.Logger{
-		Filename:   filepath.Join(options.basePath, options.fileName), //日志文件存放目录，如果文件夹不存在会自动创建
-		MaxSize:    options.maxSize,                                   //文件大小限制,单位MB
-		MaxBackups: options.maxBackups,                                //最大保留日志文件数量
-		MaxAge:     options.maxAge,                                    //日志文件保留天数
-		Compress:   options.compress,                                  //Compress确定是否应该使用gzip压缩已旋转的日志文件。默认值是不执行压缩。
+		Filename:   fileName,           //日志文件存放目录，如果文件夹不存在会自动创建
+		MaxSize:    options.maxSize,    //文件大小限制,单位MB
+		MaxBackups: options.maxBackups, //最大保留日志文件数量
+		MaxAge:     options.maxAge,     //日志文件保留天数
+		Compress:   options.compress,   //Compress确定是否应该使用gzip压缩已旋转的日志文件。默认值是不执行压缩。
 	}
 	return zapcore.AddSync(infoLumberIO)
 }
