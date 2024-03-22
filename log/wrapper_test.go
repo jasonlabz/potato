@@ -6,5 +6,6 @@ import (
 )
 
 func TestName(t *testing.T) {
-	GetLogger(context.Background()).Error("ttt%s,%s,%s", "sadas", "sdasd", "time")
+	ctx := context.TODO()
+	GetLogger(ctx).Error("ttt%s,%s,%s", "sadas", "sdasd", "time")
 }

@@ -32,16 +32,16 @@ func DefaultLogger() *loggerWrapper {
 }
 
 func GetLogger(ctx context.Context) *loggerWrapper {
-	return defaultLogger.WithField(zapField(ctx, defaultLogger.logField...)...)
+	return &loggerWrapper{
+		logger: defaultLogger.logger.With(zapField(ctx, defaultLogger.logField...)...),
+	}
 }
 
 func GormLogger(ctx context.Context) *loggerWrapper {
-	return defaultLogger.WithOptions(zap.AddCallerSkip(3)).
-		WithField(zapField(ctx, defaultLogger.logField...)...)
-}
-
-func (l *loggerWrapper) ZapLogger() *zap.Logger {
-	return l.logger
+	return &loggerWrapper{
+		logger: defaultLogger.logger.WithOptions(zap.AddCallerSkip(3)).
+			With(zapField(ctx, defaultLogger.logField...)...),
+	}
 }
 
 func (l *loggerWrapper) WithError(err error) *loggerWrapper {

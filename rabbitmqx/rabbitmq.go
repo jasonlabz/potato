@@ -166,12 +166,12 @@ type LimitConf struct {
 }
 
 func (c *MQConfig) Validate() error {
-	if c.Username == "" {
-		return errors.New("username is empty")
-	}
-	if c.Password == "" {
-		return errors.New("password is empty")
-	}
+	//if c.Username == "" {
+	//	return errors.New("username is empty")
+	//}
+	//if c.Password == "" {
+	//	return errors.New("password is empty")
+	//}
 	if c.Host == "" {
 		return errors.New("host is empty")
 	}
