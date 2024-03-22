@@ -244,3 +244,10 @@ func RandHex(n int) []byte {
 	hex.Encode(dst, src)
 	return dst[:n]
 }
+
+func IsTrueOrNot[T any](express bool, firstVal, secondVal T) T {
+	if express {
+		return firstVal
+	}
+	return secondVal
+}

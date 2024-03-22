@@ -175,8 +175,8 @@ func getEncoder(options *Options) zapcore.Encoder {
 	encoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout(times.MicroTimeFormat) //指定时间格式
 	encoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder                       //在日志文件中使用大写字母记录日志级别
 	//encoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder //按级别显示不同颜色，不需要的话取值zapcore.CapitalLevelEncoder就可以了
-	//encoderConfig.EncodeCaller = zapcore.ShortCallerEncoder //显示完整文件路径
-	encoderConfig.EncodeCaller = zapcore.FullCallerEncoder //显示完整文件路径
+	encoderConfig.EncodeCaller = zapcore.ShortCallerEncoder //显示短文件路径
+	//encoderConfig.EncodeCaller = zapcore.FullCallerEncoder //显示完整文件路径
 	encoderConfig.EncodeDuration = zapcore.SecondsDurationEncoder
 	if options.logFormat == "json" {
 		return zapcore.NewJSONEncoder(encoderConfig) // json 格式打印日志
@@ -225,49 +225,40 @@ func loadConf(options *Options) {
 	}
 
 	level := config.GetString(DefaultZapConfigName, "log.log_level")
-	if level == "" {
-		options.logLevel = defaultOptions.logLevel
-	}
+	options.logLevel = utils.IsTrueOrNot(options.logLevel == "",
+		utils.IsTrueOrNot(level == "", defaultOptions.logLevel, level), options.logLevel)
 
 	logFormat := config.GetString(DefaultZapConfigName, "log.format")
-	if logFormat == "" {
-		options.logFormat = defaultOptions.logFormat
-	}
+	options.logFormat = utils.IsTrueOrNot(options.logFormat == "",
+		utils.IsTrueOrNot(logFormat == "", defaultOptions.logFormat, logFormat), options.logFormat)
 
 	writeFile := config.GetBool(DefaultZapConfigName, "log.write_file")
-	if writeFile == false {
-		options.writeFile = defaultOptions.writeFile
-	}
+	options.writeFile = utils.IsTrueOrNot(!options.writeFile,
+		utils.IsTrueOrNot(!writeFile, defaultOptions.writeFile, writeFile), options.writeFile)
 
 	basePath := config.GetString(DefaultZapConfigName, "log.log_file_conf.base_path")
-	if basePath == "" {
-		options.basePath = defaultOptions.basePath
-	}
+	options.basePath = utils.IsTrueOrNot(options.basePath == "",
+		utils.IsTrueOrNot(basePath == "", defaultOptions.basePath, basePath), options.basePath)
 
 	fileName := config.GetString(DefaultZapConfigName, "log.log_file_conf.file_name")
-	if fileName == "" {
-		options.fileName = defaultOptions.fileName
-	}
+	options.fileName = utils.IsTrueOrNot(options.fileName == "",
+		utils.IsTrueOrNot(fileName == "", defaultOptions.fileName, fileName), options.fileName)
 
 	maxSize := config.GetInt(DefaultZapConfigName, "log.log_file_conf.max_size")
-	if maxSize == 0 {
-		options.maxSize = defaultOptions.maxSize
-	}
+	options.maxSize = utils.IsTrueOrNot(options.maxSize == 0,
+		utils.IsTrueOrNot(maxSize == 0, defaultOptions.maxSize, maxSize), options.maxSize)
 
 	maxAge := config.GetInt(DefaultZapConfigName, "log.log_file_conf.max_age")
-	if maxAge == 0 {
-		options.maxAge = defaultOptions.maxAge
-	}
+	options.maxAge = utils.IsTrueOrNot(options.maxAge == 0,
+		utils.IsTrueOrNot(maxAge == 0, defaultOptions.maxAge, maxAge), options.maxAge)
 
 	maxBackups := config.GetInt(DefaultZapConfigName, "log.log_file_conf.max_backups")
-	if maxBackups == 0 {
-		options.maxBackups = defaultOptions.maxBackups
-	}
+	options.maxBackups = utils.IsTrueOrNot(options.maxBackups == 0,
+		utils.IsTrueOrNot(maxBackups == 0, defaultOptions.maxBackups, maxBackups), options.maxBackups)
 
 	compress := config.GetBool(DefaultZapConfigName, "log.log_file_conf.compress")
-	if compress == false {
-		options.compress = defaultOptions.compress
-	}
+	options.compress = utils.IsTrueOrNot(!options.compress,
+		utils.IsTrueOrNot(!compress, defaultOptions.compress, compress), options.compress)
 
 	if len(options.keyList) == 0 {
 		options.keyList = defaultOptions.keyList
