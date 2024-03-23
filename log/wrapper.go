@@ -27,21 +27,25 @@ func init() {
 	}
 }
 
-func DefaultLogger() *loggerWrapper {
+func DefaultLogger(opts ...zap.Option) *loggerWrapper {
+	if len(opts) > 0 {
+		return defaultLogger.WithOptions(opts...)
+	}
 	return defaultLogger
 }
 
-func GetLogger(ctx context.Context) *loggerWrapper {
-	return &loggerWrapper{
-		logger: defaultLogger.logger.With(zapField(ctx, defaultLogger.logField...)...),
-	}
+func GetLogger(ctx context.Context, opts ...zap.Option) *loggerWrapper {
+	return utils.IsTrueOrNot(len(opts) > 0,
+		&loggerWrapper{logger: defaultLogger.logger.WithOptions(opts...).With(zapField(ctx, defaultLogger.logField...)...)},
+		&loggerWrapper{logger: defaultLogger.logger.With(zapField(ctx, defaultLogger.logField...)...)},
+	)
 }
 
-func GormLogger(ctx context.Context) *loggerWrapper {
-	return &loggerWrapper{
-		logger: defaultLogger.logger.WithOptions(zap.AddCallerSkip(3)).
-			With(zapField(ctx, defaultLogger.logField...)...),
-	}
+func GormLogger(ctx context.Context, opts ...zap.Option) *loggerWrapper {
+	return utils.IsTrueOrNot(len(opts) > 0,
+		&loggerWrapper{logger: defaultLogger.logger.WithOptions(opts...).WithOptions(zap.AddCallerSkip(3)).With(zapField(ctx, defaultLogger.logField...)...)},
+		&loggerWrapper{logger: defaultLogger.logger.WithOptions(zap.AddCallerSkip(3)).With(zapField(ctx, defaultLogger.logField...)...)},
+	)
 }
 
 func (l *loggerWrapper) WithError(err error) *loggerWrapper {
