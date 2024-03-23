@@ -1,104 +1,243 @@
 package config
 
 import (
-	"github.com/spf13/cast"
+	"log"
+	"os"
+
+	"github.com/BurntSushi/toml"
+	"github.com/bytedance/sonic/decoder"
+	"github.com/fsnotify/fsnotify"
+	"github.com/spf13/viper"
+	"gopkg.in/ini.v1"
+	"gopkg.in/yaml.v3"
+
+	"github.com/jasonlabz/potato/core/utils"
 )
 
-var pm = NewProviderManager()
+type CryptoType string
 
-func AddProviders(config string, provider IProvider) {
-	pm.AddProviders(config, provider)
+const (
+	CryptoTypeAES  CryptoType = "aes"
+	CryptoTypeDES  CryptoType = "des"
+	CryptoTypeHMAC CryptoType = "hmac"
+)
+
+// CryptoConfig 加密配置
+type CryptoConfig struct {
+	Type string `mapstructure:"type" json:"type" ini:"type" yaml:"type"`
+	Key  string `mapstructure:"key" json:"key" ini:"key" yaml:"key"`
 }
 
-func Get(configName, key string) interface{} {
-	v, _ := pm.Get(configName, key)
-	return v
+// KafkaConfig 配置
+type KafkaConfig struct {
+	Topic            []string `json:"topic" yaml:"topic" ini:"topic"`
+	GroupId          string   `json:"group_id" yaml:"group_id" ini:"group_id"`
+	BootstrapServers string   `json:"bootstrap_servers" yaml:"bootstrap_servers" ini:"bootstrap_servers"`
+	SecurityProtocol string   `json:"security_protocol" yaml:"security_protocol" ini:"security_protocol"`
+	SaslMechanism    string   `json:"sasl_mechanism" yaml:"sasl_mechanism" ini:"sasl_mechanism"`
+	SaslUsername     string   `json:"sasl_username" yaml:"sasl_username" ini:"sasl_username"`
+	SaslPassword     string   `json:"sasl_password" yaml:"sasl_password" ini:"sasl_password"`
 }
 
-func GetE(configName, key string) (interface{}, error) {
-	return pm.Get(configName, key)
+// Database 连接配置
+type Database struct {
+	DBType          string `json:"db_type" yaml:"db_type" ini:"db_type"`
+	DSN             string `json:"dsn" yaml:"dsn" ini:"dsn"`
+	LogMode         string `json:"log_mode" yaml:"log_mode" ini:"log_mode"`
+	Host            string `json:"host" yaml:"host" ini:"host"`
+	Port            int    `json:"port" yaml:"port" ini:"port"`
+	Database        string `json:"database" yaml:"database" ini:"database"`
+	Username        string `json:"username" yaml:"username" ini:"username"`
+	Password        string `json:"password" yaml:"password" ini:"password"`
+	Charset         string `json:"charset" yaml:"charset" ini:"charset"`
+	MaxIdleConn     int    `json:"max_idle_conn" yaml:"max_idle_conn" ini:"max_idle_conn"`
+	MaxOpenConn     int    `json:"max_open_conn" yaml:"max_open_conn" ini:"max_open_conn"`
+	ConnMaxLifeTime int64  `json:"conn_max_life_time" yaml:"conn_max_life_time" ini:"conn_max_life_time"`
 }
 
-func GetString(configName, key string) string {
-	return cast.ToString(Get(configName, key))
+// RedisConfig 连接配置
+type RedisConfig struct {
+	Endpoints        []string `json:"endpoints" yaml:"endpoints" ini:"endpoints"`
+	Username         string   `json:"username" yaml:"username" ini:"username"`
+	Password         string   `json:"password" yaml:"password" ini:"password"`
+	ClientName       string   `json:"client_name" yaml:"client_name" ini:"client_name"` // 自定义客户端名
+	MasterName       string   `json:"master_name" yaml:"master_name" ini:"master_name"` // 主节点
+	IndexDB          int      `json:"index_db" yaml:"index_db" ini:"index_db"`
+	MinIdleConns     int      `json:"min_idle_conns" yaml:"min_idle_conns" ini:"min_idle_conns"`
+	MaxIdleConns     int      `json:"max_idle_conns" yaml:"max_idle_conns" ini:"max_idle_conns"`
+	MaxActiveConns   int      `json:"max_active_conns" yaml:"max_active_conns" ini:"max_active_conns"`
+	MaxRetryTimes    int      `json:"max_retry_times" yaml:"max_retry_times" ini:"max_retry_times"`
+	SentinelUsername string   `json:"sentinel_username" yaml:"sentinel_username" ini:"sentinel_username"`
+	SentinelPassword string   `json:"sentinel_password" yaml:"sentinel_password" ini:"sentinel_password"`
 }
 
-func GetStringE(configName, key string) (string, error) {
-	v, err := GetE(configName, key)
+type Elasticsearch struct {
+	Endpoints []string `json:"endpoints" yaml:"endpoints" ini:"endpoints"`
+	Username  string   `json:"username" yaml:"username" ini:"username"`
+	Password  string   `json:"password" yaml:"password" ini:"password"`
+	IsHttps   bool     `json:"is_https" yaml:"is_https" ini:"is_https"`
+	CloudId   string   `json:"cloud_id" yaml:"cloud_id" ini:"cloud_id"`
+	APIKey    string   `json:"api_key" yaml:"api_key" ini:"api_key"`
+}
+
+type MongoConf struct {
+	Host            string `json:"host" yaml:"host" ini:"host"`
+	Port            int    `json:"port" yaml:"port" ini:"port"`
+	Username        string `json:"username" yaml:"username" ini:"username"`
+	Password        string `json:"password" yaml:"password" ini:"password"`
+	MaxPoolSize     int    `json:"max_pool_size" yaml:"max_pool_size" ini:"max_pool_size"`
+	ConnectTimeout  int    `json:"connect_timeout" yaml:"connect_timeout" ini:"connect_timeout"`
+	MaxConnIdleTime int    `json:"max_conn_idle_time" yaml:"max_conn_idle_time" ini:"max_conn_idle_time"`
+}
+
+type RabbitMQConf struct {
+	Host        string    `json:"host" yaml:"host" ini:"host"`
+	Port        int       `json:"port" yaml:"port" ini:"port"`
+	Username    string    `json:"username" yaml:"username" ini:"username"`
+	Password    string    `json:"password" yaml:"password" ini:"password"`
+	LimitSwitch bool      `json:"limit_switch" yaml:"limit_switch" ini:"limit_switch"`
+	LimitConf   LimitConf `json:"limit_conf" yaml:"limit_conf" ini:"limit_conf"`
+}
+
+type LimitConf struct {
+	AttemptTimes    int `json:"attempt_times" yaml:"attempt_times" ini:"attempt_times"`
+	RetryTimeSecond int `json:"retry_time_second" yaml:"retry_time_second" ini:"retry_time_second"`
+	PrefetchCount   int `json:"prefetch_count" yaml:"prefetch_count" ini:"prefetch_count"`
+	Timeout         int `json:"timeout" yaml:"timeout" ini:"timeout"`
+	QueueLimit      int `json:"queue_limit" yaml:"queue_limit" ini:"queue_limit"`
+}
+
+// Application 服务地址端口配置
+type Application struct {
+	Address string `json:"address" yaml:"address" ini:"address"`
+	Port    int    `json:"port" yaml:"port" ini:"port"`
+}
+
+type Config struct {
+	Debug       bool            `json:"debug" yaml:"debug" ini:"debug"`
+	Crypto      []*CryptoConfig `json:"crypto" yaml:"crypto" ini:"crypto"`
+	Application *Application    `json:"application" yaml:"application" ini:"application"`
+	Kafka       *KafkaConfig    `json:"kafka" yaml:"kafka" ini:"kafka"`
+	Database    *Database       `json:"database" yaml:"database" ini:"database"`
+	Rabbitmq    *RabbitMQConf   `json:"rabbitmq" yaml:"rabbitmq" ini:"rabbitmq"`
+	Redis       *RedisConfig    `json:"redis" yaml:"redis" ini:"redis"`
+	ES          *Elasticsearch  `json:"es" yaml:"es" ini:"es"`
+	Mongo       *MongoConf      `json:"mongo" yaml:"mongo" ini:"mongo"`
+}
+
+var applicationConfig = new(Config)
+
+func GetConfig() *Config {
+	return applicationConfig
+}
+
+func LoadConfigFromJson(configPath string) {
+	// 打开文件
+	file, _ := os.Open(configPath)
+	// 关闭文件
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			panic(err)
+		}
+	}(file)
+	//NewDecoder创建一个从file读取并解码json对象的*Decoder，解码器有自己的缓冲，并可能超前读取部分json数据。
+	decoder := decoder.NewStreamDecoder(file)
+	//Decode从输入流读取下一个json编码值并保存在v指向的值里
+	err := decoder.Decode(applicationConfig)
 	if err != nil {
-		return "", err
+		panic(err)
 	}
-	return cast.ToStringE(v)
+
 }
 
-func GetBool(configName, key string) bool {
-	return cast.ToBool(Get(configName, key))
-}
-
-func GetBoolE(configName, key string) (bool, error) {
-	v, err := GetE(configName, key)
+func LoadConfigFromIni(configPath string) {
+	err := ini.MapTo(applicationConfig, configPath)
 	if err != nil {
-		return false, err
+		panic(err)
 	}
-	return cast.ToBoolE(v)
 }
 
-func GetInt(configName, key string) int {
-	return cast.ToInt(Get(configName, key))
-}
-
-func GetIntE(configName, key string) (int, error) {
-	v, err := GetE(configName, key)
+func LoadConfigFromYaml(configPath string) {
+	file, err := os.ReadFile(configPath)
 	if err != nil {
-		return 0, err
+		panic(err)
 	}
-	return cast.ToIntE(v)
-}
-
-func GetIntSlice(configName, key string) []int {
-	return cast.ToIntSlice(Get(configName, key))
-}
-
-func GetIntSliceE(configName, key string) ([]int, error) {
-	v, err := GetE(configName, key)
+	err = yaml.Unmarshal(file, applicationConfig)
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
-	return cast.ToIntSliceE(v)
 }
 
-func GetStringSlice(configName, key string) []string {
-	return cast.ToStringSlice(Get(configName, key))
-}
-
-func GetStringSliceE(configName, key string) ([]string, error) {
-	v, err := GetE(configName, key)
+func LoadConfigFromToml(configPath string) {
+	_, err := toml.DecodeFile(configPath, applicationConfig)
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
-	return cast.ToStringSliceE(v)
 }
 
-func GetStringMap(configName, key string) map[string]interface{} {
-	return cast.ToStringMap(Get(configName, key))
-}
+func ParseConfigByViper(configPath, configName, configType string) {
+	v := viper.New()
+	v.AddConfigPath(configPath)
+	v.SetConfigName(configName)
+	v.SetConfigType(configType)
 
-func GetStringMapE(configName, key string) (map[string]interface{}, error) {
-	v, err := GetE(configName, key)
-	if err != nil {
-		return nil, err
+	if err := v.ReadInConfig(); err != nil {
+		panic(err)
 	}
-	return cast.ToStringMapE(v)
-}
-
-func GetStringMapString(configName, key string) map[string]string {
-	return cast.ToStringMapString(Get(configName, key))
-}
-
-func GetStringMapStringE(configName, key string) (map[string]string, error) {
-	v, err := GetE(configName, key)
-	if err != nil {
-		return nil, err
+	v.WatchConfig()
+	v.OnConfigChange(func(e fsnotify.Event) {
+		if err := v.ReadInConfig(); err != nil {
+			panic(err)
+		}
+	})
+	//直接反序列化为Struct
+	if err := v.Unmarshal(applicationConfig); err != nil {
+		panic(err)
 	}
-	return cast.ToStringMapStringE(v)
+	return
+}
+
+func init() {
+	var DefaultApplicationYamlConfigPath = "./conf/application.yaml"
+	var BakApplicationYamlConfigPath = "./conf/app.yaml"
+	var DefaultApplicationIniConfigPath = "./conf/application.ini"
+	var BakApplicationIniConfigPath = "./conf/app.ini"
+	var DefaultApplicationTomlConfigPath = "./conf/application.toml"
+	var BakApplicationTomlConfigPath = "./conf/app.toml"
+	// 读取服务配置文件
+	var configLoad bool
+	if !configLoad && utils.IsExist(DefaultApplicationYamlConfigPath) {
+		LoadConfigFromYaml(DefaultApplicationYamlConfigPath)
+		configLoad = true
+	}
+
+	if !configLoad && utils.IsExist(BakApplicationYamlConfigPath) {
+		LoadConfigFromYaml(BakApplicationYamlConfigPath)
+		configLoad = true
+	}
+
+	if !configLoad && utils.IsExist(BakApplicationIniConfigPath) {
+		LoadConfigFromIni(BakApplicationIniConfigPath)
+		configLoad = true
+	}
+
+	if !configLoad && utils.IsExist(DefaultApplicationIniConfigPath) {
+		LoadConfigFromIni(DefaultApplicationIniConfigPath)
+		configLoad = true
+	}
+
+	if !configLoad && utils.IsExist(DefaultApplicationTomlConfigPath) {
+		LoadConfigFromToml(DefaultApplicationTomlConfigPath)
+		configLoad = true
+	}
+
+	if !configLoad && utils.IsExist(BakApplicationTomlConfigPath) {
+		LoadConfigFromToml(BakApplicationTomlConfigPath)
+		configLoad = true
+	}
+
+	if !configLoad {
+		log.Printf("-- There is no application config.")
+	}
 }

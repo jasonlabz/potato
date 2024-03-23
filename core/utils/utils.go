@@ -184,9 +184,9 @@ func WalkDir(dirPth, suffix string) (files []string, err error) {
 	return files, err
 }
 
-// RandLow 随机字符串，包含 1~9 和 a~z - [i,l,o]
-func RandLow(n int) []byte {
-	r := rand.New(rand.NewSource(time.Now().Unix()))
+// RandLowercase 随机字符串，包含 1~9 和 a~z - [i,l,o]
+func RandLowercase(n int) []byte {
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	if n <= 0 {
 		return []byte{}
@@ -203,9 +203,9 @@ func RandLow(n int) []byte {
 	return b
 }
 
-// RandUp 随机字符串，包含 英文字母和数字附加=_两个符号
-func RandUp(n int) []byte {
-	r := rand.New(rand.NewSource(time.Now().Unix()))
+// RandUppercase 随机字符串，包含 英文字母和数字附加=_两个符号
+func RandUppercase(n int) []byte {
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	if n <= 0 {
 		return []byte{}
@@ -224,7 +224,7 @@ func RandUp(n int) []byte {
 
 // RandHex 生成16进制格式的随机字符串
 func RandHex(n int) []byte {
-	r := rand.New(rand.NewSource(time.Now().Unix()))
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	if n <= 0 {
 		return []byte{}
