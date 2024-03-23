@@ -17,7 +17,7 @@ import (
 	"github.com/elastic/go-elasticsearch/v8/typedapi/indices/create"
 	indicesget "github.com/elastic/go-elasticsearch/v8/typedapi/indices/get"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/types"
-	"github.com/jasonlabz/potato/core/config/application"
+	"github.com/jasonlabz/potato/core/config"
 	"github.com/jasonlabz/potato/log"
 )
 
@@ -28,7 +28,7 @@ func GetESOperator() *ElasticSearchOperator {
 }
 
 func init() {
-	appConf := application.GetConfig()
+	appConf := config.GetConfig()
 	if appConf.ES != nil && len(appConf.ES.Endpoints) > 0 {
 		err := InitElasticSearchOperator(&Config{
 			IsHttps:   appConf.ES.IsHttps,
