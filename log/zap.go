@@ -9,8 +9,8 @@ import (
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
 
-	"github.com/jasonlabz/potato/core/config"
-	"github.com/jasonlabz/potato/core/config/yaml"
+	"github.com/jasonlabz/potato/core/config/util"
+	"github.com/jasonlabz/potato/core/config/util/yaml"
 	"github.com/jasonlabz/potato/core/consts"
 	"github.com/jasonlabz/potato/core/times"
 	"github.com/jasonlabz/potato/core/utils"
@@ -84,19 +84,19 @@ func newLogger(opts ...Option) *loggerWrapper {
 	var configLoad bool
 	if !configLoad && options.configPath != "" && utils.IsExist(options.configPath) {
 		provider := yaml.NewConfigProvider(options.configPath)
-		config.AddProviders(DefaultZapConfigName, provider)
+		util.AddProviders(DefaultZapConfigName, provider)
 		configLoad = true
 	}
 
 	if !configLoad && utils.IsExist(consts.DefaultConfigPath) {
 		provider := yaml.NewConfigProvider(consts.DefaultConfigPath)
-		config.AddProviders(DefaultZapConfigName, provider)
+		util.AddProviders(DefaultZapConfigName, provider)
 		configLoad = true
 	}
 
 	if !configLoad && utils.IsExist(DefaultZapConfigPathBak) {
 		provider := yaml.NewConfigProvider(DefaultZapConfigPathBak)
-		config.AddProviders(DefaultZapConfigName, provider)
+		util.AddProviders(DefaultZapConfigName, provider)
 		configLoad = true
 	}
 
@@ -225,39 +225,39 @@ func loadConf(options *Options) {
 		compress:   false,
 	}
 
-	level := config.GetString(DefaultZapConfigName, "log.log_level")
+	level := util.GetString(DefaultZapConfigName, "log.log_level")
 	options.logLevel = utils.IsTrueOrNot(options.logLevel == "",
 		utils.IsTrueOrNot(level == "", defaultOptions.logLevel, level), options.logLevel)
 
-	logFormat := config.GetString(DefaultZapConfigName, "log.format")
+	logFormat := util.GetString(DefaultZapConfigName, "log.format")
 	options.logFormat = utils.IsTrueOrNot(options.logFormat == "",
 		utils.IsTrueOrNot(logFormat == "", defaultOptions.logFormat, logFormat), options.logFormat)
 
-	writeFile := config.GetBool(DefaultZapConfigName, "log.write_file")
+	writeFile := util.GetBool(DefaultZapConfigName, "log.write_file")
 	options.writeFile = utils.IsTrueOrNot(!options.writeFile,
 		utils.IsTrueOrNot(!writeFile, defaultOptions.writeFile, writeFile), options.writeFile)
 
-	basePath := config.GetString(DefaultZapConfigName, "log.log_file_conf.base_path")
+	basePath := util.GetString(DefaultZapConfigName, "log.log_file_conf.base_path")
 	options.basePath = utils.IsTrueOrNot(options.basePath == "",
 		utils.IsTrueOrNot(basePath == "", defaultOptions.basePath, basePath), options.basePath)
 
-	fileName := config.GetString(DefaultZapConfigName, "log.log_file_conf.file_name")
+	fileName := util.GetString(DefaultZapConfigName, "log.log_file_conf.file_name")
 	options.fileName = utils.IsTrueOrNot(options.fileName == "",
 		utils.IsTrueOrNot(fileName == "", defaultOptions.fileName, fileName), options.fileName)
 
-	maxSize := config.GetInt(DefaultZapConfigName, "log.log_file_conf.max_size")
+	maxSize := util.GetInt(DefaultZapConfigName, "log.log_file_conf.max_size")
 	options.maxSize = utils.IsTrueOrNot(options.maxSize == 0,
 		utils.IsTrueOrNot(maxSize == 0, defaultOptions.maxSize, maxSize), options.maxSize)
 
-	maxAge := config.GetInt(DefaultZapConfigName, "log.log_file_conf.max_age")
+	maxAge := util.GetInt(DefaultZapConfigName, "log.log_file_conf.max_age")
 	options.maxAge = utils.IsTrueOrNot(options.maxAge == 0,
 		utils.IsTrueOrNot(maxAge == 0, defaultOptions.maxAge, maxAge), options.maxAge)
 
-	maxBackups := config.GetInt(DefaultZapConfigName, "log.log_file_conf.max_backups")
+	maxBackups := util.GetInt(DefaultZapConfigName, "log.log_file_conf.max_backups")
 	options.maxBackups = utils.IsTrueOrNot(options.maxBackups == 0,
 		utils.IsTrueOrNot(maxBackups == 0, defaultOptions.maxBackups, maxBackups), options.maxBackups)
 
-	compress := config.GetBool(DefaultZapConfigName, "log.log_file_conf.compress")
+	compress := util.GetBool(DefaultZapConfigName, "log.log_file_conf.compress")
 	options.compress = utils.IsTrueOrNot(!options.compress,
 		utils.IsTrueOrNot(!compress, defaultOptions.compress, compress), options.compress)
 
