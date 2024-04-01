@@ -109,8 +109,25 @@ type LimitConf struct {
 
 // Application 服务地址端口配置
 type Application struct {
-	Address string `json:"address" yaml:"address" ini:"address"`
-	Port    int    `json:"port" yaml:"port" ini:"port"`
+	Address string   `json:"address" yaml:"address" ini:"address"`
+	Port    int      `json:"port" yaml:"port" ini:"port"`
+	Prom    PromConf `json:"prom" yaml:"prom" ini:"prom"`
+}
+
+// PromConf Prometheus 配置
+type PromConf struct {
+	Enable bool   `json:"enable" yaml:"enable" ini:"enable"` // Enable prometheus client
+	Path   string `json:"path" yaml:"path" ini:"path"`       // Default value is "metrics", set path as needed.
+	Pusher Pusher `json:"pusher" yaml:"pusher" ini:"pusher"` //推送到 pushgateway
+}
+
+// Pusher push to pushGateway 配置
+type Pusher struct {
+	Enable     bool   `json:"enable" yaml:"enable" ini:"enable"`                // Enable backend job push metrics to remote pushgateway
+	jobName    string `json:"job_name" yaml:"job_name" ini:"job_name"`          // Name of current push job
+	RemoteAddr string `json:"remote_addr" yaml:"remote_addr" ini:"remote_addr"` // Remote address of pushgateway
+	IntervalMs int    `json:"IntervalMs" yaml:"IntervalMs" ini:"IntervalMs"`    // Push interval in milliseconds
+	BasicAuth  string `json:"basic_auth" yaml:"basic_auth" ini:"basic_auth"`    // Basic auth of pushgateway
 }
 
 type Config struct {
