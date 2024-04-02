@@ -112,6 +112,7 @@ type Application struct {
 	Address string   `json:"address" yaml:"address" ini:"address"`
 	Port    int      `json:"port" yaml:"port" ini:"port"`
 	Prom    PromConf `json:"prom" yaml:"prom" ini:"prom"`
+	PProf   PProf    `json:"pprof" yaml:"pprof" ini:"pprof"`
 }
 
 // PromConf Prometheus 配置
@@ -119,6 +120,12 @@ type PromConf struct {
 	Enable bool   `json:"enable" yaml:"enable" ini:"enable"` // Enable prometheus client
 	Path   string `json:"path" yaml:"path" ini:"path"`       // Default value is "metrics", set path as needed.
 	Pusher Pusher `json:"pusher" yaml:"pusher" ini:"pusher"` //推送到 pushgateway
+}
+
+// PProf 配置pprof
+type PProf struct {
+	Enable bool `json:"enable" yaml:"enable" ini:"enable"` // Enable prometheus client
+	Port   int  `json:"port" yaml:"port" ini:"port"`
 }
 
 // Pusher push to pushGateway 配置
