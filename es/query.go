@@ -136,7 +136,7 @@ GET /{索引名}/_search
 	}
 */
 func (q *XQuery) QueryTerms(field string, values []any) *XQuery {
-	queryStr := fmt.Sprintf(`"%s":%s`, field, utils.GetString(values))
+	queryStr := fmt.Sprintf(`"%s":%s`, field, utils.StringValue(values))
 	err := q.Query.UnmarshalJSON([]byte(fmt.Sprintf(`{"query": {"term": {%s}}}`, queryStr)))
 	if err != nil {
 		log.DefaultLogger().WithError(err).Error("set query terms failure")
@@ -145,7 +145,7 @@ func (q *XQuery) QueryTerms(field string, values []any) *XQuery {
 }
 
 func (q *XQuery) QueryTermsBoost(field string, values []any, boost float32) *XQuery {
-	queryStr := fmt.Sprintf(`"%s":%s`, field, utils.GetString(values))
+	queryStr := fmt.Sprintf(`"%s":%s`, field, utils.StringValue(values))
 	err := q.Query.UnmarshalJSON([]byte(fmt.Sprintf(`{"query": {"term": {%s}}}`, queryStr)))
 	if err != nil {
 		log.DefaultLogger().WithError(err).Error("set query terms failure")

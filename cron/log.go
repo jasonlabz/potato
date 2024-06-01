@@ -37,14 +37,14 @@ func checkFields(fields []any) (checked []zap.Field) {
 	}
 
 	if len(fields) == 1 {
-		checked = append(checked, zap.Any("log_field", utils.GetString(fields[0])))
+		checked = append(checked, zap.Any("log_field", utils.StringValue(fields[0])))
 		return
 	}
 
 	for i := 0; i < len(fields)-1; {
-		checked = append(checked, zap.Any(utils.GetString(fields[i]), utils.GetString(fields[i+1])))
+		checked = append(checked, zap.Any(utils.StringValue(fields[i]), utils.StringValue(fields[i+1])))
 		if i == len(fields)-3 {
-			checked = append(checked, zap.Any("log_field", utils.GetString(fields[i+2])))
+			checked = append(checked, zap.Any("log_field", utils.StringValue(fields[i+2])))
 		}
 		i += 2
 	}

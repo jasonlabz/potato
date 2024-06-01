@@ -38,7 +38,7 @@ func (bl BodyLog) WriteHeader(statusCode int) {
 
 func RequestMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		traceID := utils.GetString(c.Value(consts.ContextTraceID))
+		traceID := utils.StringValue(c.Value(consts.ContextTraceID))
 		if traceID != "" {
 			c.Writer.Header().Set(consts.HeaderRequestID, traceID)
 		}

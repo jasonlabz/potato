@@ -8,7 +8,6 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -18,40 +17,6 @@ import (
 
 var letters = []byte("abcdefghjkmnpqrstuvwxyz123456789")
 var longLetters = []byte("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ=_")
-
-func GetString(key any) string {
-	switch key.(type) {
-	case nil:
-		return ""
-	case string:
-		return key.(string)
-	case int:
-		return strconv.Itoa(key.(int))
-	case int8:
-		return strconv.Itoa(int(key.(int8)))
-	case int32:
-		return strconv.Itoa(int(key.(int32)))
-	case int64:
-		return strconv.FormatInt(key.(int64), 10)
-	case float32:
-		return strconv.FormatFloat(float64(key.(float32)), 'E', -1, 32)
-	case float64:
-		return strconv.FormatFloat(key.(float64), 'E', -1, 64)
-	case bool:
-		return strconv.FormatBool(key.(bool))
-	case []byte:
-		resByte := key.([]byte)
-		return string(resByte)
-	case time.Time:
-		return key.(time.Time).String()
-	default:
-		bytes, err := sonic.Marshal(key)
-		if err != nil {
-			return ""
-		}
-		return string(bytes)
-	}
-}
 
 // JSONMarshal json序列化
 func JSONMarshal(data interface{}) string {
