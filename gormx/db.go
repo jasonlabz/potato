@@ -6,8 +6,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jasonlabz/oracle"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
+	"gorm.io/driver/sqlite"
 	"gorm.io/driver/sqlserver"
 	"gorm.io/gorm"
 	gormLogger "gorm.io/gorm/logger"
@@ -59,13 +61,21 @@ func InitConfig(config *Config) error {
 	if config == nil {
 		return errors.New("no db config")
 	}
-	if config.DBName == "" {
-		return errors.New("no db name")
-	}
+
 	if config.DSN == "" &&
 		config.GenDSN() == "" {
 		return errors.New("no db dsn")
 	}
+
+	if config.DBName == "" {
+		config.DBName = config.GenDSN()
+	}
+
+	_, ok := dbMap.Load(config.DBName)
+	if ok {
+		return nil
+	}
+
 	var dialect gorm.Dialector
 	switch config.DBType {
 	case DatabaseTypeMySQL:
@@ -74,19 +84,21 @@ func InitConfig(config *Config) error {
 		dialect = postgres.Open(config.DSN)
 	case DatabaseTypeSqlserver:
 		dialect = sqlserver.Open(config.DSN)
+	case DatabaseTypeOracle:
+		dialect = oracle.Open(config.DSN)
+	case DatabaseTypeSQLite:
+		dialect = sqlite.Open(config.DSN)
 	default:
 		return errors.New(fmt.Sprintf("unsupported dbType: %s", string(config.DBType)))
 	}
-	_, ok := dbMap.Load(config.DBName)
-	if ok {
-		return nil
-	}
+
 	db, err := gorm.Open(dialect, &gorm.Config{
 		Logger: dbLogger.LogMode(config.GetLogMode()),
 	})
 	if err != nil {
 		return err
 	}
+
 	sqlDB, err := db.DB()
 	if err != nil {
 		return err
@@ -103,6 +115,7 @@ func InitConfig(config *Config) error {
 	sqlDB.SetMaxOpenConns(config.MaxOpenConn)
 	sqlDB.SetMaxIdleConns(config.MaxIdleConn)
 	sqlDB.SetConnMaxLifetime(config.ConnMaxLifeTime)
+
 	// Store database
 	dbMap.Store(config.DBName, db)
 	return nil
@@ -143,7 +156,7 @@ func SetMockMode(flag bool) {
 }
 
 func IsErrNoRows(err error) bool {
-	return err == gorm.ErrRecordNotFound
+	return errors.Is(err, gorm.ErrRecordNotFound)
 }
 
 // Close close database
