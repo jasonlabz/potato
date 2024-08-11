@@ -46,7 +46,7 @@ type Database struct {
 	LogMode         string `json:"log_mode" yaml:"log_mode" ini:"log_mode"`
 	Host            string `json:"host" yaml:"host" ini:"host"`
 	Port            int    `json:"port" yaml:"port" ini:"port"`
-	Database        string `json:"database" yaml:"database" ini:"database"`
+	DBName          string `json:"db_name" yaml:"db_name" ini:"db_name"`
 	Username        string `json:"username" yaml:"username" ini:"username"`
 	Password        string `json:"password" yaml:"password" ini:"password"`
 	Charset         string `json:"charset" yaml:"charset" ini:"charset"`
