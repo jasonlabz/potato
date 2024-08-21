@@ -7,6 +7,21 @@ import (
 	"github.com/spf13/cast"
 )
 
+type ConfigType string
+
+const (
+	JSONTYPE       = "json"
+	TOMLTYPE       = "toml"
+	YAMLTYPE       = "yaml"
+	YMLTYPE        = "yml"
+	PROPERTIESTYPE = "properties"
+	PROPSTYPE      = "props"
+	PROPTYPE       = "prop"
+	ENVTYPE        = "env"
+	DOTENVTYPE     = "dotenv"
+	INITYPE        = "ini"
+)
+
 // IProvider Configuration Provider interface
 type IProvider interface {
 	// Get 获取配置信息

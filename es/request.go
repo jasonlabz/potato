@@ -7,8 +7,8 @@ import (
 	"github.com/elastic/go-elasticsearch/v8/typedapi/core/search"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/types"
 
-	"github.com/jasonlabz/potato/core/utils"
 	"github.com/jasonlabz/potato/log"
+	"github.com/jasonlabz/potato/utils"
 )
 
 type XRequest struct {

@@ -2,10 +2,12 @@ package middleware
 
 import (
 	"fmt"
-	"github.com/gin-gonic/gin"
-	"github.com/jasonlabz/potato/core/consts"
-	"github.com/jasonlabz/potato/jwtx"
 	"net/http"
+
+	"github.com/gin-gonic/gin"
+
+	"github.com/jasonlabz/potato/consts"
+	"github.com/jasonlabz/potato/jwtx"
 )
 
 func AuthCheck() gin.HandlerFunc {

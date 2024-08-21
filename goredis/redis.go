@@ -8,7 +8,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/jasonlabz/potato/core/config"
+	"github.com/jasonlabz/potato/config"
 )
 
 type RedisMode string

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jasonlabz/potato/core/times"
-	"github.com/jasonlabz/potato/core/utils"
+	"github.com/jasonlabz/potato/times"
+	"github.com/jasonlabz/potato/utils"
 )
 
 type CronTaskBuilder struct {

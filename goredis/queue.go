@@ -12,8 +12,8 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/jasonlabz/potato/core/times"
 	"github.com/jasonlabz/potato/log"
+	"github.com/jasonlabz/potato/times"
 )
 
 const (

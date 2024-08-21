@@ -6,7 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/jasonlabz/potato/core/consts"
+	"github.com/jasonlabz/potato/consts"
 )
 
 type Options struct {

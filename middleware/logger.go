@@ -9,9 +9,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/jasonlabz/potato/core/consts"
-	"github.com/jasonlabz/potato/core/utils"
+	"github.com/jasonlabz/potato/consts"
 	"github.com/jasonlabz/potato/log"
+	"github.com/jasonlabz/potato/utils"
 )
 
 const (

@@ -9,21 +9,31 @@ import (
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
 
-	"github.com/jasonlabz/potato/core/config/util"
-	"github.com/jasonlabz/potato/core/config/util/yaml"
-	"github.com/jasonlabz/potato/core/consts"
-	"github.com/jasonlabz/potato/core/times"
-	"github.com/jasonlabz/potato/core/utils"
+	"github.com/jasonlabz/potato/config/util"
+	"github.com/jasonlabz/potato/config/util/yaml"
+	"github.com/jasonlabz/potato/consts"
+	"github.com/jasonlabz/potato/times"
+	"github.com/jasonlabz/potato/utils"
 )
 
 var (
-	DefaultZapConfigName    = "default_zap_config"
-	DefaultZapConfigPathBak = "./conf/logger.yaml"
+	DefaultZapConfigName  = "default_zap_config"
+	DefaultZapConfigPaths = []string{
+		"./conf/logger.yaml",
+		"./conf/app.yaml",
+		"./conf/application.yaml",
+		"./conf/zap.yaml",
+		"./logger.yaml",
+		"./app.yaml",
+		"./application.yaml",
+		"./zap.yaml",
+	}
 )
 
 type Options struct {
 	writeFile  bool
 	logFormat  string
+	name       string   // 应用名
 	configPath string   // 日志配置文件
 	keyList    []string // 自定义context中需要打印的Field字段
 	logLevel   string   // 日志级别
@@ -37,6 +47,11 @@ type Options struct {
 
 type Option func(o *Options)
 
+func WithName(name string) Option {
+	return func(o *Options) {
+		o.name = name
+	}
+}
 func WithLevel(level string) Option {
 	return func(o *Options) {
 		o.logLevel = level
@@ -73,7 +88,7 @@ func WithConfigPath(path string) Option {
 	}
 }
 
-func newLogger(opts ...Option) *loggerWrapper {
+func NewLogger(opts ...Option) *LoggerWrapper {
 	options := &Options{}
 
 	for _, opt := range opts {
@@ -88,16 +103,15 @@ func newLogger(opts ...Option) *loggerWrapper {
 		configLoad = true
 	}
 
-	if !configLoad && utils.IsExist(consts.DefaultConfigPath) {
-		provider := yaml.NewConfigProvider(consts.DefaultConfigPath)
-		util.AddProviders(DefaultZapConfigName, provider)
-		configLoad = true
-	}
-
-	if !configLoad && utils.IsExist(DefaultZapConfigPathBak) {
-		provider := yaml.NewConfigProvider(DefaultZapConfigPathBak)
-		util.AddProviders(DefaultZapConfigName, provider)
-		configLoad = true
+	for _, confPath := range DefaultZapConfigPaths {
+		if configLoad {
+			break
+		}
+		if utils.IsExist(confPath) {
+			provider := yaml.NewConfigProvider(confPath)
+			util.AddProviders(DefaultZapConfigName, provider)
+			configLoad = true
+		}
 	}
 
 	if !configLoad {
@@ -161,7 +175,7 @@ func newLogger(opts ...Option) *loggerWrapper {
 	//生成logger
 	zapLogger := zap.New(zapcore.NewTee(coreArr...), zap.AddCaller(), zap.AddCallerSkip(1)) //zap.AddCaller() 显示文件名 和 行号
 
-	return &loggerWrapper{
+	return &LoggerWrapper{
 		logger:   zapLogger,
 		logField: options.keyList,
 	}
@@ -172,7 +186,7 @@ func getEncoder(options *Options) zapcore.Encoder {
 	//自定义编码配置
 	encoderConfig := zap.NewProductionEncoderConfig()
 	//encoderConfig := zap.NewDevelopmentEncoderConfig()
-	encoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout(times.MicroTimeFormat) //指定时间格式
+	encoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout(times.MilliTimeFormat) //指定时间格式
 	encoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder                       //在日志文件中使用大写字母记录日志级别
 	//encoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder //按级别显示不同颜色，不需要的话取值zapcore.CapitalLevelEncoder就可以了
 	encoderConfig.EncodeCaller = zapcore.ShortCallerEncoder //显示短文件路径
@@ -214,8 +228,8 @@ func loadConf(options *Options) {
 	defaultOptions := Options{
 		writeFile:  false,
 		logFormat:  "console",
-		configPath: "./conf/app.yaml",
-		keyList:    []string{consts.ContextTraceID, consts.ContextUserID},
+		configPath: "./conf/logger.yaml",
+		keyList:    []string{consts.ContextLOGID, consts.ContextTraceID, consts.ContextUserID},
 		logLevel:   "info",
 		basePath:   "./log",
 		fileName:   "app.log",
@@ -263,5 +277,9 @@ func loadConf(options *Options) {
 
 	if len(options.keyList) == 0 {
 		options.keyList = defaultOptions.keyList
+	}
+
+	if options.name != "" {
+		options.basePath = filepath.Join(options.basePath, options.name)
 	}
 }

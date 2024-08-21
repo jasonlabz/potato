@@ -18,10 +18,10 @@ import (
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 
-	"github.com/jasonlabz/potato/core/config"
-	"github.com/jasonlabz/potato/core/times"
-	"github.com/jasonlabz/potato/core/utils"
+	"github.com/jasonlabz/potato/config"
 	"github.com/jasonlabz/potato/log"
+	"github.com/jasonlabz/potato/times"
+	"github.com/jasonlabz/potato/utils"
 )
 
 var operator *RabbitMQOperator

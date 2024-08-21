@@ -5,98 +5,97 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/jasonlabz/potato/utils"
 	"go.uber.org/zap"
-
-	"github.com/jasonlabz/potato/core/utils"
 )
 
-type loggerWrapper struct {
+type LoggerWrapper struct {
 	logField []string
 	logger   *zap.Logger
 }
 
-var defaultLogger *loggerWrapper
+var defaultLogger *LoggerWrapper
 var once sync.Once
 
 func init() {
 	once.Do(func() {
-		defaultLogger = newLogger()
+		defaultLogger = NewLogger()
 	})
 	if defaultLogger == nil {
 		panic("init logger fail!")
 	}
 }
 
-func DefaultLogger(opts ...zap.Option) *loggerWrapper {
+func DefaultLogger(opts ...zap.Option) *LoggerWrapper {
 	if len(opts) > 0 {
 		return defaultLogger.WithOptions(opts...)
 	}
 	return defaultLogger
 }
 
-func GetLogger(ctx context.Context, opts ...zap.Option) *loggerWrapper {
+func GetLogger(ctx context.Context, opts ...zap.Option) *LoggerWrapper {
 	return utils.IsTrueOrNot(len(opts) > 0,
-		&loggerWrapper{logger: defaultLogger.logger.WithOptions(opts...).With(zapField(ctx, defaultLogger.logField...)...)},
-		&loggerWrapper{logger: defaultLogger.logger.With(zapField(ctx, defaultLogger.logField...)...)},
+		&LoggerWrapper{logger: defaultLogger.logger.WithOptions(opts...).With(zapField(ctx, defaultLogger.logField...)...)},
+		&LoggerWrapper{logger: defaultLogger.logger.With(zapField(ctx, defaultLogger.logField...)...)},
 	)
 }
 
-func GormLogger(ctx context.Context, opts ...zap.Option) *loggerWrapper {
+func GormLogger(ctx context.Context, opts ...zap.Option) *LoggerWrapper {
 	return utils.IsTrueOrNot(len(opts) > 0,
-		&loggerWrapper{logger: defaultLogger.logger.WithOptions(opts...).WithOptions(zap.AddCallerSkip(3)).With(zapField(ctx, defaultLogger.logField...)...)},
-		&loggerWrapper{logger: defaultLogger.logger.WithOptions(zap.AddCallerSkip(3)).With(zapField(ctx, defaultLogger.logField...)...)},
+		&LoggerWrapper{logger: defaultLogger.logger.WithOptions(opts...).WithOptions(zap.AddCallerSkip(3)).With(zapField(ctx, defaultLogger.logField...)...)},
+		&LoggerWrapper{logger: defaultLogger.logger.WithOptions(zap.AddCallerSkip(3)).With(zapField(ctx, defaultLogger.logField...)...)},
 	)
 }
 
-func (l *loggerWrapper) WithError(err error) *loggerWrapper {
+func (l *LoggerWrapper) WithError(err error) *LoggerWrapper {
 	l.logger = l.logger.With(zap.Error(err))
 	return l
 }
 
-func (l *loggerWrapper) WithOptions(opt ...zap.Option) *loggerWrapper {
+func (l *LoggerWrapper) WithOptions(opt ...zap.Option) *LoggerWrapper {
 	l.logger = l.logger.WithOptions(opt...)
 	return l
 }
 
-func (l *loggerWrapper) WithField(fields ...zap.Field) *loggerWrapper {
+func (l *LoggerWrapper) WithField(fields ...zap.Field) *LoggerWrapper {
 	l.logger = l.logger.With(fields...)
 	return l
 }
 
-func (l *loggerWrapper) WithAny(fields ...any) *loggerWrapper {
+func (l *LoggerWrapper) WithAny(fields ...any) *LoggerWrapper {
 	l.logger = l.logger.With(l.checkFields(fields)...)
 	return l
 }
 
-func (l *loggerWrapper) Debug(msg string, args ...any) {
+func (l *LoggerWrapper) Debug(msg string, args ...any) {
 	l.logger.Debug(getMessage(msg, args))
 }
 
-func (l *loggerWrapper) Info(msg string, args ...any) {
+func (l *LoggerWrapper) Info(msg string, args ...any) {
 	l.logger.Info(getMessage(msg, args))
 }
 
-func (l *loggerWrapper) Warn(msg string, args ...any) {
+func (l *LoggerWrapper) Warn(msg string, args ...any) {
 	l.logger.Warn(getMessage(msg, args))
 }
 
-func (l *loggerWrapper) Error(msg string, args ...any) {
+func (l *LoggerWrapper) Error(msg string, args ...any) {
 	l.logger.Error(getMessage(msg, args))
 }
 
-func (l *loggerWrapper) Panic(msg string, args ...any) {
+func (l *LoggerWrapper) Panic(msg string, args ...any) {
 	l.logger.Panic(getMessage(msg, args))
 }
 
-func (l *loggerWrapper) Fatal(msg string, args ...any) {
+func (l *LoggerWrapper) Fatal(msg string, args ...any) {
 	l.logger.Fatal(getMessage(msg, args))
 }
 
-func (l *loggerWrapper) Sync() {
+func (l *LoggerWrapper) Sync() {
 	_ = l.logger.Sync()
 }
 
-func (l *loggerWrapper) checkFields(fields []any) (checked []zap.Field) {
+func (l *LoggerWrapper) checkFields(fields []any) (checked []zap.Field) {
 	checked = make([]zap.Field, 0)
 
 	if len(fields) == 0 {

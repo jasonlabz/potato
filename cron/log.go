@@ -3,8 +3,8 @@ package xcron
 import (
 	"go.uber.org/zap"
 
-	"github.com/jasonlabz/potato/core/utils"
 	"github.com/jasonlabz/potato/log"
+	"github.com/jasonlabz/potato/utils"
 )
 
 var defaultLogger cronLogger = cronLogger{}

@@ -1,15 +1,17 @@
 package kube
 
 import (
-	"github.com/jasonlabz/potato/core/utils"
-	"github.com/jasonlabz/potato/log"
+	"os"
+	"path/filepath"
+
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
-	"os"
-	"path/filepath"
+
+	"github.com/jasonlabz/potato/log"
+	"github.com/jasonlabz/potato/utils"
 )
 
 var client *kubernetes.Clientset

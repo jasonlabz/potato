@@ -1,11 +1,13 @@
-package yaml
+package file
 
 import (
-	"github.com/jasonlabz/potato/core/config/util"
 	"github.com/spf13/viper"
+
+	"github.com/jasonlabz/potato/config/util"
 )
 
-// ConfigProvider YAML configuration provider
+// ConfigProvider file configuration provider
+// support type: "json", "toml", "yaml", "yml", "properties", "props", "prop", "hcl", "tfvars", "dotenv", "env", "ini"
 type ConfigProvider struct {
 	filePath string // configuration file path
 	viper    *viper.Viper

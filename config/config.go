@@ -11,7 +11,7 @@ import (
 	"gopkg.in/ini.v1"
 	"gopkg.in/yaml.v3"
 
-	"github.com/jasonlabz/potato/core/utils"
+	"github.com/jasonlabz/potato/utils"
 )
 
 type CryptoType string

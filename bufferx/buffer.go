@@ -9,7 +9,6 @@ import (
 // BufferPool bytes.Buffer 的 sync.Pool 接口
 // 可以直接 Get *bytes.Buffer 并 Reset Buffer
 type BufferPool interface {
-
 	// Get 从 Pool 中获取一个 *bytes.Buffer 实例, 该实例已经被 Reset
 	Get() *bytes.Buffer
 	// Put 把 *bytes.Buffer 放回 Pool 中

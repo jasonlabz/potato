@@ -3,7 +3,7 @@ package utils
 import (
 	"strconv"
 
-	"github.com/jasonlabz/potato/core/bufferx"
+	"github.com/jasonlabz/potato/bufferx"
 )
 
 var buffPool = bufferx.GetBuff64()

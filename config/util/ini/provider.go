@@ -5,7 +5,7 @@ import (
 
 	"gopkg.in/ini.v1"
 
-	"github.com/jasonlabz/potato/core/config/util"
+	"github.com/jasonlabz/potato/config/util"
 )
 
 // ConfigProvider YAML configuration provider
