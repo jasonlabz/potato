@@ -242,7 +242,9 @@ func init() {
 		err := file.ParseConfigByViper(config, applicationConfig)
 		if err != nil {
 			log.Printf(fmt.Sprintf("[init] -- failed to read config file: %s, err:%v", config, err))
+			continue
 		}
+		configLoad = true
 	}
 
 	if !configLoad {
