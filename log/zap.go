@@ -1,6 +1,7 @@
 package log
 
 import (
+	"github.com/jasonlabz/potato/configx"
 	"log"
 	"os"
 	"path/filepath"
@@ -9,16 +10,15 @@ import (
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
 
-	"github.com/jasonlabz/potato/config/util"
-	"github.com/jasonlabz/potato/config/util/yaml"
+	"github.com/jasonlabz/potato/configx/file"
 	"github.com/jasonlabz/potato/consts"
 	"github.com/jasonlabz/potato/times"
 	"github.com/jasonlabz/potato/utils"
 )
 
 var (
-	DefaultZapConfigName  = "default_zap_config"
-	DefaultZapConfigPaths = []string{
+	defaultZapConfigName  = "default_zap_config"
+	defaultZapConfigPaths = []string{
 		"./conf/logger.yaml",
 		"./conf/app.yaml",
 		"./conf/application.yaml",
@@ -98,18 +98,27 @@ func NewLogger(opts ...Option) *LoggerWrapper {
 	// 读取zap配置文件
 	var configLoad bool
 	if !configLoad && options.configPath != "" && utils.IsExist(options.configPath) {
-		provider := yaml.NewConfigProvider(options.configPath)
-		util.AddProviders(DefaultZapConfigName, provider)
-		configLoad = true
+		provider, err := file.NewConfigProvider(options.configPath)
+		if err != nil {
+			log.Printf("init logger {%s} err: %v", options.configPath, err)
+			configLoad = false
+		} else {
+			configx.AddProviders(defaultZapConfigName, provider)
+			configLoad = true
+		}
 	}
 
-	for _, confPath := range DefaultZapConfigPaths {
+	for _, confPath := range defaultZapConfigPaths {
 		if configLoad {
 			break
 		}
 		if utils.IsExist(confPath) {
-			provider := yaml.NewConfigProvider(confPath)
-			util.AddProviders(DefaultZapConfigName, provider)
+			provider, err := file.NewConfigProvider(confPath)
+			if err != nil {
+				log.Printf("init logger {%s} err: %v", confPath, err)
+				continue
+			}
+			configx.AddProviders(defaultZapConfigName, provider)
 			configLoad = true
 		}
 	}
@@ -239,39 +248,39 @@ func loadConf(options *Options) {
 		compress:   false,
 	}
 
-	level := util.GetString(DefaultZapConfigName, "log.log_level")
+	level := configx.GetString(defaultZapConfigName, "log.log_level")
 	options.logLevel = utils.IsTrueOrNot(options.logLevel == "",
 		utils.IsTrueOrNot(level == "", defaultOptions.logLevel, level), options.logLevel)
 
-	logFormat := util.GetString(DefaultZapConfigName, "log.format")
+	logFormat := configx.GetString(defaultZapConfigName, "log.format")
 	options.logFormat = utils.IsTrueOrNot(options.logFormat == "",
 		utils.IsTrueOrNot(logFormat == "", defaultOptions.logFormat, logFormat), options.logFormat)
 
-	writeFile := util.GetBool(DefaultZapConfigName, "log.write_file")
+	writeFile := configx.GetBool(defaultZapConfigName, "log.write_file")
 	options.writeFile = utils.IsTrueOrNot(!options.writeFile,
 		utils.IsTrueOrNot(!writeFile, defaultOptions.writeFile, writeFile), options.writeFile)
 
-	basePath := util.GetString(DefaultZapConfigName, "log.log_file_conf.base_path")
+	basePath := configx.GetString(defaultZapConfigName, "log.log_file_conf.base_path")
 	options.basePath = utils.IsTrueOrNot(options.basePath == "",
 		utils.IsTrueOrNot(basePath == "", defaultOptions.basePath, basePath), options.basePath)
 
-	fileName := util.GetString(DefaultZapConfigName, "log.log_file_conf.file_name")
+	fileName := configx.GetString(defaultZapConfigName, "log.log_file_conf.file_name")
 	options.fileName = utils.IsTrueOrNot(options.fileName == "",
 		utils.IsTrueOrNot(fileName == "", defaultOptions.fileName, fileName), options.fileName)
 
-	maxSize := util.GetInt(DefaultZapConfigName, "log.log_file_conf.max_size")
+	maxSize := configx.GetInt(defaultZapConfigName, "log.log_file_conf.max_size")
 	options.maxSize = utils.IsTrueOrNot(options.maxSize == 0,
 		utils.IsTrueOrNot(maxSize == 0, defaultOptions.maxSize, maxSize), options.maxSize)
 
-	maxAge := util.GetInt(DefaultZapConfigName, "log.log_file_conf.max_age")
+	maxAge := configx.GetInt(defaultZapConfigName, "log.log_file_conf.max_age")
 	options.maxAge = utils.IsTrueOrNot(options.maxAge == 0,
 		utils.IsTrueOrNot(maxAge == 0, defaultOptions.maxAge, maxAge), options.maxAge)
 
-	maxBackups := util.GetInt(DefaultZapConfigName, "log.log_file_conf.max_backups")
+	maxBackups := configx.GetInt(defaultZapConfigName, "log.log_file_conf.max_backups")
 	options.maxBackups = utils.IsTrueOrNot(options.maxBackups == 0,
 		utils.IsTrueOrNot(maxBackups == 0, defaultOptions.maxBackups, maxBackups), options.maxBackups)
 
-	compress := util.GetBool(DefaultZapConfigName, "log.log_file_conf.compress")
+	compress := configx.GetBool(defaultZapConfigName, "log.log_file_conf.compress")
 	options.compress = utils.IsTrueOrNot(!options.compress,
 		utils.IsTrueOrNot(!compress, defaultOptions.compress, compress), options.compress)
 

@@ -8,7 +8,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/jasonlabz/potato/config"
+	"github.com/jasonlabz/potato/configx"
 )
 
 type RedisMode string
@@ -41,8 +41,8 @@ type Config struct {
 }
 
 func init() {
-	config := config.GetConfig()
-	if config.Redis != nil && len(config.Redis.Endpoints) > 0 {
+	config := configx.GetConfig()
+	if len(config.Redis.Endpoints) > 0 {
 		InitRedisClient(&Config{
 			ClientName:       config.Redis.ClientName,
 			MasterName:       config.Redis.MasterName,

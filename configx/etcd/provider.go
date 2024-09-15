@@ -3,7 +3,7 @@ package yaml
 import (
 	"github.com/spf13/viper"
 
-	"github.com/jasonlabz/potato/config/util"
+	"github.com/jasonlabz/potato/configx/util"
 )
 
 // ConfigProvider ETCD configuration provider

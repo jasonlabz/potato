@@ -18,7 +18,7 @@ import (
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
 
-	"github.com/jasonlabz/potato/config"
+	"github.com/jasonlabz/potato/configx"
 	"github.com/jasonlabz/potato/log"
 	"github.com/jasonlabz/potato/times"
 	"github.com/jasonlabz/potato/utils"
@@ -31,8 +31,8 @@ func GetRabbitMQOperator() *RabbitMQOperator {
 }
 
 func init() {
-	appConf := config.GetConfig()
-	if appConf.Rabbitmq != nil && len(appConf.Rabbitmq.Host) > 0 {
+	appConf := configx.GetConfig()
+	if len(appConf.Rabbitmq.Host) > 0 {
 		mqConf := &MQConfig{}
 		err := utils.CopyStruct(appConf.Rabbitmq, mqConf)
 		if err != nil {
