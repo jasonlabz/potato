@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	requestBodyMaxLen = 20480
+	requestBodyMaxLen = 4096
 )
 
 type BodyLog struct {
@@ -44,28 +44,16 @@ func RequestMiddleware() gin.HandlerFunc {
 		}
 
 		var requestBodyBytes []byte
-		var requestBodyLogBytes []byte
 		if c.Request.Body != nil {
 			requestBodyBytes, _ = io.ReadAll(c.Request.Body)
 		}
-		c.Request.Body = io.NopCloser(bytes.NewBuffer(requestBodyBytes))
+		//c.Request.Body = io.NopCloser(bytes.NewBuffer(requestBodyBytes))
 		bodyLog := &BodyLog{body: bytes.NewBufferString(""), ResponseWriter: c.Writer}
 		c.Writer = bodyLog
 
-		maxLen := len(requestBodyBytes)
-		if maxLen > requestBodyMaxLen {
-			maxLen = requestBodyMaxLen
-		}
-		requestBodyLogBytes = make([]byte, maxLen)
-		copy(requestBodyLogBytes, requestBodyBytes)
-		if maxLen < len(requestBodyBytes) {
-			requestBodyLogBytes = append(requestBodyLogBytes, []byte("......")...)
-		}
-
-		logger := log.GetLogger(c)
 		start := time.Now() // Start timer
-		logger.WithField(log.String("agent", c.Request.UserAgent()),
-			log.String("body", string(requestBodyLogBytes)),
+		log.GetLogger(c).WithField(log.String("agent", c.Request.UserAgent()),
+			log.String("body", string(logBytes(requestBodyBytes, requestBodyMaxLen))),
 			log.String("client_ip", c.ClientIP()),
 			log.String("method", c.Request.Method),
 			log.String("path", c.Request.URL.Path)).
@@ -73,11 +61,25 @@ func RequestMiddleware() gin.HandlerFunc {
 
 		c.Next()
 
-		logger.WithField(log.Int("status_code", c.Writer.Status()),
+		log.GetLogger(c).WithField(log.Int("status_code", c.Writer.Status()),
 			log.String("error_message", c.Errors.ByType(gin.ErrorTypePrivate).String()),
-			log.String("body", bodyLog.body.String()),
+			log.String("body", string(logBytes(bodyLog.body.Bytes(), requestBodyMaxLen))),
 			log.String("path", c.Request.URL.Path),
 			log.String("cost", fmt.Sprintf("%dms", time.Now().Sub(start).Milliseconds()))).
 			Info("	[GIN] response")
 	}
+}
+
+func logBytes(src []byte, maxLen int) []byte {
+	srcLen := len(src)
+	length := srcLen
+	if srcLen > maxLen {
+		length = maxLen
+	}
+	requestBodyLogBytes := make([]byte, length)
+	copy(requestBodyLogBytes, src)
+	if length < srcLen {
+		requestBodyLogBytes = append(requestBodyLogBytes, []byte(" ......")...)
+	}
+	return requestBodyLogBytes
 }
