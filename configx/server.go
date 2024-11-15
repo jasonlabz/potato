@@ -115,7 +115,8 @@ type LimitConf struct {
 
 // Application 服务地址端口配置
 type Application struct {
-	Address    string   `mapstructure:"address" json:"address" yaml:"address" ini:"address"`
+	Host       string   `mapstructure:"host" json:"host" yaml:"host" ini:"host"`
+	Name       string   `mapstructure:"name" json:"name" yaml:"name" ini:"name"`
 	Port       int      `mapstructure:"port" json:"port" yaml:"port" ini:"port"`
 	FileServer bool     `mapstructure:"file_server" json:"file_server" yaml:"file_server" ini:"file_server"`
 	Prom       PromConf `mapstructure:"prom" json:"prom" yaml:"prom" ini:"prom"`
