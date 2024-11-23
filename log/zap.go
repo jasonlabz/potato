@@ -1,7 +1,6 @@
 package log
 
 import (
-	"github.com/jasonlabz/potato/configx"
 	"log"
 	"os"
 	"path/filepath"
@@ -10,6 +9,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
 
+	"github.com/jasonlabz/potato/configx"
 	"github.com/jasonlabz/potato/configx/file"
 	"github.com/jasonlabz/potato/consts"
 	"github.com/jasonlabz/potato/times"
@@ -238,7 +238,7 @@ func loadConf(options *Options) {
 		writeFile:  false,
 		logFormat:  "console",
 		configPath: "./conf/logger.yaml",
-		keyList:    []string{consts.ContextLOGID, consts.ContextTraceID, consts.ContextUserID},
+		keyList:    []string{consts.ContextLOGID, consts.ContextTraceID, consts.ContextUserID, consts.ContextClientAddr},
 		logLevel:   "info",
 		basePath:   "./log",
 		fileName:   "app.log",

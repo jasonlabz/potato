@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	requestBodyMaxLen = 4096
+	requestBodyMaxLen = 20480
 )
 
 type BodyLog struct {
@@ -47,26 +47,26 @@ func RequestMiddleware() gin.HandlerFunc {
 		if c.Request.Body != nil {
 			requestBodyBytes, _ = io.ReadAll(c.Request.Body)
 		}
-		//c.Request.Body = io.NopCloser(bytes.NewBuffer(requestBodyBytes))
+		c.Request.Body = io.NopCloser(bytes.NewBuffer(requestBodyBytes))
 		bodyLog := &BodyLog{body: bytes.NewBufferString(""), ResponseWriter: c.Writer}
 		c.Writer = bodyLog
 
 		start := time.Now() // Start timer
-		log.GetLogger(c).WithField(log.String("agent", c.Request.UserAgent()),
+		logger := log.GetLogger().WithContext(c)
+		logger.Info("	[GIN] request",
+			log.String("agent", c.Request.UserAgent()),
 			log.String("body", string(logBytes(requestBodyBytes, requestBodyMaxLen))),
-			log.String("client_ip", c.ClientIP()),
 			log.String("method", c.Request.Method),
-			log.String("path", c.Request.URL.Path)).
-			Info("	[GIN] request")
+			log.String("path", c.Request.URL.Path))
 
 		c.Next()
 
-		log.GetLogger(c).WithField(log.Int("status_code", c.Writer.Status()),
+		logger.Info("	[GIN] response",
+			log.Int("status_code", c.Writer.Status()),
 			log.String("error_message", c.Errors.ByType(gin.ErrorTypePrivate).String()),
 			log.String("body", string(logBytes(bodyLog.body.Bytes(), requestBodyMaxLen))),
 			log.String("path", c.Request.URL.Path),
-			log.String("cost", fmt.Sprintf("%dms", time.Now().Sub(start).Milliseconds()))).
-			Info("	[GIN] response")
+			log.String("cost", fmt.Sprintf("%dms", time.Now().Sub(start).Milliseconds())))
 	}
 }
 

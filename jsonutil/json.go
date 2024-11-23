@@ -284,9 +284,9 @@ func (j *JSON) GetMap(path ...any) (map[string]*JSON, error) {
 
 // String 获取字符串表示
 func (j *JSON) String() string {
-	raw, err := j.rt.Raw()
+	raw, err := j.rt.String()
 	if err != nil {
-		log.DefaultLogger().WithError(err).Error("get json error")
+		log.GetLogger().WithError(err).Error("get json error")
 		return ""
 	}
 	return raw
@@ -301,8 +301,8 @@ func (j *JSON) String() string {
 //	     }]
 //		}
 //	}
-func (j *JSON) IsArray(key string) bool {
-	return j.rt.Get(key).Type() == ast.V_ARRAY
+func (j *JSON) IsArray(path ...any) bool {
+	return j.rt.GetByPath(path...).Type() == ast.V_ARRAY
 }
 
 // IsNumber 判断path路径对应的值是否是数值,对于下列json
@@ -316,8 +316,8 @@ func (j *JSON) IsArray(key string) bool {
 //	}
 //
 // 要访问到x字符串 path每层的访问路径为a,a.b,a.b.0，a.b.0.c
-func (j *JSON) IsNumber(key string) bool {
-	return j.rt.Get(key).Type() == ast.V_NUMBER
+func (j *JSON) IsNumber(path ...any) bool {
+	return j.rt.GetByPath(path...).Type() == ast.V_NUMBER
 }
 
 // IsJSON 判断path路径对应的值是否是JSON,对于下列json
@@ -329,8 +329,8 @@ func (j *JSON) IsNumber(key string) bool {
 //	     }]
 //		}
 //	}
-func (j *JSON) IsJSON(key string) bool {
-	return j.rt.Get(key).Type() == ast.V_OBJECT
+func (j *JSON) IsJSON(path ...any) bool {
+	return j.rt.GetByPath(path...).Type() == ast.V_OBJECT
 }
 
 // IsBool 判断path路径对应的值是否是BOOL,对于下列json
@@ -342,8 +342,8 @@ func (j *JSON) IsJSON(key string) bool {
 //	     }]
 //		}
 //	}
-func (j *JSON) IsBool(key string) bool {
-	tp := j.rt.Get(key).Type()
+func (j *JSON) IsBool(path ...any) bool {
+	tp := j.rt.GetByPath(path...).Type()
 	return tp == ast.V_TRUE || tp == ast.V_FALSE
 }
 
@@ -358,8 +358,8 @@ func (j *JSON) IsBool(key string) bool {
 //	}
 //
 // 要访问到x字符串 path每层的访问路径为a,a.b,a.b.0，a.b.0.c
-func (j *JSON) IsString(key string) bool {
-	return j.rt.Get(key).Type() == ast.V_STRING
+func (j *JSON) IsString(path ...any) bool {
+	return j.rt.GetByPath(path...).Type() == ast.V_STRING
 }
 
 // IsNull 判断path路径对应的值值是否为空,对于下列json
@@ -373,8 +373,8 @@ func (j *JSON) IsString(key string) bool {
 //	}
 //
 // 要访问到x字符串 path每层的访问路径为a,a.b,a.b.0，a.b.0.c
-func (j *JSON) IsNull(key string) bool {
-	return j.rt.Get(key).Type() == ast.V_NULL
+func (j *JSON) IsNull(path ...any) bool {
+	return j.rt.GetByPath(path...).Type() == ast.V_NULL
 }
 
 // Exists 判断path路径对应的值值是否存在,对于下列json
@@ -388,8 +388,8 @@ func (j *JSON) IsNull(key string) bool {
 //	}
 //
 // 要访问到x字符串 path每层的访问路径为a,a.b,a.b.0，a.b.0.c
-func (j *JSON) Exists(key string) bool {
-	return j.rt.Get(key).Exists()
+func (j *JSON) Exists(path ...any) bool {
+	return j.rt.GetByPath(path...).Exists()
 }
 
 // Set 将path路径对应的值设置成v,会返回错误error,对于下列json

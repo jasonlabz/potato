@@ -12,11 +12,11 @@ var defaultLogger cronLogger = cronLogger{}
 type cronLogger struct{}
 
 func (l cronLogger) Info(msg string, keysAndValues ...interface{}) {
-	log.DefaultLogger().WithAny(checkFields(keysAndValues)).Info(msg)
+	log.GetLogger().WithAny(checkFields(keysAndValues)).Info(msg)
 }
 
 func (l cronLogger) Error(err error, msg string, keysAndValues ...interface{}) {
-	log.DefaultLogger().WithError(err).WithAny(checkFields(keysAndValues)).Error(msg)
+	log.GetLogger().WithError(err).WithAny(checkFields(keysAndValues)).Error(msg)
 }
 
 func checkFields(fields []any) (checked []zap.Field) {

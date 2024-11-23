@@ -113,7 +113,7 @@ zapx.InitLogger(zapx.WithConfigPath("conf/application.yaml"),zapx.WithFields("us
 - 使用日志zap
 ```go
 // 获取日志对象
-logger := log.GetLogger(ctx)
+logger := log.GetLogger().WithContext(ctx)
 // 打印日志
 logger.WithError(err).Error("get user error")
 ```
@@ -144,7 +144,7 @@ func TestName(t *testing.T) {
             fmt.Println(err)
         }
     }(operator)
-    logger := zapx.GetLogger(ctx)
+    logger := zapx.GetLogger().WithContext(ctx)
     pdmsg := &rabbitmqx.PushDelayBody{}
     pmsg := &rabbitmqx.PushBody{}
     msg := &rabbitmqx.ExchangePushBody{}

@@ -11,5 +11,5 @@ const (
 	ContextUserID     = "user_id"
 	ContextSpanID     = "span_id"
 	ContextToken      = "token"
-	ContextClientAddr = "client_addr"
+	ContextClientAddr = "client_ip"
 )

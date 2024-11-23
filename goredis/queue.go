@@ -28,7 +28,7 @@ const (
 
 func handlePanic() {
 	if r := recover(); r != nil {
-		log.DefaultLogger().Error("Recovered: %+v", r)
+		log.GetLogger().Error("Recovered: %+v", r)
 	}
 }
 
@@ -53,7 +53,7 @@ func (op *RedisOperator) Watch(ctx context.Context, fn func(*redis.Tx) error, ke
 // tryMigrationDaemon 将到期的PublishBody迁移到ready队列等待执行
 func (op *RedisOperator) tryMigrationDaemon(ctx context.Context) {
 	defer handlePanic()
-	logger := log.GetLogger(ctx).WithField(log.String("tag", "redis_delay_queue_method"))
+	logger := log.GetLogger().WithContext(ctx).WithField(log.String("tag", "redis_delay_queue_method"))
 	sig := make(chan os.Signal)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGKILL)
 	timer := time.NewTimer(DefaultPollingTimes)

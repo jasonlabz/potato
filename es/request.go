@@ -34,13 +34,13 @@ GET /{索引名}/_search
 */
 func (x *XRequest) QueryMatchAll() *XRequest {
 	err := x.Query.UnmarshalJSON([]byte(`{"query": {"match_all": {}}}`))
-	log.DefaultLogger().WithError(err).Error("set query match all failure")
+	log.GetLogger().WithError(err).Error("set query match all failure")
 	return x
 }
 
 func (x *XRequest) QueryMatchAllBoost(boost float32) *XRequest {
 	err := x.Query.UnmarshalJSON([]byte(fmt.Sprintf(`{"query": {"match_all": {"boost":%f}}}`, boost)))
-	log.DefaultLogger().WithError(err).Error("set query match all failure")
+	log.GetLogger().WithError(err).Error("set query match all failure")
 	return x
 }
 
@@ -59,14 +59,14 @@ func (x *XRequest) QueryMatch(field, text string) *XRequest {
 	queryStr := fmt.Sprintf(`"%s":"%s"`, field, text)
 	err := x.Query.UnmarshalJSON([]byte(fmt.Sprintf(`{"query": {"match": {%s}}}`, queryStr)))
 	if err != nil {
-		log.DefaultLogger().WithError(err).Error("set query match failure")
+		log.GetLogger().WithError(err).Error("set query match failure")
 	}
 	return x
 }
 func (x *XRequest) QueryMatchBoost(field, text string, boost float32) *XRequest {
 	err := x.Query.UnmarshalJSON([]byte(fmt.Sprintf(`{"query": {"match": {"%s":{"query":"%s","boost":%f}}}}`, field, text, boost)))
 	if err != nil {
-		log.DefaultLogger().WithError(err).Error("set query match failure")
+		log.GetLogger().WithError(err).Error("set query match failure")
 	}
 	return x
 }
@@ -86,7 +86,7 @@ GET /{索引名}/_search
 func (x *XRequest) QueryMultiMatch(fields []string, text string) *XRequest {
 	err := x.Query.UnmarshalJSON([]byte(fmt.Sprintf(`{"query":{"multi_match":{"query":"%s","fields":[%s]}}}`, text, strings.Join(fields, ","))))
 	if err != nil {
-		log.DefaultLogger().WithError(err).Error("set query multi match failure")
+		log.GetLogger().WithError(err).Error("set query multi match failure")
 	}
 	return x
 }
@@ -94,7 +94,7 @@ func (x *XRequest) QueryMultiMatch(fields []string, text string) *XRequest {
 func (x *XRequest) QueryMultiMatchBoost(fields []string, text string, boost float32) *XRequest {
 	err := x.Query.UnmarshalJSON([]byte(fmt.Sprintf(`{"query":{"multi_match":{"query":"%s","fields":[%s],"boost":%f}}}`, text, strings.Join(fields, ","), boost)))
 	if err != nil {
-		log.DefaultLogger().WithError(err).Error("set query multi match failure")
+		log.GetLogger().WithError(err).Error("set query multi match failure")
 	}
 	return x
 }
@@ -114,7 +114,7 @@ func (x *XRequest) QueryTerm(field string, value any) *XRequest {
 	queryStr := fmt.Sprintf(`"%s":%s`, field, utils.JSONMarshal(value))
 	err := x.Query.UnmarshalJSON([]byte(fmt.Sprintf(`{"query": {"term": {%s}}}`, queryStr)))
 	if err != nil {
-		log.DefaultLogger().WithError(err).Error("set query term failure")
+		log.GetLogger().WithError(err).Error("set query term failure")
 	}
 	return x
 }
@@ -122,7 +122,7 @@ func (x *XRequest) QueryTerm(field string, value any) *XRequest {
 func (x *XRequest) QueryTermBoost(field string, value any, boost float32) *XRequest {
 	err := x.Query.UnmarshalJSON([]byte(fmt.Sprintf(`{"query": {"term": {"%s":{"value":%v,"boost":%f}}}}`, field, utils.JSONMarshal(value), boost)))
 	if err != nil {
-		log.DefaultLogger().WithError(err).Error("set query term failure")
+		log.GetLogger().WithError(err).Error("set query term failure")
 	}
 	return x
 }
@@ -142,7 +142,7 @@ func (x *XRequest) QueryTerms(field string, values []any) *XRequest {
 	queryStr := fmt.Sprintf(`"%s":%s`, field, utils.JSONMarshal(values))
 	err := x.Query.UnmarshalJSON([]byte(fmt.Sprintf(`{"query": {"term": {%s}}}`, queryStr)))
 	if err != nil {
-		log.DefaultLogger().WithError(err).Error("set query terms failure")
+		log.GetLogger().WithError(err).Error("set query terms failure")
 	}
 	return x
 }
@@ -151,7 +151,7 @@ func (x *XRequest) QueryTermsBoost(field string, values []any, boost float32) *X
 	queryStr := fmt.Sprintf(`"%s":%s`, field, utils.JSONMarshal(values))
 	err := x.Query.UnmarshalJSON([]byte(fmt.Sprintf(`{"query": {"term": {%s}}}`, queryStr)))
 	if err != nil {
-		log.DefaultLogger().WithError(err).Error("set query terms failure")
+		log.GetLogger().WithError(err).Error("set query terms failure")
 	}
 	x.Query.Terms.Boost = &boost
 	return x
@@ -175,7 +175,7 @@ func (x *XRequest) QueryRange(field string, start, end any) *XRequest {
 	queryStr := fmt.Sprintf(`"%s": {"gte": %v,"lte": %v}`, field, start, end)
 	err := x.Query.UnmarshalJSON([]byte(fmt.Sprintf(`{"query": {"range": {%s}}}`, queryStr)))
 	if err != nil {
-		log.DefaultLogger().WithError(err).Error("set query terms failure")
+		log.GetLogger().WithError(err).Error("set query terms failure")
 	}
 	return x
 }
@@ -183,7 +183,7 @@ func (x *XRequest) QueryRange(field string, start, end any) *XRequest {
 func (x *XRequest) QueryRawJson(body string) *XRequest {
 	err := x.Query.UnmarshalJSON([]byte(body))
 	if err != nil {
-		log.DefaultLogger().WithError(err).Error("set query terms failure")
+		log.GetLogger().WithError(err).Error("set query terms failure")
 	}
 	return x
 }

@@ -36,12 +36,12 @@ func init() {
 		mqConf := &MQConfig{}
 		err := utils.CopyStruct(appConf.Rabbitmq, mqConf)
 		if err != nil {
-			log.DefaultLogger().WithError(err).Error("copy rmq config error, skipping ...")
+			log.GetLogger().WithError(err).Error("copy rmq config error, skipping ...")
 			return
 		}
 		err = InitRabbitMQOperator(mqConf)
 		if err != nil {
-			log.DefaultLogger().WithError(err).Error("init rmq Client error, skipping ...")
+			log.GetLogger().WithError(err).Error("init rmq Client error, skipping ...")
 		}
 	}
 }
@@ -72,7 +72,7 @@ const (
 
 // NewRabbitMQOperator 该函数负责根据配置创建rmq客户端对象供外部调用
 func NewRabbitMQOperator(config *MQConfig) (op *RabbitMQOperator, err error) {
-	logger := log.DefaultLogger()
+	logger := log.GetLogger()
 	op = &RabbitMQOperator{}
 	// init
 	op.client = &Client{
@@ -120,7 +120,7 @@ func NewRabbitMQOperator(config *MQConfig) (op *RabbitMQOperator, err error) {
 
 // 消息确认
 func (op *RabbitMQOperator) confirmOne(confirms <-chan amqp.Confirmation) (ok bool) {
-	logger := log.DefaultLogger()
+	logger := log.GetLogger()
 	sig := make(chan os.Signal)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGKILL)
 
@@ -143,7 +143,7 @@ func (op *RabbitMQOperator) confirmOne(confirms <-chan amqp.Confirmation) (ok bo
 
 func handlePanic() {
 	if r := recover(); r != nil {
-		log.DefaultLogger().Error("Recovered: %+v", r)
+		log.GetLogger().Error("Recovered: %+v", r)
 	}
 }
 
@@ -212,7 +212,7 @@ func (op *RabbitMQOperator) SetLogger(logger amqp.Logging) {
 }
 
 func (op *RabbitMQOperator) tryReConnect(daemon bool) (connected bool) {
-	logger := log.DefaultLogger()
+	logger := log.GetLogger()
 	sig := make(chan os.Signal)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGKILL)
 
@@ -367,7 +367,7 @@ func (op *RabbitMQOperator) PushDelayMessage(ctx context.Context, body *PushDela
 	if body.MessageId == "" {
 		body.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
 	}
-	logger := log.GetLogger(ctx).WithField(log.String("msg_id", body.MessageId))
+	logger := log.GetLogger().WithContext(ctx).WithField(log.String("msg_id", body.MessageId))
 	ticker := time.NewTicker(DefaultRetryWaitTimes)
 	defer ticker.Stop()
 
@@ -401,7 +401,7 @@ func (op *RabbitMQOperator) PushDelayMessage(ctx context.Context, body *PushDela
 }
 
 func (op *RabbitMQOperator) pushDelayMessageCore(ctx context.Context, body *PushDelayBody, opts ...OptionFunc) (err error) {
-	logger := log.GetLogger(ctx).WithField(log.String("msg_id", body.MessageId))
+	logger := log.GetLogger().WithContext(ctx).WithField(log.String("msg_id", body.MessageId))
 
 	delayStr := strconv.FormatInt(body.DelayTime.Milliseconds(), 10)
 	delayQueue := "potato_delay_queue:" + body.ExchangeName
@@ -506,7 +506,7 @@ func (op *RabbitMQOperator) PushExchange(ctx context.Context, body *ExchangePush
 	if body.MessageId == "" {
 		body.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
 	}
-	logger := log.GetLogger(ctx).WithField(log.String("msg_id", body.MessageId))
+	logger := log.GetLogger().WithContext(ctx).WithField(log.String("msg_id", body.MessageId))
 	ticker := time.NewTicker(DefaultRetryWaitTimes)
 	defer ticker.Stop()
 	body.Validate()
@@ -542,7 +542,7 @@ func (op *RabbitMQOperator) PushQueue(ctx context.Context, body *QueuePushBody, 
 	if body.MessageId == "" {
 		body.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
 	}
-	logger := log.GetLogger(ctx).WithField(log.String("msg_id", body.MessageId))
+	logger := log.GetLogger().WithContext(ctx).WithField(log.String("msg_id", body.MessageId))
 	ticker := time.NewTicker(DefaultRetryWaitTimes)
 	defer ticker.Stop()
 
@@ -578,7 +578,7 @@ func (op *RabbitMQOperator) Push(ctx context.Context, body *PushBody, opts ...Op
 	if body.MessageId == "" {
 		body.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
 	}
-	logger := log.GetLogger(ctx).WithField(log.String("msg_id", body.MessageId))
+	logger := log.GetLogger().WithContext(ctx).WithField(log.String("msg_id", body.MessageId))
 	ticker := time.NewTicker(DefaultRetryWaitTimes)
 	defer ticker.Stop()
 	for i := 0; i < RetryTimes; i++ {
@@ -612,7 +612,7 @@ func (op *RabbitMQOperator) Push(ctx context.Context, body *PushBody, opts ...Op
 @description: 向队列推送消息
 */
 func (op *RabbitMQOperator) pushQueueCore(ctx context.Context, body *QueuePushBody, opts ...OptionFunc) (err error) {
-	logger := log.GetLogger(ctx).WithField(log.String("msg_id", body.MessageId))
+	logger := log.GetLogger().WithContext(ctx).WithField(log.String("msg_id", body.MessageId))
 
 	key, channel, err := op.getChannelForQueue(false, body.QueueName, body.ConfirmedByOrder)
 	if err != nil {
@@ -683,7 +683,7 @@ func (op *RabbitMQOperator) pushQueueCore(ctx context.Context, body *QueuePushBo
 @description: 向队列推送消息
 */
 func (op *RabbitMQOperator) pushExchangeCore(ctx context.Context, body *ExchangePushBody, opts ...OptionFunc) (err error) {
-	logger := log.GetLogger(ctx).WithField(log.String("msg_id", body.MessageId))
+	logger := log.GetLogger().WithContext(ctx).WithField(log.String("msg_id", body.MessageId))
 
 	key, channel, err := op.getChannelForExchange(body.ExchangeName, body.ConfirmedByOrder)
 	if err != nil {
@@ -775,7 +775,7 @@ func (op *RabbitMQOperator) pushExchangeCore(ctx context.Context, body *Exchange
 }
 
 func (op *RabbitMQOperator) pushCore(ctx context.Context, body *PushBody, opts ...OptionFunc) (err error) {
-	logger := log.GetLogger(ctx).WithField(log.String("msg_id", body.MessageId))
+	logger := log.GetLogger().WithContext(ctx).WithField(log.String("msg_id", body.MessageId))
 	key, channel, err := op.getChannel(false, body.ExchangeName, body.QueueName, body.ConfirmedByOrder)
 	if err != nil {
 		logger.Error(err.Error())
@@ -878,7 +878,7 @@ func (op *RabbitMQOperator) pushCore(ctx context.Context, body *PushBody, opts .
 }
 
 func (op *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-chan amqp.Delivery, error) {
-	logger := log.GetLogger(ctx)
+	logger := log.GetLogger().WithContext(ctx)
 	resChan, key, channel, consumerTag, err := op.consumeCore(ctx, param)
 	if err != nil {
 		return nil, err
@@ -991,7 +991,7 @@ func (op *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-
 
 func (op *RabbitMQOperator) consumeCore(ctx context.Context, param *ConsumeBody, opts ...OptionFunc) (contents <-chan amqp.Delivery, key string,
 	channel *amqp.Channel, consumerTag string, err error) {
-	logger := log.GetLogger(ctx)
+	logger := log.GetLogger().WithContext(ctx)
 	if !op.isReady {
 		err = errors.New("connection is not ready")
 		return
@@ -1213,7 +1213,7 @@ func (op *RabbitMQOperator) CancelQueue(queueName string) (err error) {
 		}
 		<-ticker.C
 	}
-	log.DefaultLogger().Warn("cancel consumer timeout：%s", queueName)
+	log.GetLogger().Warn("cancel consumer timeout：%s", queueName)
 	return
 }
 
@@ -1405,7 +1405,7 @@ func (op *RabbitMQOperator) Close() (err error) {
 }
 
 func (op *RabbitMQOperator) Ack(ctx context.Context, msg amqp.Delivery) {
-	logger := log.GetLogger(ctx).WithField(log.String("msg_id", msg.MessageId))
+	logger := log.GetLogger().WithContext(ctx).WithField(log.String("msg_id", msg.MessageId))
 	ch := make(chan bool, 1)
 	defer close(ch)
 	go func() {
@@ -1432,7 +1432,7 @@ func (op *RabbitMQOperator) Ack(ctx context.Context, msg amqp.Delivery) {
 }
 
 func (op *RabbitMQOperator) Nack(ctx context.Context, msg amqp.Delivery) {
-	logger := log.GetLogger(ctx).WithField(log.String("msg_id", msg.MessageId))
+	logger := log.GetLogger().WithContext(ctx).WithField(log.String("msg_id", msg.MessageId))
 	ch := make(chan bool, 1)
 	defer close(ch)
 	go func() {

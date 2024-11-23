@@ -32,7 +32,7 @@ func k8sRestConfig() *rest.Config {
 	}
 	config, err := clientcmd.BuildConfigFromFlags("", kubeConfigFilePath)
 	if err != nil {
-		log.DefaultLogger().WithError(err).Fatal("load kube config fail")
+		log.GetLogger().WithError(err).Fatal("load kube config fail")
 	}
 	return config
 }
@@ -42,7 +42,7 @@ func initClient() *kubernetes.Clientset {
 	c, err := kubernetes.NewForConfig(k8sRestConfig())
 
 	if err != nil {
-		log.DefaultLogger().WithError(err).Fatal("init kube clientSet fail")
+		log.GetLogger().WithError(err).Fatal("init kube clientSet fail")
 	}
 
 	return c
@@ -53,7 +53,7 @@ func initDynamicClient() dynamic.Interface {
 	c, err := dynamic.NewForConfig(k8sRestConfig())
 
 	if err != nil {
-		log.DefaultLogger().WithError(err).Fatal("init kube dynamicClient fail")
+		log.GetLogger().WithError(err).Fatal("init kube dynamicClient fail")
 	}
 
 	return c

@@ -74,7 +74,7 @@ func GenerateJWTToken(m *User, d time.Duration) (string, error) {
 	// Sign and get the complete encoded token as a string using the secret
 	tokenString, err := token.SignedString([]byte(secretKey))
 	if err != nil {
-		log.DefaultLogger().WithError(err).Fatal("config is wrong, can not generate jwt")
+		log.GetLogger().WithError(err).Fatal("config is wrong, can not generate jwt")
 	}
 	return tokenString, err
 }

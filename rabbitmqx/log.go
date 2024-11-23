@@ -25,17 +25,17 @@ func getLogger() rmqLogger {
 type rmqLogger struct{}
 
 func (l rmqLogger) Printf(msg string, args ...interface{}) {
-	log.GetLogger(context.Background()).Info(fmt.Sprintf(msg, args))
+	log.GetLogger().Info(fmt.Sprintf(msg, args))
 }
 
 func (l rmqLogger) Info(ctx context.Context, msg string, args ...interface{}) {
-	log.GetLogger(ctx).Info(fmt.Sprintf(msg, args))
+	log.GetLogger().WithContext(ctx).Info(fmt.Sprintf(msg, args))
 }
 
 func (l rmqLogger) Warn(ctx context.Context, msg string, args ...interface{}) {
-	log.GetLogger(ctx).Warn(fmt.Sprintf(msg, args))
+	log.GetLogger().WithContext(ctx).Warn(fmt.Sprintf(msg, args))
 }
 
 func (l rmqLogger) Error(ctx context.Context, msg string, args ...interface{}) {
-	log.GetLogger(ctx).Error(fmt.Sprintf(msg, args))
+	log.GetLogger().WithContext(ctx).Error(fmt.Sprintf(msg, args))
 }

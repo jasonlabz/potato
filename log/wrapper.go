@@ -26,29 +26,16 @@ func init() {
 	}
 }
 
-func DefaultLogger(opts ...zap.Option) *LoggerWrapper {
+func GetLogger(opts ...zap.Option) *LoggerWrapper {
 	if len(opts) > 0 {
 		return defaultLogger.WithOptions(opts...)
 	}
-	return defaultLogger
+	return &LoggerWrapper{logger: defaultLogger.logger, logField: defaultLogger.logField}
 }
 
-func GetLogger(ctx context.Context, opts ...zap.Option) *LoggerWrapper {
-	return utils.IsTrueOrNot(len(opts) > 0,
-		&LoggerWrapper{
-			logger: defaultLogger.logger.WithOptions(opts...).With(zapField(ctx, defaultLogger.logField...)...),
-		},
-		&LoggerWrapper{
-			logger: defaultLogger.logger.With(zapField(ctx, defaultLogger.logField...)...),
-		},
-	)
-}
-
-func GormLogger(ctx context.Context, opts ...zap.Option) *LoggerWrapper {
-	opts = append(opts, zap.AddCallerSkip(3))
-	return &LoggerWrapper{
-		logger: defaultLogger.logger.WithOptions(opts...).With(zapField(ctx, defaultLogger.logField...)...),
-	}
+func (l *LoggerWrapper) WithContext(ctx context.Context) *LoggerWrapper {
+	l.logger = l.logger.With(zapField(ctx, l.logField...)...)
+	return l
 }
 
 func (l *LoggerWrapper) WithError(err error) *LoggerWrapper {
@@ -71,28 +58,28 @@ func (l *LoggerWrapper) WithAny(fields ...any) *LoggerWrapper {
 	return l
 }
 
-func (l *LoggerWrapper) Debug(msg string, args ...any) {
-	l.logger.Debug(getMessage(msg, args))
+func (l *LoggerWrapper) Debug(msg string, fields ...any) {
+	l.logger.Debug(msg, l.checkFields(fields)...)
 }
 
-func (l *LoggerWrapper) Info(msg string, args ...any) {
-	l.logger.Info(getMessage(msg, args))
+func (l *LoggerWrapper) Info(msg string, fields ...any) {
+	l.logger.Info(msg, l.checkFields(fields)...)
 }
 
-func (l *LoggerWrapper) Warn(msg string, args ...any) {
-	l.logger.Warn(getMessage(msg, args))
+func (l *LoggerWrapper) Warn(msg string, fields ...any) {
+	l.logger.Warn(msg, l.checkFields(fields)...)
 }
 
-func (l *LoggerWrapper) Error(msg string, args ...any) {
-	l.logger.Error(getMessage(msg, args))
+func (l *LoggerWrapper) Error(msg string, fields ...any) {
+	l.logger.Error(msg, l.checkFields(fields)...)
 }
 
-func (l *LoggerWrapper) Panic(msg string, args ...any) {
-	l.logger.Panic(getMessage(msg, args))
+func (l *LoggerWrapper) Panic(msg string, fields ...any) {
+	l.logger.Panic(msg, l.checkFields(fields)...)
 }
 
-func (l *LoggerWrapper) Fatal(msg string, args ...any) {
-	l.logger.Fatal(getMessage(msg, args))
+func (l *LoggerWrapper) Fatal(msg string, fields ...any) {
+	l.logger.Fatal(msg, l.checkFields(fields)...)
 }
 
 func (l *LoggerWrapper) Sync() {
@@ -133,21 +120,21 @@ func (l *LoggerWrapper) checkFields(fields []any) (checked []zap.Field) {
 }
 
 // getMessage format with Sprint, Sprintf, or neither.
-func getMessage(template string, fmtArgs []interface{}) string {
-	if len(fmtArgs) == 0 {
+func getMessage(template string, args []interface{}) string {
+	if len(args) == 0 {
 		return template
 	}
 
 	if template != "" {
-		return fmt.Sprintf(template, fmtArgs...)
+		return fmt.Sprintf(template, args...)
 	}
 
-	if len(fmtArgs) == 1 {
-		if str, ok := fmtArgs[0].(string); ok {
+	if len(args) == 1 {
+		if str, ok := args[0].(string); ok {
 			return str
 		}
 	}
-	return fmt.Sprint(fmtArgs...)
+	return fmt.Sprint(args...)
 }
 
 func Any(key string, val any) zap.Field {

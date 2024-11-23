@@ -17,7 +17,7 @@ func TestName(t *testing.T) {
 		},
 	}, 10*time.Second)
 	if err != nil {
-		log.DefaultLogger().Fatal(err.Error())
+		log.GetLogger().Fatal(err.Error())
 	}
 	user, err := ParseJWTToken(jwtToken)
 	fmt.Println(user)
