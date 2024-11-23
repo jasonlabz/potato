@@ -123,6 +123,10 @@ func (l *LoggerWrapper) ErrorContext(ctx context.Context, msg string, args ...an
 	l.log(ctx, slog.LevelError, msg, args...)
 }
 
+func (l *LoggerWrapper) Sync() error {
+	return l.core.Sync()
+}
+
 // log is the low-level logging method for methods that take ...any.
 // It must always be called directly by an exported logging method
 // or function, because it uses a fixed call depth to obtain the pc.
