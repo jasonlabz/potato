@@ -23,11 +23,13 @@ const (
 	DatabaseTypeSqlserver DatabaseType = "sqlserver"
 	DatabaseTypeOracle    DatabaseType = "oracle"
 	DatabaseTypeSQLite    DatabaseType = "sqlite"
+	DatabaseTypeDM        DatabaseType = "dm"
 )
 
 // DatabaseDsnMap 关系型数据库类型  username、password、address、port、dbname
 var DatabaseDsnMap = map[DatabaseType]string{
 	DatabaseTypeSQLite:    "%s",
+	DatabaseTypeDM:        "dm://%s:%s@%s:%d?schema=%s",
 	DatabaseTypeOracle:    "%s/%s@%s:%d/%s",
 	DatabaseTypeMySQL:     "%s:%s@tcp(%s:%d)/%s?parseTime=True&loc=Local",
 	DatabaseTypePostgres:  "user=%s password=%s host=%s port=%d dbname=%s sslmode=disable TimeZone=Asia/Shanghai",

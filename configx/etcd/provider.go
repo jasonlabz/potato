@@ -3,7 +3,7 @@ package yaml
 import (
 	"github.com/spf13/viper"
 
-	"github.com/jasonlabz/potato/configx/util"
+	"github.com/jasonlabz/potato/configx/base"
 )
 
 // ConfigProvider ETCD configuration provider
@@ -17,7 +17,7 @@ func (c *ConfigProvider) Get(key string) (val interface{}, err error) {
 	return val, nil
 }
 
-func NewConfigProvider(endpoint, watchKey string, fileType string) util.IProvider {
+func NewConfigProvider(endpoint, watchKey string, fileType string) base.IProvider {
 	switch fileType {
 	case "json", "toml", "yaml", "yml", "properties", "props", "prop", "env", "dotenv":
 	default:
