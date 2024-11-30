@@ -887,7 +887,7 @@ func (op *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-
 
 	go func() {
 		ctxBack := context.Background()
-		rLogger := log.GetLogger(ctxBack)
+		rLogger := log.GetLogger().WithContext(ctxBack)
 		defer func() {
 			if e := recover(); e != nil {
 				logger.Error("recover_panic: %v", e)
