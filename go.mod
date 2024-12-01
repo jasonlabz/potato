@@ -6,7 +6,7 @@ require (
 	github.com/BurntSushi/toml v1.4.0
 	github.com/axgle/mahonia v0.0.0-20180208002826-3358181d7394
 	github.com/bits-and-blooms/bitset v1.13.0
-	github.com/bytedance/sonic v1.11.8
+	github.com/bytedance/sonic v1.12.5
 	github.com/dgrijalva/jwt-go v3.2.1-0.20210802184156-9742bd7fca1c+incompatible
 	github.com/elastic/go-elasticsearch/v8 v8.11.1
 	github.com/fsnotify/fsnotify v1.6.0
@@ -45,7 +45,7 @@ require (
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/bytedance/sonic/loader v0.1.1 // indirect
+	github.com/bytedance/sonic/loader v0.2.0 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/cloudwego/base64x v0.1.4 // indirect
 	github.com/cloudwego/iasm v0.2.0 // indirect
