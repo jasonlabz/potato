@@ -27,10 +27,16 @@ func init() {
 }
 
 func GetLogger(opts ...zap.Option) *LoggerWrapper {
+	clone := defaultLogger.clone()
 	if len(opts) > 0 {
-		return defaultLogger.WithOptions(opts...)
+		return clone.WithOptions(opts...)
 	}
-	return &LoggerWrapper{logger: defaultLogger.logger, logField: defaultLogger.logField}
+	return clone
+}
+
+func (l *LoggerWrapper) clone() *LoggerWrapper {
+	newLogger := *l.logger
+	return &LoggerWrapper{logger: &newLogger, logField: l.logField}
 }
 
 func (l *LoggerWrapper) WithContext(ctx context.Context) *LoggerWrapper {
@@ -174,4 +180,44 @@ func zapField(ctx context.Context, contextKey ...string) (fields []zap.Field) {
 		fields = append(fields, zap.String(key, value))
 	}
 	return
+}
+
+func Debug(ctx context.Context, msg string, fields ...any) {
+	logFields := zapField(ctx, defaultLogger.logField...)
+	for _, field := range defaultLogger.checkFields(fields) {
+		logFields = append(logFields, field)
+	}
+	defaultLogger.logger.Debug(msg, logFields...)
+}
+
+func Info(ctx context.Context, msg string, fields ...any) {
+	logFields := zapField(ctx, defaultLogger.logField...)
+	for _, field := range defaultLogger.checkFields(fields) {
+		logFields = append(logFields, field)
+	}
+	defaultLogger.logger.Info(msg, logFields...)
+}
+
+func Warn(ctx context.Context, msg string, fields ...any) {
+	logFields := zapField(ctx, defaultLogger.logField...)
+	for _, field := range defaultLogger.checkFields(fields) {
+		logFields = append(logFields, field)
+	}
+	defaultLogger.logger.Warn(msg, logFields...)
+}
+
+func Error(ctx context.Context, msg string, fields ...any) {
+	logFields := zapField(ctx, defaultLogger.logField...)
+	for _, field := range defaultLogger.checkFields(fields) {
+		logFields = append(logFields, field)
+	}
+	defaultLogger.logger.Error(msg, logFields...)
+}
+
+func Fatal(ctx context.Context, msg string, fields ...any) {
+	logFields := zapField(ctx, defaultLogger.logField...)
+	for _, field := range defaultLogger.checkFields(fields) {
+		logFields = append(logFields, field)
+	}
+	defaultLogger.logger.Fatal(msg, logFields...)
 }

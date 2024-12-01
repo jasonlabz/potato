@@ -54,12 +54,10 @@ func SetContext(opts ...Option) gin.HandlerFunc {
 		}
 		userID := ctx.Request.Header.Get(consts.HeaderUserID)
 		authorization := ctx.Request.Header.Get(consts.HeaderAuthorization)
-		remote := ctx.ClientIP()
 
 		ctx.Set(consts.ContextToken, authorization)
 		ctx.Set(consts.ContextUserID, userID)
 		ctx.Set(consts.ContextTraceID, traceID)
-		ctx.Set(consts.ContextClientAddr, remote)
 
 		ctx.Next()
 	}

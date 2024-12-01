@@ -18,4 +18,6 @@ func TestName(t *testing.T) {
 	GetLogger().WithContext(ctx).Error("ttt%s,%s,%s", "sadas", "sdasd", "time")
 	//GetLogger().WithContext(ctx).Panic("ttt%s,%s,%s", "sadas", "sdasd", "time")
 	//slog.Info("test")
+
+	Info(ctx, "hello", "sadas", "sdasd")
 }
