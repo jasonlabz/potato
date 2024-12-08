@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.uber.org/zap"
 	"time"
 
 	gormLogger "gorm.io/gorm/logger"
@@ -13,16 +12,58 @@ import (
 )
 
 var (
-	infoStr      = "[DB] [info] "
-	warnStr      = "[DB] [warn] "
-	errStr       = "[DB] [error] "
-	traceStr     = "[DB] [%.3fms] [rows:%v] %s"
-	traceWarnStr = "[DB] %s [%.3fms] [rows:%v] %s"
-	traceErrStr  = "[DB] %s [%.3fms] [rows:%v] %s"
+	infoStr                 = "[DB] [info] "
+	warnStr                 = "[DB] [warn] "
+	errStr                  = "[DB] [error] "
+	traceStr                = "[DB] [%.3fms] [rows:%v] %s"
+	traceWarnStr            = "[DB] %s [%.3fms] [rows:%v] %s"
+	traceErrStr             = "[DB] %s [%.3fms] [rows:%v] %s"
+	defaultGormLoggerConfig = &gormLogger.Config{
+		SlowThreshold:             time.Second,       // Slow SQL threshold
+		LogLevel:                  gormLogger.Silent, // Log level
+		IgnoreRecordNotFoundError: false,             // Ignore ErrRecordNotFound error for logger
+		Colorful:                  false,             // Disable color
+	}
 )
 
-func NewLogger(config *gormLogger.Config) gormLogger.Interface {
-	if config.Colorful {
+type OptionFunc func(*gormLogger.Config)
+
+func WithLevel(level gormLogger.LogLevel) OptionFunc {
+	return func(config *gormLogger.Config) {
+		config.LogLevel = level
+	}
+}
+
+func WithColorful(colorful bool) OptionFunc {
+	return func(config *gormLogger.Config) {
+		config.Colorful = colorful
+	}
+}
+
+func WithIgnoreRecordNotFoundError(ignore bool) OptionFunc {
+	return func(config *gormLogger.Config) {
+		config.IgnoreRecordNotFoundError = ignore
+	}
+}
+
+func WithSlowThreshold(threshold time.Duration) OptionFunc {
+	return func(config *gormLogger.Config) {
+		config.SlowThreshold = threshold
+	}
+}
+
+func WithParameterizedQueries(query bool) OptionFunc {
+	return func(config *gormLogger.Config) {
+		config.ParameterizedQueries = query
+	}
+}
+
+func LoggerAdapter(l *log.LoggerWrapper, opts ...OptionFunc) gormLogger.Interface {
+	cloneConfig := *defaultGormLoggerConfig
+	for _, opt := range opts {
+		opt(&cloneConfig)
+	}
+	if cloneConfig.Colorful {
 		infoStr = "[DB] " + gormLogger.Green + "[info] " + gormLogger.Reset
 		warnStr = "[DB] " + gormLogger.Magenta + "[warn] " + gormLogger.Reset
 		errStr = "[DB] " + gormLogger.Red + "[error] " + gormLogger.Reset
@@ -31,7 +72,8 @@ func NewLogger(config *gormLogger.Config) gormLogger.Interface {
 		traceErrStr = "[DB] " + gormLogger.MagentaBold + "%s\n" + gormLogger.Reset + gormLogger.Yellow + "[%.3fms] " + gormLogger.BlueBold + "[rows:%v]" + gormLogger.Reset + " %s"
 	}
 	return &Logger{
-		Config:          config,
+		l:               l,
+		Config:          &cloneConfig,
 		infoLogMsg:      infoStr,
 		warnLogMsg:      warnStr,
 		errLogMsg:       errStr,
@@ -42,8 +84,8 @@ func NewLogger(config *gormLogger.Config) gormLogger.Interface {
 }
 
 type Logger struct {
-	//logWrapper *zapx.LoggerWrapper
 	*gormLogger.Config
+	l                                            *log.LoggerWrapper
 	infoLogMsg, warnLogMsg, errLogMsg            string
 	traceLogMsg, traceErrLogMsg, traceWarnLogMsg string
 }
@@ -58,21 +100,21 @@ func (l *Logger) LogMode(level gormLogger.LogLevel) gormLogger.Interface {
 // Info print info
 func (l *Logger) Info(ctx context.Context, msg string, data ...interface{}) {
 	if l.LogLevel >= gormLogger.Info {
-		log.GetLogger(zap.AddCallerSkip(3)).WithContext(ctx).Info(fmt.Sprintf(l.infoLogMsg+msg, append([]interface{}{}, data...)...))
+		l.l.InfoContext(ctx, fmt.Sprintf(l.infoLogMsg+msg, append([]interface{}{}, data...)...))
 	}
 }
 
 // Warn print warn messages
 func (l *Logger) Warn(ctx context.Context, msg string, data ...interface{}) {
 	if l.LogLevel >= gormLogger.Warn {
-		log.GetLogger(zap.AddCallerSkip(3)).WithContext(ctx).Warn(fmt.Sprintf(l.warnLogMsg+msg, append([]interface{}{}, data...)...))
+		l.l.WarnContext(ctx, fmt.Sprintf(l.warnLogMsg+msg, append([]interface{}{}, data...)...))
 	}
 }
 
 // Error print error messages
 func (l *Logger) Error(ctx context.Context, msg string, data ...interface{}) {
 	if l.LogLevel >= gormLogger.Error {
-		log.GetLogger(zap.AddCallerSkip(3)).WithContext(ctx).Error(fmt.Sprintf(l.errLogMsg+msg, append([]interface{}{}, data...)...))
+		l.l.ErrorContext(ctx, fmt.Sprintf(l.errLogMsg+msg, append([]interface{}{}, data...)...))
 	}
 }
 
@@ -81,30 +123,29 @@ func (l *Logger) Trace(ctx context.Context, begin time.Time, fc func() (string, 
 	if l.LogLevel <= gormLogger.Silent {
 		return
 	}
-	logger := log.GetLogger(zap.AddCallerSkip(3)).WithContext(ctx)
 	elapsed := time.Since(begin)
 	switch {
 	case err != nil && l.LogLevel >= gormLogger.Error && (!errors.Is(err, gormLogger.ErrRecordNotFound) || !l.IgnoreRecordNotFoundError):
 		sql, rows := fc()
 		if rows == -1 {
-			logger.Error(fmt.Sprintf(l.traceErrLogMsg, err, float64(elapsed.Nanoseconds())/1e6, int64(-1), sql))
+			l.l.ErrorContext(ctx, fmt.Sprintf(l.traceErrLogMsg, err, float64(elapsed.Nanoseconds())/1e6, int64(-1), sql))
 		} else {
-			logger.Error(fmt.Sprintf(l.traceErrLogMsg, err, float64(elapsed.Nanoseconds())/1e6, rows, sql))
+			l.l.ErrorContext(ctx, fmt.Sprintf(l.traceErrLogMsg, err, float64(elapsed.Nanoseconds())/1e6, rows, sql))
 		}
 	case elapsed > l.SlowThreshold && l.SlowThreshold != 0 && l.LogLevel >= gormLogger.Warn:
 		sql, rows := fc()
 		slowLog := fmt.Sprintf("SLOW SQL >= %v", l.SlowThreshold)
 		if rows == -1 {
-			logger.Warn(fmt.Sprintf(l.traceWarnLogMsg, slowLog, float64(elapsed.Nanoseconds())/1e6, int64(-1), sql))
+			l.l.WarnContext(ctx, fmt.Sprintf(l.traceWarnLogMsg, slowLog, float64(elapsed.Nanoseconds())/1e6, int64(-1), sql))
 		} else {
-			logger.Warn(fmt.Sprintf(l.traceWarnLogMsg, slowLog, float64(elapsed.Nanoseconds())/1e6, rows, sql))
+			l.l.WarnContext(ctx, fmt.Sprintf(l.traceWarnLogMsg, slowLog, float64(elapsed.Nanoseconds())/1e6, rows, sql))
 		}
 	case l.LogLevel == gormLogger.Info:
 		sql, rows := fc()
 		if rows == -1 {
-			logger.Info(fmt.Sprintf(l.traceLogMsg, float64(elapsed.Nanoseconds())/1e6, int64(-1), sql))
+			l.l.InfoContext(ctx, fmt.Sprintf(l.traceLogMsg, float64(elapsed.Nanoseconds())/1e6, int64(-1), sql))
 		} else {
-			logger.Info(fmt.Sprintf(l.traceLogMsg, float64(elapsed.Nanoseconds())/1e6, rows, sql))
+			l.l.InfoContext(ctx, fmt.Sprintf(l.traceLogMsg, float64(elapsed.Nanoseconds())/1e6, rows, sql))
 		}
 	}
 }

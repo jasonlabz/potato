@@ -32,6 +32,8 @@ type Config struct {
 	SSLMode  string       `json:"ssl_mode"`
 	TimeZone string       `json:"time_zone"`
 	Charset  string       `json:"charset"`
+
+	Logger gormLogger.Interface
 }
 
 // GetLogMode _

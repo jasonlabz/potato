@@ -4,22 +4,20 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"time"
 
 	dm "github.com/jasonlabz/gorm-dm-driver"
 	"github.com/jasonlabz/oracle"
+	"github.com/jasonlabz/potato/log"
+	"go.uber.org/zap"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/driver/sqlserver"
 	"gorm.io/gorm"
-	gormLogger "gorm.io/gorm/logger"
 )
 
 var (
 	dbMap    *sync.Map
-	dbLogger gormLogger.Interface
-
 	mockMode = false
 
 	ErrDBConfigIsNil   = errors.New("db config is nil")
@@ -30,14 +28,7 @@ var (
 
 func init() {
 	dbMap = &sync.Map{}
-	dbLogger = NewLogger(
-		&gormLogger.Config{
-			SlowThreshold:             time.Second,       // Slow SQL threshold
-			LogLevel:                  gormLogger.Silent, // Log level
-			IgnoreRecordNotFoundError: false,             // Ignore ErrRecordNotFound error for logger
-			Colorful:                  false,             // Disable color
-		},
-	)
+
 }
 
 // InitWithDB init database instance with db instance
@@ -95,9 +86,14 @@ func InitConfig(config *Config) error {
 		return errors.New(fmt.Sprintf("unsupported dbType: %s", string(config.DBType)))
 	}
 
+	if config.Logger == nil {
+		config.Logger = LoggerAdapter(log.GetLogger(zap.AddCallerSkip(3)))
+	}
+
 	db, err := gorm.Open(dialect, &gorm.Config{
-		Logger: dbLogger.LogMode(config.GetLogMode()),
+		Logger: config.Logger.LogMode(config.GetLogMode()),
 	})
+
 	if err != nil {
 		return err
 	}

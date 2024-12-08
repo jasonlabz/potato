@@ -68,24 +68,78 @@ func (l *LoggerWrapper) Debug(msg string, fields ...any) {
 	l.logger.Debug(msg, l.checkFields(fields)...)
 }
 
+func (l *LoggerWrapper) DebugContext(ctx context.Context, msg string, fields ...any) {
+	field := zapField(ctx, l.logField...)
+	checkFields := l.checkFields(fields)
+	if len(checkFields) > 0 {
+		field = append(field, checkFields...)
+	}
+	l.logger.Debug(msg, field...)
+}
+
 func (l *LoggerWrapper) Info(msg string, fields ...any) {
 	l.logger.Info(msg, l.checkFields(fields)...)
+}
+
+func (l *LoggerWrapper) InfoContext(ctx context.Context, msg string, fields ...any) {
+	field := zapField(ctx, l.logField...)
+	checkFields := l.checkFields(fields)
+	if len(checkFields) > 0 {
+		field = append(field, checkFields...)
+	}
+	l.logger.Info(msg, field...)
 }
 
 func (l *LoggerWrapper) Warn(msg string, fields ...any) {
 	l.logger.Warn(msg, l.checkFields(fields)...)
 }
 
+func (l *LoggerWrapper) WarnContext(ctx context.Context, msg string, fields ...any) {
+	field := zapField(ctx, l.logField...)
+	checkFields := l.checkFields(fields)
+	if len(checkFields) > 0 {
+		field = append(field, checkFields...)
+	}
+	l.logger.Warn(msg, field...)
+}
+
 func (l *LoggerWrapper) Error(msg string, fields ...any) {
 	l.logger.Error(msg, l.checkFields(fields)...)
+}
+
+func (l *LoggerWrapper) ErrorContext(ctx context.Context, msg string, fields ...any) {
+	field := zapField(ctx, l.logField...)
+	checkFields := l.checkFields(fields)
+	if len(checkFields) > 0 {
+		field = append(field, checkFields...)
+	}
+	l.logger.Error(msg, field...)
 }
 
 func (l *LoggerWrapper) Panic(msg string, fields ...any) {
 	l.logger.Panic(msg, l.checkFields(fields)...)
 }
 
+func (l *LoggerWrapper) PanicContext(ctx context.Context, msg string, fields ...any) {
+	field := zapField(ctx, l.logField...)
+	checkFields := l.checkFields(fields)
+	if len(checkFields) > 0 {
+		field = append(field, checkFields...)
+	}
+	l.logger.Panic(msg, field...)
+}
+
 func (l *LoggerWrapper) Fatal(msg string, fields ...any) {
 	l.logger.Fatal(msg, l.checkFields(fields)...)
+}
+
+func (l *LoggerWrapper) FatalContext(ctx context.Context, msg string, fields ...any) {
+	field := zapField(ctx, l.logField...)
+	checkFields := l.checkFields(fields)
+	if len(checkFields) > 0 {
+		field = append(field, checkFields...)
+	}
+	l.logger.Fatal(msg, field...)
 }
 
 func (l *LoggerWrapper) Sync() {
@@ -180,44 +234,4 @@ func zapField(ctx context.Context, contextKey ...string) (fields []zap.Field) {
 		fields = append(fields, zap.String(key, value))
 	}
 	return
-}
-
-func Debug(ctx context.Context, msg string, fields ...any) {
-	logFields := zapField(ctx, defaultLogger.logField...)
-	for _, field := range defaultLogger.checkFields(fields) {
-		logFields = append(logFields, field)
-	}
-	defaultLogger.logger.Debug(msg, logFields...)
-}
-
-func Info(ctx context.Context, msg string, fields ...any) {
-	logFields := zapField(ctx, defaultLogger.logField...)
-	for _, field := range defaultLogger.checkFields(fields) {
-		logFields = append(logFields, field)
-	}
-	defaultLogger.logger.Info(msg, logFields...)
-}
-
-func Warn(ctx context.Context, msg string, fields ...any) {
-	logFields := zapField(ctx, defaultLogger.logField...)
-	for _, field := range defaultLogger.checkFields(fields) {
-		logFields = append(logFields, field)
-	}
-	defaultLogger.logger.Warn(msg, logFields...)
-}
-
-func Error(ctx context.Context, msg string, fields ...any) {
-	logFields := zapField(ctx, defaultLogger.logField...)
-	for _, field := range defaultLogger.checkFields(fields) {
-		logFields = append(logFields, field)
-	}
-	defaultLogger.logger.Error(msg, logFields...)
-}
-
-func Fatal(ctx context.Context, msg string, fields ...any) {
-	logFields := zapField(ctx, defaultLogger.logField...)
-	for _, field := range defaultLogger.checkFields(fields) {
-		logFields = append(logFields, field)
-	}
-	defaultLogger.logger.Fatal(msg, logFields...)
 }
