@@ -12,7 +12,8 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/go-resty/resty/v2"
 
-	"github.com/jasonlabz/potato/log"
+	"github.com/jasonlabz/potato/internal/log"
+	zapx "github.com/jasonlabz/potato/log"
 )
 
 const (
@@ -29,6 +30,11 @@ func GetClient() *Client {
 
 type Client struct {
 	client *resty.Client
+	l      log.Logger
+}
+
+func SetLogger(l log.Logger) {
+	cli.l = l
 }
 
 func init() {
@@ -42,6 +48,13 @@ func init() {
 func (c *Client) SetHeaders(headers map[string]string) {
 	c.client.SetHeaders(headers)
 	return
+}
+
+func (c *Client) logger() (l log.Logger) {
+	if c.l == nil {
+		c.l = zapx.GetLogger()
+	}
+	return c.l
 }
 
 func (c *Client) SetToken(token string) {
@@ -61,17 +74,16 @@ func (c *Client) GetRestyClient() (cli *resty.Client) {
 
 // Get get request and json response
 func (c *Client) Get(ctx context.Context, url string, result interface{}) (err error) {
-	logger := log.GetLogger().WithContext(ctx)
-	logger.Info("HTTP Request [method:%s] [URL:%s]", http.MethodGet, url)
+	c.logger().InfoContext(ctx, fmt.Sprintf("HTTP Request [method:%s] [URL:%s]", http.MethodGet, url))
 	res, err := c.client.R().
 		SetResult(result).
 		SetHeader("Accept", "application/json").
 		Get(url)
 	if err != nil {
-		logger.Error(err.Error())
+		c.logger().ErrorContext(ctx, err.Error())
 		return
 	}
-	logger.Info("Http Response [Code]:%d [Body]:%s [Cost]:%v", res.StatusCode(), string(res.Body()), res.Time())
+	c.logger().InfoContext(ctx, fmt.Sprintf("Http Response [Code]:%d [Body]:%s [Cost]:%vms", res.StatusCode(), string(res.Body()), res.Time()/time.Millisecond))
 
 	return
 }
@@ -116,17 +128,17 @@ func (c *Client) HeadForm(ctx context.Context, url string, formData map[string]s
 
 // requestForm send formData and response json
 func (c *Client) requestForm(ctx context.Context, url, method string, formData map[string]string, result interface{}) (res *resty.Response, err error) {
-	logger := log.GetLogger().WithContext(ctx)
-	logger.Info("HTTP Request [method:%s] [URL:%s] [Form-Data:%s]", method, url, func() string {
-		if len(formData) == 0 {
-			return ""
-		}
-		var strList = make([]string, 0)
-		for key, val := range formData {
-			strList = append(strList, fmt.Sprintf("%s=%s", key, val))
-		}
-		return strings.Join(strList, "&")
-	}())
+	c.logger().InfoContext(ctx, fmt.Sprintf("HTTP Request [method:%s] [URL:%s] [Form-Data:%s]", method, url,
+		func() string {
+			if len(formData) == 0 {
+				return ""
+			}
+			var strList = make([]string, 0)
+			for key, val := range formData {
+				strList = append(strList, fmt.Sprintf("%s=%s", key, val))
+			}
+			return strings.Join(strList, "&")
+		}()))
 	req := c.client.R().
 		SetHeader("Content-Type", "application/x-www-form-urlencoded").
 		SetHeader("Accept", "application/json").
@@ -150,24 +162,23 @@ func (c *Client) requestForm(ctx context.Context, url, method string, formData m
 		err = errors.New(fmt.Sprintf("form param unsupported method:[%s]", method))
 	}
 	if err != nil {
-		logger.Error(err.Error())
+		c.logger().ErrorContext(ctx, err.Error())
 		return
 	}
-	logger.Info("Http Response [Code]:%d [Body]:%s [Cost]:%v", res.StatusCode(), string(res.Body()), res.Time())
+	c.logger().InfoContext(ctx, fmt.Sprintf("Http Response [Code]:%d [Body]:%s [Cost]:%vms", res.StatusCode(), string(res.Body()), res.Time()/time.Millisecond))
 
 	return res, err
 }
 
 // requestJson send json and response json
 func (c *Client) requestJson(ctx context.Context, url, method string, body interface{}, result interface{}) (res *resty.Response, err error) {
-	logger := log.GetLogger().WithContext(ctx)
-	logger.Info("HTTP Request [method:%s] [URL:%s] [Body:%s]", method, url, func() string {
+	c.logger().InfoContext(ctx, fmt.Sprintf("HTTP Request [method:%s] [URL:%s] [Body:%s]", method, url, func() string {
 		marshal, marErr := sonic.Marshal(body)
 		if marErr != nil {
 			return ""
 		}
 		return string(marshal)
-	}())
+	}()))
 	req := c.client.R().
 		SetHeader("Content-Type", "application/json").
 		SetHeader("Accept", "application/json").
@@ -192,10 +203,10 @@ func (c *Client) requestJson(ctx context.Context, url, method string, body inter
 	}
 
 	if err != nil {
-		logger.Error(err.Error())
+		c.logger().ErrorContext(ctx, err.Error())
 		return
 	}
-	logger.Info("Http Response [Code]:%d [Body]:%s [Cost]:%v", res.StatusCode(), string(res.Body()), res.Time())
+	c.logger().InfoContext(ctx, fmt.Sprintf("Http Response [Code]:%d [Body]:%s [Cost]:%vms", res.StatusCode(), string(res.Body()), res.Time()/time.Millisecond))
 
 	return
 }

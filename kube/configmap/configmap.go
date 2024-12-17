@@ -3,11 +3,13 @@ package configmap
 import (
 	"context"
 	"fmt"
-	"github.com/jasonlabz/potato/kube"
-	"github.com/jasonlabz/potato/kube/options"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
+
+	"github.com/jasonlabz/potato/kube"
+	"github.com/jasonlabz/potato/kube/options"
 )
 
 func GetConfigmapList(ctx context.Context, namespace string, opts ...options.ListOptionFunc) (configmapList *corev1.ConfigMapList, err error) {
@@ -94,9 +96,9 @@ func CreateConfigmap(ctx context.Context, request CreateConfigmapRequest) (confi
 	for labelKey, labelVal := range request.ConfigmapLabels {
 		configmapSrc.ObjectMeta.Labels[labelKey] = labelVal
 	}
-	options := metav1.CreateOptions{}
+	createOptions := metav1.CreateOptions{}
 	//创建configmap
-	configmapInfo, err = kube.GetKubeClient().CoreV1().ConfigMaps(request.Namespace).Create(ctx, configmapSrc, options)
+	configmapInfo, err = kube.GetKubeClient().CoreV1().ConfigMaps(request.Namespace).Create(ctx, configmapSrc, createOptions)
 	if err != nil {
 		return nil, err
 	}

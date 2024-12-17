@@ -9,61 +9,61 @@ import (
 )
 
 type CronTaskBuilder struct {
-	jobType    JobType  `json:"job_type"` //  1|每天；2|每月；3|每周；4|间隔（每隔2个小时，每隔30分钟）
-	seconds    *string  `json:"seconds"`
-	minutes    *string  `json:"minutes"`
-	hours      *string  `json:"hours"`
-	dayOfMonth []string `json:"day_of_month"`
-	month      *string  `json:"month"`
-	dayOfWeek  []string `json:"day_of_week"`
-	spec       string   `json:"spec"`
+	JobType    JobType  `json:"job_type"` //  1|每天；2|每月；3|每周；4|间隔（每隔2个小时，每隔30分钟）
+	Seconds    *string  `json:"seconds"`
+	Minutes    *string  `json:"minutes"`
+	Hours      *string  `json:"hours"`
+	DayOfMonth []string `json:"day_of_month"`
+	Month      *string  `json:"month"`
+	DayOfWeek  []string `json:"day_of_week"`
+	Spec       string   `json:"spec"`
 }
 
-func (b *CronTaskBuilder) Spec(spec string) *CronTaskBuilder {
-	b.spec = spec
+func (b *CronTaskBuilder) SetSpec(spec string) *CronTaskBuilder {
+	b.Spec = spec
 	return b
 }
 
-func (b *CronTaskBuilder) Seconds(seconds string) *CronTaskBuilder {
-	b.seconds = &seconds
+func (b *CronTaskBuilder) SetSeconds(seconds string) *CronTaskBuilder {
+	b.Seconds = &seconds
 	return b
 }
 
-func (b *CronTaskBuilder) Minutes(minutes string) *CronTaskBuilder {
-	b.minutes = &minutes
+func (b *CronTaskBuilder) SetMinutes(minutes string) *CronTaskBuilder {
+	b.Minutes = &minutes
 	return b
 }
 
-func (b *CronTaskBuilder) Hours(hours string) *CronTaskBuilder {
-	b.hours = &hours
+func (b *CronTaskBuilder) SetHours(hours string) *CronTaskBuilder {
+	b.Hours = &hours
 	return b
 }
 
-func (b *CronTaskBuilder) DayOfMonth(dayOfMonth ...string) *CronTaskBuilder {
-	b.dayOfMonth = dayOfMonth
+func (b *CronTaskBuilder) SetDayOfMonth(dayOfMonth ...string) *CronTaskBuilder {
+	b.DayOfMonth = dayOfMonth
 	return b
 }
 
-func (b *CronTaskBuilder) Month(month string) *CronTaskBuilder {
-	b.month = &month
+func (b *CronTaskBuilder) SetMonth(month string) *CronTaskBuilder {
+	b.Month = &month
 	return b
 }
 
-func (b *CronTaskBuilder) DayOfWeek(dayOfWeek ...string) *CronTaskBuilder {
-	b.dayOfWeek = dayOfWeek
+func (b *CronTaskBuilder) SetDayOfWeek(dayOfWeek ...string) *CronTaskBuilder {
+	b.DayOfWeek = dayOfWeek
 	return b
 }
 
 func (b *CronTaskBuilder) BuildSpec() string {
-	if b.spec != "" {
-		return b.spec
+	if b.Spec != "" {
+		return b.Spec
 	}
-	seconds := utils.IsTrueOrNot(*b.seconds == "", "*", *b.seconds)
-	minutes := utils.IsTrueOrNot(*b.minutes == "", "*", *b.minutes)
-	hours := utils.IsTrueOrNot(*b.hours == "", "*", *b.hours)
-	dayOfMonth := utils.IsTrueOrNot(len(b.dayOfMonth) == 0, "*", strings.Join(b.dayOfMonth, ","))
-	month := utils.IsTrueOrNot(*b.month == "", "*", *b.month)
-	dayOfWeek := utils.IsTrueOrNot(len(b.dayOfWeek) == 0, "*", strings.Join(b.dayOfWeek, ","))
+	seconds := utils.IsTrueOrNot(*b.Seconds == "", "*", *b.Seconds)
+	minutes := utils.IsTrueOrNot(*b.Minutes == "", "*", *b.Minutes)
+	hours := utils.IsTrueOrNot(*b.Hours == "", "*", *b.Hours)
+	dayOfMonth := utils.IsTrueOrNot(len(b.DayOfMonth) == 0, "*", strings.Join(b.DayOfMonth, ","))
+	month := utils.IsTrueOrNot(*b.Month == "", "*", *b.Month)
+	dayOfWeek := utils.IsTrueOrNot(len(b.DayOfWeek) == 0, "*", strings.Join(b.DayOfWeek, ","))
 	return fmt.Sprintf("%s %s %s %s %s %s", seconds, minutes, hours, dayOfMonth, month, dayOfWeek)
 }
 
@@ -72,9 +72,9 @@ func (b *CronTaskBuilder) Validate() error {
 	var err error
 	switch len(splits) {
 	case 5:
-		_, err = standardParser.Parse(b.spec)
+		_, err = standardParser.Parse(b.Spec)
 	case 6:
-		_, err = secondParser.Parse(b.spec)
+		_, err = secondParser.Parse(b.Spec)
 	}
 	if err != nil {
 		return fmt.Errorf("invalid crontab spec")
@@ -83,12 +83,12 @@ func (b *CronTaskBuilder) Validate() error {
 }
 
 func (b *CronTaskBuilder) Reset() {
-	b.dayOfWeek = nil
-	b.seconds = nil
-	b.minutes = nil
-	b.hours = nil
-	b.month = nil
-	b.dayOfMonth = nil
+	b.DayOfWeek = nil
+	b.Seconds = nil
+	b.Minutes = nil
+	b.Hours = nil
+	b.Month = nil
+	b.DayOfMonth = nil
 }
 
 type JobType int
@@ -123,22 +123,3 @@ func (b *CronTaskBuilder) GenCrontabStr(jobType JobType) (spec string) {
 	}
 	return
 }
-
-//type Options struct {
-//	writeFile bool
-//	logFormat string
-//}
-//
-//type Option func(o *Options)
-//
-//func WithLevel(level string) Option {
-//	return func(o *Options) {
-//		o.logLevel = level
-//	}
-//}
-//
-//func WithBasePath(basePath string) Option {
-//	return func(o *Options) {
-//		o.basePath = basePath
-//	}
-//}

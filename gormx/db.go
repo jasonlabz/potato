@@ -31,8 +31,8 @@ func init() {
 
 }
 
-// InitWithDB init database instance with db instance
-func InitWithDB(dbName string, db *gorm.DB) error {
+// StoreDB store database instance
+func StoreDB(dbName string, db *gorm.DB) error {
 	if db == nil {
 		return errors.New("no db")
 	}
@@ -49,23 +49,23 @@ func InitWithDB(dbName string, db *gorm.DB) error {
 }
 
 // InitConfig init database instance with db configuration and dialect
-func InitConfig(config *Config) error {
+func InitConfig(config *Config) (db *gorm.DB, err error) {
 	if config == nil {
-		return errors.New("no db config")
+		return nil, errors.New("no db config")
 	}
 
 	if config.DSN == "" &&
 		config.GenDSN() == "" {
-		return errors.New("no db dsn")
+		return nil, errors.New("no db dsn")
 	}
 
 	if config.DBName == "" {
 		config.DBName = config.GenDSN()
 	}
 
-	_, ok := dbMap.Load(config.DBName)
+	dbLoaded, ok := dbMap.Load(config.DBName)
 	if ok {
-		return nil
+		return dbLoaded.(*gorm.DB), nil
 	}
 
 	var dialect gorm.Dialector
@@ -83,24 +83,24 @@ func InitConfig(config *Config) error {
 	case DatabaseTypeDM:
 		dialect = dm.Open(config.DSN)
 	default:
-		return errors.New(fmt.Sprintf("unsupported dbType: %s", string(config.DBType)))
+		return nil, errors.New(fmt.Sprintf("unsupported dbType: %s", string(config.DBType)))
 	}
 
 	if config.Logger == nil {
 		config.Logger = LoggerAdapter(log.GetLogger(zap.AddCallerSkip(3)))
 	}
 
-	db, err := gorm.Open(dialect, &gorm.Config{
+	dbOpened, err := gorm.Open(dialect, &gorm.Config{
 		Logger: config.Logger.LogMode(config.GetLogMode()),
 	})
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	sqlDB, err := db.DB()
+	sqlDB, err := dbOpened.DB()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if config.MaxOpenConn == 0 {
 		config.MaxOpenConn = defaultConfig.MaxOpenConn
@@ -116,8 +116,8 @@ func InitConfig(config *Config) error {
 	sqlDB.SetConnMaxLifetime(config.ConnMaxLifeTime)
 
 	// Store database
-	dbMap.Store(config.DBName, db)
-	return nil
+	dbMap.Store(config.DBName, dbOpened)
+	return dbOpened, nil
 }
 
 func GetDB(name string) (*gorm.DB, error) {

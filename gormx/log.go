@@ -8,7 +8,7 @@ import (
 
 	gormLogger "gorm.io/gorm/logger"
 
-	"github.com/jasonlabz/potato/log"
+	"github.com/jasonlabz/potato/internal/log"
 )
 
 var (
@@ -58,7 +58,7 @@ func WithParameterizedQueries(query bool) OptionFunc {
 	}
 }
 
-func LoggerAdapter(l *log.LoggerWrapper, opts ...OptionFunc) gormLogger.Interface {
+func LoggerAdapter(l log.Logger, opts ...OptionFunc) gormLogger.Interface {
 	cloneConfig := *defaultGormLoggerConfig
 	for _, opt := range opts {
 		opt(&cloneConfig)
@@ -85,7 +85,7 @@ func LoggerAdapter(l *log.LoggerWrapper, opts ...OptionFunc) gormLogger.Interfac
 
 type Logger struct {
 	*gormLogger.Config
-	l                                            *log.LoggerWrapper
+	l                                            log.Logger
 	infoLogMsg, warnLogMsg, errLogMsg            string
 	traceLogMsg, traceErrLogMsg, traceWarnLogMsg string
 }

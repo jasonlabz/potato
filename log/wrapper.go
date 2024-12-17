@@ -49,6 +49,12 @@ func (l *LoggerWrapper) WithError(err error) *LoggerWrapper {
 	return l
 }
 
+// WithCallerSkip 调用层级
+func (l *LoggerWrapper) WithCallerSkip(callerSkip int) *LoggerWrapper {
+	l.logger = l.logger.WithOptions(zap.AddCallerSkip(callerSkip))
+	return l
+}
+
 func (l *LoggerWrapper) WithOptions(opt ...zap.Option) *LoggerWrapper {
 	l.logger = l.logger.WithOptions(opt...)
 	return l

@@ -12,7 +12,6 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/jasonlabz/potato/log"
 	"github.com/jasonlabz/potato/times"
 )
 
@@ -26,9 +25,9 @@ const (
 	Closed = 1
 )
 
-func handlePanic() {
+func handlePanic(op *RedisOperator) {
 	if r := recover(); r != nil {
-		log.GetLogger().Error("Recovered: %+v", r)
+		op.logger().Error(fmt.Sprintf("Recovered: %+v", r))
 	}
 }
 
@@ -52,8 +51,8 @@ func (op *RedisOperator) Watch(ctx context.Context, fn func(*redis.Tx) error, ke
 /**********************************************************  延迟队列 ****************************************************************/
 // tryMigrationDaemon 将到期的PublishBody迁移到ready队列等待执行
 func (op *RedisOperator) tryMigrationDaemon(ctx context.Context) {
-	defer handlePanic()
-	logger := log.GetLogger().WithContext(ctx).WithField(log.String("tag", "redis_delay_queue_method"))
+	defer handlePanic(op)
+
 	sig := make(chan os.Signal)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGKILL)
 	timer := time.NewTimer(DefaultPollingTimes)
@@ -65,7 +64,8 @@ func (op *RedisOperator) tryMigrationDaemon(ctx context.Context) {
 		if !delayInit {
 			members, getErr := op.SMembers(ctx, CacheKeyWithDelayQueueKey)
 			if getErr != nil {
-				logger.WithError(getErr).Error("redis get delay queue key error")
+				op.logger().ErrorContext(ctx, "redis get delay queue key error",
+					"err", getErr.Error(), "tag", "redis_delay_queue_method")
 				continue
 			}
 			for _, member := range members {
@@ -80,7 +80,7 @@ func (op *RedisOperator) tryMigrationDaemon(ctx context.Context) {
 
 		select {
 		case s := <-sig:
-			logger.Info("recived： %v, exiting redis daemon... ", s)
+			op.logger().Info(fmt.Sprintf("recived： %v, exiting redis daemon... ", s))
 			return
 		case <-timer.C:
 			op.delayQueues.Range(func(key, value interface{}) bool {
@@ -91,7 +91,8 @@ func (op *RedisOperator) tryMigrationDaemon(ctx context.Context) {
 					delayQueueTimeout := fmt.Sprintf(DelayQueueTimeoutTemplate, delayKey)
 					migrateErr := op.migrateExpiredBody(ctx, delayQueueTimeout, delayKey)
 					if migrateErr != nil {
-						logger.WithError(migrateErr).Error("migrate timeout message error: " + delayQueueTimeout + " -> " + delayKey)
+						op.logger().ErrorContext(ctx, "migrate timeout message error: "+delayQueueTimeout+" -> "+delayKey,
+							"err", migrateErr.Error(), "tag", "redis_delay_queue_method")
 						return
 					}
 				}()

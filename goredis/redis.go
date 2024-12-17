@@ -9,6 +9,8 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/jasonlabz/potato/configx"
+	"github.com/jasonlabz/potato/internal/log"
+	zapx "github.com/jasonlabz/potato/log"
 )
 
 type RedisMode string
@@ -104,6 +106,7 @@ type RedisOperator struct {
 	config      *Config
 	client      redis.UniversalClient
 	closed      int32
+	l           log.Logger
 }
 
 func NewRedisOperator(config *Config) (op *RedisOperator, err error) {
@@ -148,6 +151,17 @@ func (op *RedisOperator) Close() (err error) {
 	err = op.client.Close()
 	op.closed = Closed
 	return
+}
+
+func (op *RedisOperator) SetLogger(l log.Logger) {
+	op.l = l
+}
+
+func (op *RedisOperator) logger() (l log.Logger) {
+	if op.l == nil {
+		op.l = zapx.GetLogger()
+	}
+	return op.l
 }
 
 func (op *RedisOperator) GetRedisClient() redis.UniversalClient {

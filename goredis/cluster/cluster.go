@@ -2,11 +2,15 @@ package cluster
 
 import (
 	"context"
-	"github.com/jasonlabz/potato/goredis/single"
-	"github.com/redis/go-redis/v9"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/redis/go-redis/v9"
+
+	"github.com/jasonlabz/potato/goredis/single"
+	"github.com/jasonlabz/potato/internal/log"
+	zapx "github.com/jasonlabz/potato/log"
 )
 
 type RedisOperator struct {
@@ -15,6 +19,7 @@ type RedisOperator struct {
 	config      *redis.ClusterOptions
 	client      *redis.ClusterClient
 	closed      int32
+	l           log.Logger
 }
 
 func NewRedisOperator(config *redis.ClusterOptions) (op *RedisOperator, err error) {
@@ -50,6 +55,17 @@ func (op *RedisOperator) Close() (err error) {
 	err = op.client.Close()
 	op.closed = single.Closed
 	return
+}
+
+func (op *RedisOperator) SetLogger(l log.Logger) {
+	op.l = l
+}
+
+func (op *RedisOperator) logger() (l log.Logger) {
+	if op.l == nil {
+		op.l = zapx.GetLogger()
+	}
+	return op.l
 }
 
 func (op *RedisOperator) Set(ctx context.Context, key string, value any) (success bool, err error) {

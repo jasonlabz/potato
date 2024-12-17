@@ -3,6 +3,8 @@ package sentinel
 import (
 	"context"
 	"github.com/jasonlabz/potato/goredis/single"
+	"github.com/jasonlabz/potato/internal/log"
+	zapx "github.com/jasonlabz/potato/log"
 	"github.com/redis/go-redis/v9"
 	"sync"
 	"sync/atomic"
@@ -15,6 +17,7 @@ type RedisOperator struct {
 	config      *redis.FailoverOptions
 	client      *redis.Client
 	closed      int32
+	l           log.Logger
 }
 
 func NewRedisOperator(config *redis.FailoverOptions) (op *RedisOperator, err error) {
@@ -32,6 +35,17 @@ func NewRedisOperator(config *redis.FailoverOptions) (op *RedisOperator, err err
 	// daemon process
 	go op.tryMigrationDaemon(context.Background())
 	return
+}
+
+func (op *RedisOperator) SetLogger(l log.Logger) {
+	op.l = l
+}
+
+func (op *RedisOperator) logger() (l log.Logger) {
+	if op.l == nil {
+		op.l = zapx.GetLogger()
+	}
+	return op.l
 }
 
 func (op *RedisOperator) GetRedisClient() redis.UniversalClient {

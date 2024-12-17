@@ -655,7 +655,7 @@ func explainPvc(mountPvcInfoList []MountPvc) (volumeMounts []corev1.VolumeMount,
 	return volumeMounts, volumes
 }
 
-// 定义hostpath的解释器
+// explainHostPath 定义hostpath的解释器
 func explainHostPath(hostPathInfo []MountHostPath) (volumeMounts []corev1.VolumeMount, volumes []corev1.Volume) {
 	for _, mountInfo := range hostPathInfo {
 		//拼接 volumeMount.Name
