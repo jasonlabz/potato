@@ -97,7 +97,7 @@ func IsNumberString(s string) bool {
 	return true
 }
 
-// ListDir 获取指定目录下文件
+// ListDir 获取指定目录下文件列表，包含文件路径
 func ListDir(dirPth string, suffix string) (files []string, err error) {
 	files = make([]string, 0)
 
@@ -125,7 +125,7 @@ func ListDir(dirPth string, suffix string) (files []string, err error) {
 	return files, nil
 }
 
-// WalkDir 获取指定目录及所有子目录下的所有文件，可以匹配后缀过滤。
+// WalkDir 获取指定目录及所有子目录下的所有文件（只包含文件名），可以匹配后缀过滤。
 func WalkDir(dirPth, suffix string) (files []string, err error) {
 	files = make([]string, 0)
 	suffix = strings.ToUpper(suffix) //忽略后缀匹配的大小写
