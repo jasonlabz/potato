@@ -44,7 +44,7 @@ type Config struct {
 
 func init() {
 	config := configx.GetConfig()
-	if len(config.Redis.Endpoints) > 0 {
+	if config.Redis.Enable {
 		InitRedisClient(&Config{
 			ClientName:       config.Redis.ClientName,
 			MasterName:       config.Redis.MasterName,

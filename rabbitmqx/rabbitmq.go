@@ -33,7 +33,7 @@ func GetRabbitMQOperator() *RabbitMQOperator {
 
 func init() {
 	appConf := configx.GetConfig()
-	if len(appConf.Rabbitmq.Host) > 0 {
+	if appConf.Rabbitmq.Enable {
 		mqConf := &MQConfig{}
 		err := utils.CopyStruct(appConf.Rabbitmq, mqConf)
 		if err != nil {

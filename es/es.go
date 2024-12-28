@@ -29,7 +29,7 @@ func GetESOperator() *ElasticSearchOperator {
 
 func init() {
 	appConf := configx.GetConfig()
-	if len(appConf.ES.Endpoints) > 0 {
+	if appConf.ES.Enable {
 		err := InitElasticSearchOperator(&Config{
 			IsHttps:   appConf.ES.IsHttps,
 			Endpoints: appConf.ES.Endpoints,

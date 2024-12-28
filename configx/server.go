@@ -47,6 +47,7 @@ type KafkaConfig struct {
 
 // Database 连接配置
 type Database struct {
+	Enable          bool   `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"`
 	DBType          string `mapstructure:"db_type" json:"db_type" yaml:"db_type" ini:"db_type"`
 	DSN             string `mapstructure:"dsn" json:"dsn" yaml:"dsn" ini:"dsn"`
 	LogMode         string `mapstructure:"log_mode" json:"log_mode" yaml:"log_mode" ini:"log_mode"`
@@ -63,6 +64,7 @@ type Database struct {
 
 // RedisConfig 连接配置
 type RedisConfig struct {
+	Enable           bool     `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"`
 	Endpoints        []string `mapstructure:"endpoints" json:"endpoints" yaml:"endpoints" ini:"endpoints"`
 	Username         string   `mapstructure:"username" json:"username" yaml:"username" ini:"username"`
 	Password         string   `mapstructure:"password" json:"password" yaml:"password" ini:"password"`
@@ -78,6 +80,7 @@ type RedisConfig struct {
 }
 
 type Elasticsearch struct {
+	Enable    bool     `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"`
 	Endpoints []string `mapstructure:"endpoints" json:"endpoints" yaml:"endpoints" ini:"endpoints"`
 	Username  string   `mapstructure:"username" json:"username" yaml:"username" ini:"username"`
 	Password  string   `mapstructure:"password" json:"password" yaml:"password" ini:"password"`
@@ -86,7 +89,8 @@ type Elasticsearch struct {
 	APIKey    string   `mapstructure:"api_key" json:"api_key" yaml:"api_key" ini:"api_key"`
 }
 
-type MongoConf struct {
+type MongodbConf struct {
+	Enable          bool   `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"`
 	Host            string `mapstructure:"host" json:"host" yaml:"host" ini:"host"`
 	Port            int    `mapstructure:"port" json:"port" yaml:"port" ini:"port"`
 	Username        string `mapstructure:"username" json:"username" yaml:"username" ini:"username"`
@@ -97,6 +101,7 @@ type MongoConf struct {
 }
 
 type RabbitMQConf struct {
+	Enable      bool      `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"`
 	Host        string    `mapstructure:"host" json:"host" yaml:"host" ini:"host"`
 	Port        int       `mapstructure:"port" json:"port" yaml:"port" ini:"port"`
 	Username    string    `mapstructure:"username" json:"username" yaml:"username" ini:"username"`
@@ -106,11 +111,12 @@ type RabbitMQConf struct {
 }
 
 type LimitConf struct {
-	AttemptTimes    int `mapstructure:"attempt_times" json:"attempt_times" yaml:"attempt_times" ini:"attempt_times"`
-	RetryTimeSecond int `mapstructure:"retry_time_second" json:"retry_time_second" yaml:"retry_time_second" ini:"retry_time_second"`
-	PrefetchCount   int `mapstructure:"prefetch_count" json:"prefetch_count" yaml:"prefetch_count" ini:"prefetch_count"`
-	Timeout         int `mapstructure:"timeout" json:"timeout" yaml:"timeout" ini:"timeout"`
-	QueueLimit      int `mapstructure:"queue_limit" json:"queue_limit" yaml:"queue_limit" ini:"queue_limit"`
+	Enable          bool `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"`
+	AttemptTimes    int  `mapstructure:"attempt_times" json:"attempt_times" yaml:"attempt_times" ini:"attempt_times"`
+	RetryTimeSecond int  `mapstructure:"retry_time_second" json:"retry_time_second" yaml:"retry_time_second" ini:"retry_time_second"`
+	PrefetchCount   int  `mapstructure:"prefetch_count" json:"prefetch_count" yaml:"prefetch_count" ini:"prefetch_count"`
+	Timeout         int  `mapstructure:"timeout" json:"timeout" yaml:"timeout" ini:"timeout"`
+	QueueLimit      int  `mapstructure:"queue_limit" json:"queue_limit" yaml:"queue_limit" ini:"queue_limit"`
 }
 
 // Application 服务地址端口配置
@@ -139,7 +145,7 @@ type PProf struct {
 // Pusher push to pushGateway 配置
 type Pusher struct {
 	Enable     bool   `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"`                     // Enable backend job push metrics to remote pushgateway
-	jobName    string `mapstructure:"job_name" json:"job_name" yaml:"job_name" ini:"job_name"`             // Name of current push job
+	JobName    string `mapstructure:"job_name" json:"job_name" yaml:"job_name" ini:"job_name"`             // Name of current push job
 	RemoteAddr string `mapstructure:"remote_addr" json:"remote_addr" yaml:"remote_addr" ini:"remote_addr"` // Remote address of pushgateway
 	IntervalMs int    `mapstructure:"IntervalMs" json:"IntervalMs" yaml:"interval_ms" ini:"interval_ms"`   // Push interval in milliseconds
 	BasicAuth  string `mapstructure:"basic_auth" json:"basic_auth" yaml:"basic_auth" ini:"basic_auth"`     // Basic auth of pushgateway
@@ -154,7 +160,7 @@ type Config struct {
 	Rabbitmq    RabbitMQConf   `mapstructure:"rabbitmq" json:"rabbitmq" yaml:"rabbitmq" ini:"rabbitmq"`
 	Redis       RedisConfig    `mapstructure:"redis" json:"redis" yaml:"redis" ini:"redis"`
 	ES          Elasticsearch  `mapstructure:"es" json:"es" yaml:"es" ini:"es"`
-	Mongo       MongoConf      `mapstructure:"mongo" json:"mongo" yaml:"mongo" ini:"mongo"`
+	Mongodb     MongodbConf    `mapstructure:"mongodb" json:"mongodb" yaml:"mongodb" ini:"mongodb"`
 }
 
 var applicationConfig = new(Config)
