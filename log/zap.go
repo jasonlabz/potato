@@ -47,11 +47,18 @@ type Options struct {
 
 type Option func(o *Options)
 
+func WithWriteFile(write bool) Option {
+	return func(o *Options) {
+		o.writeFile = write
+	}
+}
+
 func WithName(name string) Option {
 	return func(o *Options) {
 		o.name = name
 	}
 }
+
 func WithLevel(level string) Option {
 	return func(o *Options) {
 		o.logLevel = level

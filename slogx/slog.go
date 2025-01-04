@@ -77,6 +77,13 @@ func WithName(name string) Option {
 		o.name = name
 	}
 }
+
+func WithWriteFile(write bool) Option {
+	return func(o *Options) {
+		o.writeFile = write
+	}
+}
+
 func WithLevel(level string) Option {
 	return func(o *Options) {
 		o.logLevel = level
