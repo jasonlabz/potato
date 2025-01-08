@@ -2,6 +2,7 @@ package slogx
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"runtime"
 	"strings"
@@ -35,12 +36,7 @@ type LoggerWrapper struct {
 }
 
 func GetLogger() *LoggerWrapper {
-	return &LoggerWrapper{
-		logger:     defaultLogger.logger,
-		core:       defaultLogger.core,
-		logField:   defaultLogger.logField,
-		callerSkip: defaultLogger.callerSkip,
-	}
+	return defaultLogger.clone()
 }
 
 func slogField(ctx context.Context, contextKey ...string) (fields []any) {
@@ -55,6 +51,11 @@ func slogField(ctx context.Context, contextKey ...string) (fields []any) {
 		fields = append(fields, slog.String(key, value))
 	}
 	return
+}
+
+func (l *LoggerWrapper) clone() *LoggerWrapper {
+	c := *l.logger
+	return &LoggerWrapper{logger: &c, logField: l.logField, core: l.core, callerSkip: l.callerSkip}
 }
 
 // WithCallerSkip 调用层级
@@ -88,6 +89,10 @@ func (l *LoggerWrapper) Debug(msg string, args ...any) {
 	l.log(context.Background(), slog.LevelDebug, msg, args...)
 }
 
+func (l *LoggerWrapper) Debugf(msg string, args ...any) {
+	l.log(context.Background(), slog.LevelDebug, getMessage(msg, args))
+}
+
 // DebugContext logs at [LevelDebug] with the given context.
 func (l *LoggerWrapper) DebugContext(ctx context.Context, msg string, args ...any) {
 	l.log(ctx, slog.LevelDebug, msg, args...)
@@ -96,6 +101,10 @@ func (l *LoggerWrapper) DebugContext(ctx context.Context, msg string, args ...an
 // Info logs at [LevelInfo].
 func (l *LoggerWrapper) Info(msg string, args ...any) {
 	l.log(context.Background(), slog.LevelInfo, msg, args...)
+}
+
+func (l *LoggerWrapper) Infof(msg string, args ...any) {
+	l.log(context.Background(), slog.LevelInfo, getMessage(msg, args))
 }
 
 // InfoContext logs at [LevelInfo] with the given context.
@@ -108,6 +117,10 @@ func (l *LoggerWrapper) Warn(msg string, args ...any) {
 	l.log(context.Background(), slog.LevelWarn, msg, args...)
 }
 
+func (l *LoggerWrapper) Warnf(msg string, args ...any) {
+	l.log(context.Background(), slog.LevelWarn, getMessage(msg, args))
+}
+
 // WarnContext logs at [LevelWarn] with the given context.
 func (l *LoggerWrapper) WarnContext(ctx context.Context, msg string, args ...any) {
 	l.log(ctx, slog.LevelWarn, msg, args...)
@@ -116,6 +129,10 @@ func (l *LoggerWrapper) WarnContext(ctx context.Context, msg string, args ...any
 // Error logs at [LevelError].
 func (l *LoggerWrapper) Error(msg string, args ...any) {
 	l.log(context.Background(), slog.LevelError, msg, args...)
+}
+
+func (l *LoggerWrapper) Errorf(msg string, args ...any) {
+	l.log(context.Background(), slog.LevelError, getMessage(msg, args))
 }
 
 // ErrorContext logs at [LevelError] with the given context.
@@ -168,6 +185,24 @@ func (l *LoggerWrapper) logAttrs(ctx context.Context, level slog.Level, msg stri
 		ctx = context.Background()
 	}
 	_ = l.logger.Handler().Handle(ctx, r)
+}
+
+// getMessage format with Sprint, Sprintf, or neither.
+func getMessage(template string, args []any) string {
+	if len(args) == 0 {
+		return template
+	}
+
+	if template != "" {
+		return fmt.Sprintf(template, args...)
+	}
+
+	if len(args) == 1 {
+		if str, ok := args[0].(string); ok {
+			return str
+		}
+	}
+	return fmt.Sprint(args...)
 }
 
 func Any(key string, val any) slog.Attr {

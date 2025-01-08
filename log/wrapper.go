@@ -27,51 +27,60 @@ func init() {
 }
 
 func GetLogger(opts ...zap.Option) *LoggerWrapper {
-	clone := defaultLogger.clone()
 	if len(opts) > 0 {
-		return clone.WithOptions(opts...)
+		return defaultLogger.WithOptions(opts...)
 	}
-	return clone
+	return defaultLogger.clone()
 }
 
 func (l *LoggerWrapper) clone() *LoggerWrapper {
-	newLogger := *l.logger
-	return &LoggerWrapper{logger: &newLogger, logField: l.logField}
+	cloneLogger := *l.logger
+	return &LoggerWrapper{logger: &cloneLogger, logField: l.logField}
 }
 
 func (l *LoggerWrapper) WithContext(ctx context.Context) *LoggerWrapper {
-	l.logger = l.logger.With(zapField(ctx, l.logField...)...)
-	return l
+	lw := l.clone()
+	lw.logger = lw.logger.With(zapField(ctx, lw.logField...)...)
+	return lw
 }
 
 func (l *LoggerWrapper) WithError(err error) *LoggerWrapper {
-	l.logger = l.logger.With(zap.Error(err))
-	return l
+	lw := l.clone()
+	lw.logger = lw.logger.With(zap.Error(err))
+	return lw
 }
 
 // WithCallerSkip 调用层级
 func (l *LoggerWrapper) WithCallerSkip(callerSkip int) *LoggerWrapper {
-	l.logger = l.logger.WithOptions(zap.AddCallerSkip(callerSkip))
-	return l
+	lw := l.clone()
+	lw.logger = lw.logger.WithOptions(zap.AddCallerSkip(callerSkip))
+	return lw
 }
 
 func (l *LoggerWrapper) WithOptions(opt ...zap.Option) *LoggerWrapper {
-	l.logger = l.logger.WithOptions(opt...)
-	return l
+	lw := l.clone()
+	lw.logger = lw.logger.WithOptions(opt...)
+	return lw
 }
 
 func (l *LoggerWrapper) WithField(fields ...zap.Field) *LoggerWrapper {
-	l.logger = l.logger.With(fields...)
-	return l
+	lw := l.clone()
+	lw.logger = lw.logger.With(fields...)
+	return lw
 }
 
 func (l *LoggerWrapper) WithAny(fields ...any) *LoggerWrapper {
-	l.logger = l.logger.With(l.checkFields(fields)...)
-	return l
+	lw := l.clone()
+	lw.logger = lw.logger.With(lw.checkFields(fields)...)
+	return lw
 }
 
 func (l *LoggerWrapper) Debug(msg string, fields ...any) {
 	l.logger.Debug(msg, l.checkFields(fields)...)
+}
+
+func (l *LoggerWrapper) Debugf(msg string, args ...any) {
+	l.logger.Debug(getMessage(msg, args))
 }
 
 func (l *LoggerWrapper) DebugContext(ctx context.Context, msg string, fields ...any) {
@@ -87,6 +96,10 @@ func (l *LoggerWrapper) Info(msg string, fields ...any) {
 	l.logger.Info(msg, l.checkFields(fields)...)
 }
 
+func (l *LoggerWrapper) Infof(msg string, args ...any) {
+	l.logger.Info(getMessage(msg, args))
+}
+
 func (l *LoggerWrapper) InfoContext(ctx context.Context, msg string, fields ...any) {
 	field := zapField(ctx, l.logField...)
 	checkFields := l.checkFields(fields)
@@ -98,6 +111,10 @@ func (l *LoggerWrapper) InfoContext(ctx context.Context, msg string, fields ...a
 
 func (l *LoggerWrapper) Warn(msg string, fields ...any) {
 	l.logger.Warn(msg, l.checkFields(fields)...)
+}
+
+func (l *LoggerWrapper) Warnf(msg string, args ...any) {
+	l.logger.Warn(getMessage(msg, args))
 }
 
 func (l *LoggerWrapper) WarnContext(ctx context.Context, msg string, fields ...any) {
@@ -113,6 +130,10 @@ func (l *LoggerWrapper) Error(msg string, fields ...any) {
 	l.logger.Error(msg, l.checkFields(fields)...)
 }
 
+func (l *LoggerWrapper) Errorf(msg string, args ...any) {
+	l.logger.Error(getMessage(msg, args))
+}
+
 func (l *LoggerWrapper) ErrorContext(ctx context.Context, msg string, fields ...any) {
 	field := zapField(ctx, l.logField...)
 	checkFields := l.checkFields(fields)
@@ -126,6 +147,10 @@ func (l *LoggerWrapper) Panic(msg string, fields ...any) {
 	l.logger.Panic(msg, l.checkFields(fields)...)
 }
 
+func (l *LoggerWrapper) Panicf(msg string, args ...any) {
+	l.logger.Panic(getMessage(msg, args))
+}
+
 func (l *LoggerWrapper) PanicContext(ctx context.Context, msg string, fields ...any) {
 	field := zapField(ctx, l.logField...)
 	checkFields := l.checkFields(fields)
@@ -137,6 +162,10 @@ func (l *LoggerWrapper) PanicContext(ctx context.Context, msg string, fields ...
 
 func (l *LoggerWrapper) Fatal(msg string, fields ...any) {
 	l.logger.Fatal(msg, l.checkFields(fields)...)
+}
+
+func (l *LoggerWrapper) Fatalf(msg string, args ...any) {
+	l.logger.Panic(getMessage(msg, args))
 }
 
 func (l *LoggerWrapper) FatalContext(ctx context.Context, msg string, fields ...any) {
@@ -186,7 +215,7 @@ func (l *LoggerWrapper) checkFields(fields []any) (checked []zap.Field) {
 }
 
 // getMessage format with Sprint, Sprintf, or neither.
-func getMessage(template string, args []interface{}) string {
+func getMessage(template string, args []any) string {
 	if len(args) == 0 {
 		return template
 	}
