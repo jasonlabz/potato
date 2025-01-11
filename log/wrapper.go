@@ -30,7 +30,7 @@ func GetLogger(opts ...zap.Option) *LoggerWrapper {
 	if len(opts) > 0 {
 		return defaultLogger.WithOptions(opts...)
 	}
-	return defaultLogger.clone()
+	return defaultLogger
 }
 
 func (l *LoggerWrapper) clone() *LoggerWrapper {

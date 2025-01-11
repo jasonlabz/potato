@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	requestBodyMaxLen = 20480
+	requestBodyMaxLen = 204800
 )
 
 type BodyLog struct {
@@ -52,23 +52,22 @@ func RequestMiddleware() gin.HandlerFunc {
 		c.Writer = bodyLog
 
 		start := time.Now() // Start timer
-		logger := log.GetLogger().WithContext(c)
-		logger.Info("	[GIN] request",
+		log.GetLogger().InfoContext(c, "	[GIN] request",
 			log.String("proto", c.Request.Proto),
 			log.String("client_ip", c.ClientIP()),
 			log.Int64("content_length", c.Request.ContentLength),
 			log.String("agent", c.Request.UserAgent()),
 			log.String("request_body", string(logBytes(requestBodyBytes, requestBodyMaxLen))),
 			log.String("method", c.Request.Method),
-			log.String("uri", c.Request.URL.Path))
+			log.String("path", c.Request.URL.Path))
 
 		c.Next()
 
-		logger.Info("	[GIN] response",
+		log.GetLogger().InfoContext(c, "	[GIN] response",
 			log.Int("status_code", c.Writer.Status()),
 			log.String("error_message", c.Errors.ByType(gin.ErrorTypePrivate).String()),
 			log.String("response_body", string(logBytes(bodyLog.body.Bytes(), requestBodyMaxLen))),
-			log.String("uri", c.Request.URL.Path),
+			log.String("path", c.Request.URL.Path),
 			log.String("cost", fmt.Sprintf("%dms", time.Now().Sub(start).Milliseconds())))
 	}
 }
