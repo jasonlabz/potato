@@ -154,7 +154,7 @@ type Pusher struct {
 type Config struct {
 	Debug       bool           `mapstructure:"debug" json:"debug" yaml:"debug" ini:"debug"`
 	Application Application    `mapstructure:"application" json:"application" yaml:"application" ini:"application"`
-	Database    *Database      `mapstructure:"database" json:"database" yaml:"database" ini:"database"`
+	Database    Database       `mapstructure:"database" json:"database" yaml:"database" ini:"database"`
 	Crypto      []CryptoConfig `mapstructure:"crypto" json:"crypto" yaml:"crypto" ini:"crypto"`
 	Kafka       KafkaConfig    `mapstructure:"kafka" json:"kafka" yaml:"kafka" ini:"kafka"`
 	Rabbitmq    RabbitMQConf   `mapstructure:"rabbitmq" json:"rabbitmq" yaml:"rabbitmq" ini:"rabbitmq"`
