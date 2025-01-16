@@ -2,6 +2,8 @@ package log
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"runtime/debug"
 	"testing"
 )
@@ -18,6 +20,5 @@ func TestName(t *testing.T) {
 	GetLogger().WithContext(ctx).Error("ttt%s,%s,%s", "sadas", "sdasd", "time")
 	//GetLogger().WithContext(ctx).Panic("ttt%s,%s,%s", "sadas", "sdasd", "time")
 	//slog.Info("test")
-
-	Info(ctx, "hello", "sadas", "sdasd")
+	GetLogger().Info(fmt.Sprintf("err: %s", errors.New("test error")))
 }
