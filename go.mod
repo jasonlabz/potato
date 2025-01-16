@@ -13,7 +13,7 @@ require (
 	github.com/gin-gonic/gin v1.9.1
 	github.com/go-resty/resty/v2 v2.9.1
 	github.com/google/uuid v1.6.0
-	github.com/jasonlabz/gorm-dm-driver v0.0.0-20241128113518-e7faa4ec0cee
+	github.com/jasonlabz/gorm-dm-driver v0.1.1
 	github.com/jasonlabz/oracle v1.1.1-0.20240609161033-cf780c860ebb
 	github.com/panjf2000/ants/v2 v2.9.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible
