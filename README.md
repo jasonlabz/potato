@@ -1,5 +1,5 @@
-﻿# potato
-> potato主要对go语言开发过程中常用的基础组件进行封装，包含常用加解密cryptox、错误定义errors、本地缓存gocache、gorm框架、httpclient、常用日志框架等等。
+## Potato 🥔
+Potato 是一个轻量级的 Go 语言工具库，专注于简化常见开发任务（如配置管理、HTTP 请求处理等）。通过提供简洁的 API 和模块化设计，帮助开发者快速构建高效的应用，包含常用加解密cryptox、错误定义errors、本地缓存gocache、gorm框架、httpclient、常用日志框架等等。
 
 全局拥有默认的配置文件方式，也提供手动初始化配置的方式,其中redis默认会读取conf/application.yaml下的配置：
 ```yaml
