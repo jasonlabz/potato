@@ -11,6 +11,8 @@ func StringValue(key any) string {
 	switch key.(type) {
 	case nil:
 		return ""
+	case error:
+		return key.(error).Error()
 	case string:
 		return key.(string)
 	case int:

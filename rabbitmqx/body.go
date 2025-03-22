@@ -175,7 +175,7 @@ func (p *PushBody) Validate() {
 	if p.ExchangeName != "" {
 		if string(p.ExchangeType) == "" {
 			//  default exchangeType is fanout
-			p.ExchangeType = ExchangeTypeFanout
+			p.ExchangeType = Fanout
 		}
 
 		if p.QueueName != "" {
@@ -358,7 +358,7 @@ type ExchangePushBody struct {
 func (e *ExchangePushBody) Validate() {
 	if string(e.ExchangeType) == "" {
 		//  default exchangeType is fanout
-		e.ExchangeType = ExchangeTypeFanout
+		e.ExchangeType = Fanout
 	}
 
 	for queue, bindKey := range e.BindingKeyMap {

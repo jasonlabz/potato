@@ -2,6 +2,7 @@ package rabbitmqx
 
 import (
 	"context"
+
 	amqp "github.com/rabbitmq/amqp091-go"
 
 	"github.com/jasonlabz/potato/internal/log"
