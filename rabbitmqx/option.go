@@ -16,9 +16,9 @@ func init() {
 		ObjectPoolConfig: *pool.NewDefaultPoolConfig(),
 		l:                zapx.GetLogger(),
 	}
-	defaultOptionConfig.MinIdle = 10
+	defaultOptionConfig.MinIdle = 20
 	defaultOptionConfig.MaxIdle = 20
-	defaultOptionConfig.MaxTotal = 100
+	defaultOptionConfig.MaxTotal = 500
 	defaultOptionConfig.MinEvictableIdleTime = 30 * time.Minute
 	defaultOptionConfig.TestOnReturn = true
 	defaultOptionConfig.TestOnBorrow = true
