@@ -342,7 +342,7 @@ func (r *RabbitMQOperator) connect() (err error) {
 }
 
 func (r *RabbitMQOperator) tryReConnect(daemon bool) (connected bool, err error) {
-	sig := make(chan os.Signal)
+	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGKILL)
 	ticker := time.NewTicker(DefaultRetryWaitTimes)
 	defer ticker.Stop()
@@ -408,7 +408,7 @@ func (r *RabbitMQOperator) tryReConnect(daemon bool) (connected bool, err error)
 
 // 消息确认
 func (r *RabbitMQOperator) confirmOne(confirms <-chan amqp.Confirmation) (ok bool) {
-	sig := make(chan os.Signal)
+	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGKILL)
 
 	select {
@@ -1007,7 +1007,7 @@ func (r *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-c
 			r.client.cacheMu.Unlock()
 		}
 
-		sig := make(chan os.Signal)
+		sig := make(chan os.Signal, 1)
 		signal.Notify(sig, syscall.SIGINT, syscall.SIGKILL)
 
 		ticker := time.NewTicker(DefaultRetryWaitTimes)
@@ -1301,7 +1301,7 @@ func (r *RabbitMQOperator) CancelQueue(queueName string) (err error) {
 		}
 		<-ticker.C
 	}
-	zapx.GetLogger().Warn("cancel consumer timeout：%s", queueName)
+	r.l.GetLogger().Warn("cancel consumer timeout：%s", queueName)
 	return
 }
 
