@@ -16,7 +16,6 @@ const consumerTagLengthMax = 0xFF // see writeShortstr
 // PushDelayBody 生产延迟消息body参数设置，兼容交换机和队列两种模式
 type PushDelayBody struct {
 	ExchangePushBody
-	amqp.Publishing
 	DelayTime time.Duration
 }
 

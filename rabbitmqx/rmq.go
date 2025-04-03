@@ -1301,7 +1301,7 @@ func (r *RabbitMQOperator) CancelQueue(queueName string) (err error) {
 		}
 		<-ticker.C
 	}
-	r.l.GetLogger().Warn("cancel consumer timeout：%s", queueName)
+	r.l.Warn(fmt.Sprintf("cancel consumer timeout：%s", queueName))
 	return
 }
 
