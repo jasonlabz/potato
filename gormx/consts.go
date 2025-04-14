@@ -31,7 +31,7 @@ var DatabaseDsnMap = map[DatabaseType]string{
 	DatabaseTypeSQLite:    "%s",
 	DatabaseTypeDM:        "dm://%s:%s@%s:%d?schema=%s",
 	DatabaseTypeOracle:    "%s/%s@%s:%d/%s",
-	DatabaseTypeMySQL:     "%s:%s@tcp(%s:%d)/%s?parseTime=True&loc=Local",
+	DatabaseTypeMySQL:     "%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=True&loc=Local&timeout=1000ms",
 	DatabaseTypePostgres:  "user=%s password=%s host=%s port=%d dbname=%s sslmode=disable TimeZone=Asia/Shanghai",
 	DatabaseTypeSqlserver: "user id=%s;password=%s;server=%s;port=%d;database=%s;encrypt=disable",
 }
