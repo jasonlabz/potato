@@ -14,16 +14,16 @@ func AddProviders(config string, provider base.IProvider) {
 }
 
 func Search(key string) any {
-	var v any
-	pm.ProviderMap.Range(func(key, value any) bool {
-		provider := value.(base.IProvider)
-		if provider.IsExist(key.(string)) {
-			v = provider.Get(key.(string))
+	var value any
+	pm.ProviderMap.Range(func(k, v any) bool {
+		provider := v.(base.IProvider)
+		if provider.IsExist(key) {
+			value = provider.Get(key)
 			return false
 		}
 		return true
 	})
-	return v
+	return value
 }
 
 func SearchE(key string) (any, error) {
