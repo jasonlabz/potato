@@ -12,9 +12,13 @@ type ConfigProvider struct {
 	viper    *viper.Viper
 }
 
-func (c *ConfigProvider) Get(key string) (val interface{}, err error) {
+func (c *ConfigProvider) Get(key string) (val any) {
 	val = c.viper.Get(key)
-	return val, nil
+	return val
+}
+
+func (c *ConfigProvider) IsExist(key string) (res bool) {
+	return c.viper.IsSet(key)
 }
 
 func NewConfigProvider(endpoint, watchKey string, fileType string) base.IProvider {

@@ -31,11 +31,17 @@ type ConfigProvider struct {
 	rwMutex  sync.RWMutex
 }
 
-func (c *ConfigProvider) Get(key string) (val interface{}, err error) {
+func (c *ConfigProvider) Get(key string) (val any) {
 	c.rwMutex.RLock()
 	defer c.rwMutex.RUnlock()
 	val = c.viper.Get(key)
-	return val, nil
+	return val
+}
+
+func (c *ConfigProvider) IsExist(key string) (res bool) {
+	c.rwMutex.RLock()
+	defer c.rwMutex.RUnlock()
+	return c.viper.IsSet(key)
 }
 
 func NewConfigProvider(filePath string, opts ...Option) (provider base.IProvider, err error) {

@@ -22,8 +22,8 @@ const (
 
 // IProvider Configuration Provider interface
 type IProvider interface {
-	// Get 获取配置信息
-	Get(key string) (val interface{}, err error)
+	Get(key string) any
+	IsExist(key string) bool
 }
 
 type ProviderManager struct {
@@ -40,10 +40,7 @@ func (p *ProviderManager) Get(configName, key string) (val interface{}, err erro
 		err = fmt.Errorf("config: %s not found", configName)
 		return
 	}
-	val, err = provider.(IProvider).Get(key)
-	if err != nil {
-		return
-	}
+	val = provider.(IProvider).Get(key)
 	if val != nil {
 		return
 	}
