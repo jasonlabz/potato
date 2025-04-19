@@ -46,7 +46,7 @@ func (l *LoggerWrapper) WithContext(ctx context.Context) *LoggerWrapper {
 
 func (l *LoggerWrapper) WithError(err error) *LoggerWrapper {
 	lw := l.clone()
-	lw.logger = lw.logger.With(zap.Error(err))
+	lw.logger = lw.logger.With(String("error", err.Error()))
 	return lw
 }
 
