@@ -215,7 +215,7 @@ func (j *JSON) GetString(path ...any) (string, error) {
 	}
 	switch rt.Type() {
 	case ast.V_STRING:
-		return rt.Raw()
+		return rt.String()
 	}
 	return "", errors.Errorf("path(%v) is not string", path)
 }
