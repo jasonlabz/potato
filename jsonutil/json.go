@@ -284,7 +284,7 @@ func (j *JSON) GetMap(path ...any) (map[string]*JSON, error) {
 
 // String 获取字符串表示
 func (j *JSON) String() string {
-	raw, err := j.rt.String()
+	raw, err := j.rt.Raw()
 	if err != nil {
 		log.GetLogger().WithError(err).Error("get json error")
 		return ""
