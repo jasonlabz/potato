@@ -19,7 +19,7 @@ var letters = []byte("abcdefghjkmnpqrstuvwxyz123456789")
 var longLetters = []byte("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ=_")
 
 // JSONMarshal json序列化
-func JSONMarshal(data interface{}) string {
+func JSONMarshal(data any) string {
 	res, err := sonic.Marshal(&data)
 	if err != nil {
 		fmt.Println("json marsh error: ", err.Error())
@@ -29,7 +29,7 @@ func JSONMarshal(data interface{}) string {
 }
 
 // JSONUnmarshal json反序列化
-func JSONUnmarshal(data string, dest interface{}) {
+func JSONUnmarshal(data string, dest any) {
 	err := sonic.Unmarshal([]byte(data), dest)
 	if err != nil {
 		fmt.Println("json unmarsh error: ", err.Error())
@@ -38,7 +38,7 @@ func JSONUnmarshal(data string, dest interface{}) {
 }
 
 // CopyStruct 利用json进行深拷贝
-func CopyStruct(src, dst interface{}) error {
+func CopyStruct(src, dst any) error {
 	if tmp, err := sonic.Marshal(&src); err != nil {
 		return err
 	} else {
@@ -49,9 +49,9 @@ func CopyStruct(src, dst interface{}) error {
 
 // IsExist 判断所给路径文件/文件夹是否存在
 func IsExist(path string) bool {
-	_, err := os.Stat(path) //os.Stat获取文件信息
+	_, err := os.Stat(path) // os.Stat获取文件信息
 	if err != nil {
-		//return os.IsExist(err)
+		// return os.IsExist(err)
 		return errors.Is(err, fs.ErrExist)
 	}
 	return true
@@ -107,7 +107,7 @@ func ListDir(dirPth string, suffix string) (files []string, err error) {
 	}
 
 	PthSep := string(os.PathSeparator)
-	suffix = strings.ToUpper(suffix) //忽略后缀匹配的大小写
+	suffix = strings.ToUpper(suffix) // 忽略后缀匹配的大小写
 
 	for _, fi := range dir {
 		if fi.IsDir() { // 忽略目录
@@ -117,7 +117,7 @@ func ListDir(dirPth string, suffix string) (files []string, err error) {
 			files = append(files, dirPth+PthSep+fi.Name())
 			continue
 		}
-		if strings.HasSuffix(strings.ToUpper(fi.Name()), suffix) { //匹配文件
+		if strings.HasSuffix(strings.ToUpper(fi.Name()), suffix) { // 匹配文件
 			files = append(files, dirPth+PthSep+fi.Name())
 		}
 	}
@@ -128,10 +128,9 @@ func ListDir(dirPth string, suffix string) (files []string, err error) {
 // WalkDir 获取指定目录及所有子目录下的所有文件（只包含文件名），可以匹配后缀过滤。
 func WalkDir(dirPth, suffix string) (files []string, err error) {
 	files = make([]string, 0)
-	suffix = strings.ToUpper(suffix) //忽略后缀匹配的大小写
+	suffix = strings.ToUpper(suffix) // 忽略后缀匹配的大小写
 
-	err = filepath.Walk(dirPth, func(filename string, fi os.FileInfo, err error) error { //遍历目录
-
+	err = filepath.Walk(dirPth, func(filename string, fi os.FileInfo, err error) error { // 遍历目录
 		if fi.IsDir() { // 忽略目录
 			return nil
 		}

@@ -2,7 +2,7 @@ package configmap
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -59,11 +59,11 @@ type CreateConfigmapRequest struct {
 
 func (c *CreateConfigmapRequest) checkParameters() error {
 	if c.Namespace == "" {
-		return fmt.Errorf("namespace is required")
+		return errors.New("namespace is required")
 	}
 
 	if c.ConfigmapName == "" {
-		return fmt.Errorf("configmap name is required")
+		return errors.New("configmap name is required")
 	}
 
 	if len(c.ConfigmapLabels) == 0 {
@@ -97,7 +97,7 @@ func CreateConfigmap(ctx context.Context, request CreateConfigmapRequest) (confi
 		configmapSrc.ObjectMeta.Labels[labelKey] = labelVal
 	}
 	createOptions := metav1.CreateOptions{}
-	//创建configmap
+	// 创建configmap
 	configmapInfo, err = kube.GetKubeClient().CoreV1().ConfigMaps(request.Namespace).Create(ctx, configmapSrc, createOptions)
 	if err != nil {
 		return nil, err

@@ -2,12 +2,14 @@ package kube
 
 import (
 	"context"
-	"github.com/jasonlabz/potato/kube/pvc"
+	"log"
+	"testing"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/watch"
-	"log"
-	"testing"
+
+	"github.com/jasonlabz/potato/kube/pvc"
 )
 
 func TestPVC(t *testing.T) {

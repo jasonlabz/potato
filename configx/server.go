@@ -133,7 +133,7 @@ type Application struct {
 type PromConf struct {
 	Enable bool   `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"` // Enable prometheus client
 	Path   string `mapstructure:"path" json:"path" yaml:"path" ini:"path"`         // Default value is "metrics", set path as needed.
-	Pusher Pusher `mapstructure:"pusher" json:"pusher" yaml:"pusher" ini:"pusher"` //推送到 pushgateway
+	Pusher Pusher `mapstructure:"pusher" json:"pusher" yaml:"pusher" ini:"pusher"` // 推送到 pushgateway
 }
 
 // PProf 配置pprof
@@ -179,14 +179,13 @@ func LoadConfigFromJson(configPath string) {
 			panic(err)
 		}
 	}(file)
-	//NewDecoder创建一个从file读取并解码json对象的*Decoder，解码器有自己的缓冲，并可能超前读取部分json数据。
+	// NewDecoder创建一个从file读取并解码json对象的*Decoder，解码器有自己的缓冲，并可能超前读取部分json数据。
 	decoder := decoder.NewStreamDecoder(file)
-	//Decode从输入流读取下一个json编码值并保存在v指向的值里
+	// Decode从输入流读取下一个json编码值并保存在v指向的值里
 	err := decoder.Decode(applicationConfig)
 	if err != nil {
 		panic(err)
 	}
-
 }
 
 func LoadConfigFromIni(configPath string) {
@@ -229,7 +228,7 @@ func ParseConfigByViper(configPath, configName, configType string) {
 			panic(err)
 		}
 	})
-	//直接反序列化为Struct
+	// 直接反序列化为Struct
 	if err := v.Unmarshal(applicationConfig); err != nil {
 		panic(err)
 	}
@@ -255,6 +254,6 @@ func init() {
 	}
 
 	if !configLoad {
-		log.Printf("[init] -- there is no application config.")
+		log.Print("[init] -- there is no application config.")
 	}
 }

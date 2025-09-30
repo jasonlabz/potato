@@ -6,8 +6,9 @@ import (
 	"sync"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/jasonlabz/potato/configx/base"
 	"github.com/spf13/viper"
+
+	"github.com/jasonlabz/potato/configx/base"
 )
 
 type ConfigInfo struct {
@@ -83,7 +84,7 @@ func ParseConfigByViper(configFile string, dest any, opts ...Option) (err error)
 		err = fmt.Errorf("failed to read config file: %w", err)
 		return
 	}
-	//直接反序列化为Struct
+	// 直接反序列化为Struct
 	if err = v.Unmarshal(dest); err != nil {
 		err = fmt.Errorf("failed to Unmarshal: %w", err)
 		return

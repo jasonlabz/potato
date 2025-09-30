@@ -11,6 +11,7 @@ func Test_Slog(t *testing.T) {
 
 	slog.Info("hello", slog.String("test", "dksjdjaks"))
 }
+
 func Test_Wrapper(t *testing.T) {
 	ctx := context.Background()
 	slog.InfoContext(ctx, "sadasdasdasda")

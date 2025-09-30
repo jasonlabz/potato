@@ -6,7 +6,7 @@ import (
 )
 
 func TestName(t *testing.T) {
-	//dst, err := Convert("hello 你好啊！", GBK, UTF_8)
+	// dst, err := Convert("hello 你好啊！", GBK, UTF_8)
 	str := "this is 中文"
 	dst, err := ConvertCharset("hello 你好啊！", GBK, ISO_8859_1)
 	dest, err := ConvertCharset(dst, ISO_8859_1, GBK)

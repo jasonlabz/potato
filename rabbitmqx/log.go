@@ -10,9 +10,9 @@ import (
 
 type LoggerInterface interface {
 	amqp.Logging
-	Info(context.Context, string, ...interface{})
-	Warn(context.Context, string, ...interface{})
-	Error(context.Context, string, ...interface{})
+	Info(context.Context, string, ...any)
+	Warn(context.Context, string, ...any)
+	Error(context.Context, string, ...any)
 }
 
 func AdapterLogger(l log.Logger) *RmqLogger {
@@ -23,18 +23,18 @@ type RmqLogger struct {
 	l log.Logger
 }
 
-func (l *RmqLogger) Printf(msg string, args ...interface{}) {
+func (l *RmqLogger) Printf(msg string, args ...any) {
 	l.l.Info(msg, args...)
 }
 
-func (l *RmqLogger) Info(ctx context.Context, msg string, args ...interface{}) {
+func (l *RmqLogger) Info(ctx context.Context, msg string, args ...any) {
 	l.l.InfoContext(ctx, msg, args...)
 }
 
-func (l *RmqLogger) Warn(ctx context.Context, msg string, args ...interface{}) {
+func (l *RmqLogger) Warn(ctx context.Context, msg string, args ...any) {
 	l.l.WarnContext(ctx, msg, args...)
 }
 
-func (l *RmqLogger) Error(ctx context.Context, msg string, args ...interface{}) {
+func (l *RmqLogger) Error(ctx context.Context, msg string, args ...any) {
 	l.l.ErrorContext(ctx, msg, args...)
 }

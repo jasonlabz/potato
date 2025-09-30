@@ -2,13 +2,15 @@ package sentinel
 
 import (
 	"context"
-	"github.com/jasonlabz/potato/goredis/single"
-	"github.com/jasonlabz/potato/internal/log"
-	zapx "github.com/jasonlabz/potato/log"
-	"github.com/redis/go-redis/v9"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/redis/go-redis/v9"
+
+	"github.com/jasonlabz/potato/goredis/single"
+	"github.com/jasonlabz/potato/internal/log"
+	zapx "github.com/jasonlabz/potato/log"
 )
 
 type RedisOperator struct {

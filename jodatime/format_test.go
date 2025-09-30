@@ -21,7 +21,6 @@ func TestFormatMoreQuotes(t *testing.T) {
 		format   string
 		expected string
 	}{
-
 		{"HHTmm", "16T05"},
 		{"HH''mm", "16'05"},
 		{"HH''mm", "16'05"},
@@ -89,15 +88,13 @@ func TestFormatMore(t *testing.T) {
 	for _, test := range tests {
 		assert.Equal(t, test.expected, Format(test.format, test.date), "("+test.format+") they should be equal")
 	}
-
 }
-func TestFormat(t *testing.T) {
 
+func TestFormat(t *testing.T) {
 	tests := []struct {
 		format   string
 		expected string
 	}{
-
 		{"Y", "2007"},
 		{"YY", "07"},
 		{"YYY", "2007"},
@@ -195,7 +192,6 @@ func TestFormat(t *testing.T) {
 	for _, test := range tests {
 		assert.Equal(t, test.expected, Format(test.format, date), "("+test.format+") they should be equal")
 	}
-
 }
 
 func TestFormatEra(t *testing.T) {
@@ -256,7 +252,7 @@ func TestFormatWeekOfWeekyear(t *testing.T) {
 	check(t, "wwww", "", "1945-01-31T15:04:05Z")
 }
 
-func TestFormatHourOfHalfday(t *testing.T) { //0~11
+func TestFormatHourOfHalfday(t *testing.T) { // 0~11
 	check(t, "K", "0", "2004-06-09T00:20:05+05:00")
 	check(t, "K", "10", "2004-06-09T10:20:05+07:00")
 	check(t, "K", "0", "2004-06-09T12:20:05+05:00")
@@ -322,7 +318,6 @@ func check(t *testing.T, format, expected, date string) {
 		assert.Equal(t, expected, Format(format, mt), fmt.Sprintf("%s/ pattern '%s', with '%s'", t.Name(), format, date))
 	} else {
 		t.Errorf("date parse error - %s", err)
-
 	}
 }
 

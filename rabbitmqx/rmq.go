@@ -191,7 +191,7 @@ func NewRabbitMQOperator(config *MQConfig, opts ...ConnOption) (op *RabbitMQOper
 
 func (r *RabbitMQOperator) init(ctx context.Context, config *pool.ObjectPoolConfig) {
 	factory := pool.NewPooledObjectFactory(
-		func(ctx context.Context) (interface{}, error) {
+		func(ctx context.Context) (any, error) {
 			if !r.isReady && atomic.LoadInt32(&r.closed) != Closed {
 				connected, connectErr := r.tryReConnect(false)
 				if !connected {
@@ -250,7 +250,7 @@ func (r *RabbitMQOperator) init(ctx context.Context, config *pool.ObjectPoolConf
 		nil,
 	)
 	confirmFactory := pool.NewPooledObjectFactory(
-		func(ctx context.Context) (interface{}, error) {
+		func(ctx context.Context) (any, error) {
 			if !r.isReady && atomic.LoadInt32(&r.closed) != Closed {
 				connected, connectErr := r.tryReConnect(false)
 				if !connected {
@@ -348,7 +348,7 @@ func (r *RabbitMQOperator) tryReConnect(daemon bool) (connected bool, err error)
 	defer ticker.Stop()
 	var count int
 	for {
-		//var err error
+		// var err error
 		if !r.isReady && atomic.LoadInt32(&r.closed) != Closed {
 			r.client.connMu.Lock() // 加锁
 			if r.isReady && atomic.LoadInt32(&r.closed) != Closed {
@@ -377,7 +377,7 @@ func (r *RabbitMQOperator) tryReConnect(daemon bool) (connected bool, err error)
 			select {
 			case s := <-sig:
 				r.l.Infof("received signal：[%v], exiting... ", s)
-				return false, errors.New(fmt.Sprintf("connect fail, received signal：[%v]", s))
+				return false, fmt.Errorf("connect fail, received signal：[%v]", s)
 			case <-r.closeCh:
 				r.l.Info("rabbitmq is closed, exiting...")
 				return false, errors.New("connect fail, rabbitmq is closed")
@@ -392,14 +392,14 @@ func (r *RabbitMQOperator) tryReConnect(daemon bool) (connected bool, err error)
 		select {
 		case s := <-sig:
 			r.l.Info("received signal：[%v], exiting daemon program... ", s)
-			return false, errors.New(fmt.Sprintf("received signal：[%v], exiting daemon program", s))
+			return false, fmt.Errorf("received signal：[%v], exiting daemon program", s)
 		case <-r.closeCh:
 			r.l.Info("rabbitmq is closed, exiting daemon program...")
 			return false, errors.New("rabbitmq is closed, exiting daemon program")
 		case <-r.client.closeConnNotify:
 			r.isReady = false
-			//r.client.channelCache = sync.Map{}
-			//r.client.chCloseListener = sync.Map{}
+			// r.client.channelCache = sync.Map{}
+			// r.client.chCloseListener = sync.Map{}
 			r.l.Error("rabbitmq disconnects unexpectedly, retrying...")
 		}
 	}
@@ -791,12 +791,12 @@ func (r *RabbitMQOperator) pushQueueCore(ctx context.Context, body *QueuePushBod
 	}
 
 	if body.OpenConfirm && channelWrap.openConfirm {
-		//confirmed := r.confirmOne(channelWrap.confirmChan)
+		// confirmed := r.confirmOne(channelWrap.confirmChan)
 		<-channelWrap.confirmChan
-		//if !confirmed {
+		// if !confirmed {
 		//	err = errors.New("push confirmed fail")
 		//	return
-		//}
+		// }
 	}
 	return
 }
@@ -1082,7 +1082,6 @@ func (r *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-c
 				continue
 			}
 		}
-
 	}()
 	return contents, nil
 }
@@ -1166,31 +1165,37 @@ func WithDeclareOptionDurable(durable bool) OptionFunc {
 		options.durable = durable
 	}
 }
+
 func WithDeclareOptionAutoDelete(autoDelete bool) OptionFunc {
 	return func(options *Options) {
 		options.autoDelete = autoDelete
 	}
 }
+
 func WithDeclareOptionExclusive(exclusive bool) OptionFunc {
 	return func(options *Options) {
 		options.exclusive = exclusive
 	}
 }
+
 func WithDeclareOptionNoWait(noWait bool) OptionFunc {
 	return func(options *Options) {
 		options.noWait = noWait
 	}
 }
+
 func WithDeclareOptionInternal(internal bool) OptionFunc {
 	return func(options *Options) {
 		options.internal = internal
 	}
 }
+
 func WithDelOptionIfEmpty(ifEmpty bool) OptionFunc {
 	return func(options *Options) {
 		options.ifEmpty = ifEmpty
 	}
 }
+
 func WithDelOptionIfUnused(ifUnUsed bool) OptionFunc {
 	return func(options *Options) {
 		options.ifUnUsed = ifUnUsed

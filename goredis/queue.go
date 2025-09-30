@@ -83,7 +83,7 @@ func (op *RedisOperator) tryMigrationDaemon(ctx context.Context) {
 				"tag", "redis_delay_queue_method")
 			return
 		case <-timer.C:
-			op.delayQueues.Range(func(key, value interface{}) bool {
+			op.delayQueues.Range(func(key, value any) bool {
 				delayKey := key.(string)
 				wg.Add(1)
 				go func() {

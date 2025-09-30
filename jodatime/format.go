@@ -60,7 +60,6 @@ func Format(format string, date time.Time) string {
 				if formatRune[i+j] != r {
 					break
 				}
-
 			}
 			i = i + j - 1
 
@@ -81,7 +80,6 @@ func Format(format string, date time.Time) string {
 				if formatRune[i+j] != r {
 					break
 				}
-
 			}
 			i = i + j - 1
 
@@ -102,7 +100,6 @@ func Format(format string, date time.Time) string {
 				if formatRune[i+j] != r {
 					break
 				}
-
 			}
 			i = i + j - 1
 			_, w := date.ISOWeek()
@@ -122,7 +119,6 @@ func Format(format string, date time.Time) string {
 				if formatRune[i+j] != r {
 					break
 				}
-
 			}
 			i = i + j - 1
 			v := date.Month()
@@ -146,7 +142,6 @@ func Format(format string, date time.Time) string {
 				if formatRune[i+j] != r {
 					break
 				}
-
 			}
 			i = i + j - 1
 			v := date.Day()
@@ -166,7 +161,6 @@ func Format(format string, date time.Time) string {
 				if formatRune[i+j] != r {
 					break
 				}
-
 			}
 			i = i + j - 1
 			v := date.Weekday()
@@ -184,7 +178,6 @@ func Format(format string, date time.Time) string {
 				if formatRune[i+j] != r {
 					break
 				}
-
 			}
 			i = i + j - 1
 			v := date.Weekday()
@@ -200,7 +193,6 @@ func Format(format string, date time.Time) string {
 				if formatRune[i+j] != r {
 					break
 				}
-
 			}
 			i = i + j - 1
 			v := date.Hour()
@@ -226,7 +218,6 @@ func Format(format string, date time.Time) string {
 				if formatRune[i+j] != r {
 					break
 				}
-
 			}
 			i = i + j - 1
 			v := date.Hour()
@@ -253,7 +244,6 @@ func Format(format string, date time.Time) string {
 				if formatRune[i+j] != r {
 					break
 				}
-
 			}
 			i = i + j - 1
 			v := date.Minute()
@@ -272,7 +262,6 @@ func Format(format string, date time.Time) string {
 				if formatRune[i+j] != r {
 					break
 				}
-
 			}
 			i = i + j - 1
 			v := date.Second()
@@ -323,7 +312,6 @@ func Format(format string, date time.Time) string {
 				if formatRune[i+j] != r {
 					break
 				}
-
 			}
 			i = i + j - 1
 			zs, z := date.Zone()
@@ -361,10 +349,10 @@ func Format(format string, date time.Time) string {
 				}
 			}
 
-		case 'G': //era                          text
+		case 'G': // era                          text
 			out = append(out, "AD"...)
 
-		case 'C': //century of era (>=0)         number
+		case 'C': // century of era (>=0)         number
 			out = append(out, strconv.Itoa(date.Year())[0:2]...)
 
 		case 'K': // K KK hour of halfday (0~11)
@@ -373,7 +361,6 @@ func Format(format string, date time.Time) string {
 				if formatRune[i+j] != r {
 					break
 				}
-
 			}
 			i = i + j - 1
 			v := date.Hour()
@@ -397,7 +384,6 @@ func Format(format string, date time.Time) string {
 				if formatRune[i+j] != r {
 					break
 				}
-
 			}
 			i = i + j - 1
 			v := date.Hour()
@@ -438,7 +424,6 @@ func Format(format string, date time.Time) string {
 		}
 	}
 	return UnsafeString(out)
-
 }
 
 // TODO: refactor timezone

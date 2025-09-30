@@ -2,15 +2,16 @@ package deployment
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"k8s.io/apimachinery/pkg/watch"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"strings"
+	"k8s.io/apimachinery/pkg/watch"
 
 	"github.com/jasonlabz/potato/kube"
 	"github.com/jasonlabz/potato/kube/options"
@@ -98,6 +99,7 @@ type EnvVar struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
 }
+
 type MountPvc struct {
 	MountPath string `json:"mount_path"`
 	PvcName   string `json:"pvc_name"`
@@ -111,11 +113,11 @@ type MountHostPath struct {
 
 func (c *CreateDeploymentRequest) checkParameters() error {
 	if c.Namespace == "" {
-		return fmt.Errorf("namespace is required")
+		return errors.New("namespace is required")
 	}
 
 	if c.DeploymentName == "" {
-		return fmt.Errorf("deployment name is required")
+		return errors.New("deployment name is required")
 	}
 
 	if c.Replicas == 0 {
@@ -132,7 +134,7 @@ func (c *CreateDeploymentRequest) checkParameters() error {
 		}
 
 		if initContainer.Image == "" {
-			return fmt.Errorf("init container's image is required")
+			return errors.New("init container's image is required")
 		}
 
 		if initContainer.Resources == nil {
@@ -168,7 +170,7 @@ func (c *CreateDeploymentRequest) checkParameters() error {
 		}
 
 		if container.Image == "" {
-			return fmt.Errorf("container's image is required")
+			return errors.New("container's image is required")
 		}
 
 		if container.Resources == nil {
@@ -391,7 +393,7 @@ func CreateDeployment(ctx context.Context, request *CreateDeploymentRequest) (de
 	volumes := make([]corev1.Volume, 0)
 	for _, info := range request.InitContainerInfoList {
 		containerPort := explainPort(info.ContainerPorts)
-		//调用解释器（之后定义）
+		// 调用解释器（之后定义）
 		volumeMounts, volumeItems := explainVolumeMounts(info.MountConfigmapInfoList, info.MountPvcInfoList, info.HostPathInfoList)
 		volumes = append(volumes, volumeItems...)
 		initContainers = append(initContainers, corev1.Container{
@@ -446,7 +448,7 @@ func CreateDeployment(ctx context.Context, request *CreateDeploymentRequest) (de
 	}
 	for _, info := range request.ContainerInfoList {
 		containerPort := explainPort(info.ContainerPorts)
-		//调用解释器（之后定义）
+		// 调用解释器（之后定义）
 		volumeMounts, volumeItems := explainVolumeMounts(info.MountConfigmapInfoList, info.MountPvcInfoList, info.HostPathInfoList)
 		volumes = append(volumes, volumeItems...)
 		containers = append(containers, corev1.Container{
@@ -498,7 +500,7 @@ func CreateDeployment(ctx context.Context, request *CreateDeploymentRequest) (de
 			TTY:          info.TTY,
 		})
 	}
-	//这个结构和原生k8s启动deployment的yml文件结构完全一样，对着写就好
+	// 这个结构和原生k8s启动deployment的yml文件结构完全一样，对着写就好
 	deployment := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Deployment",
@@ -557,7 +559,7 @@ func CreateDeployment(ctx context.Context, request *CreateDeploymentRequest) (de
 	for labelKey, labelVal := range request.DeploymentLabels {
 		deployment.ObjectMeta.Labels[labelKey] = labelVal
 	}
-	//创建deployment
+	// 创建deployment
 	deploymentInfo, err = kube.GetKubeClient().AppsV1().Deployments(request.Namespace).Create(ctx, deployment, metav1.CreateOptions{})
 	if err != nil {
 		return deploymentInfo, err
@@ -574,22 +576,21 @@ func explainPort(ports []int32) (portInfoList []corev1.ContainerPort) {
 
 // 定义一个总的解释器，调用各子解释器
 func explainVolumeMounts(mountConfigmapInfoList []MountConfigmap, mountPvcInfoList []MountPvc, hostPathInfoList []MountHostPath) (volumeMounts []corev1.VolumeMount, volumes []corev1.Volume) {
-
-	//解释configmap
+	// 解释configmap
 	if len(mountConfigmapInfoList) != 0 {
 		volumeMounts1, volumes1 := explainConfigmap(mountConfigmapInfoList)
 		volumeMounts = append(volumeMounts, volumeMounts1...)
 		volumes = append(volumes, volumes1...)
 	}
 
-	//解释目录挂载PVC
+	// 解释目录挂载PVC
 	if len(mountPvcInfoList) != 0 {
 		volumeMounts2, volumes2 := explainPvc(mountPvcInfoList)
 		volumeMounts = append(volumeMounts, volumeMounts2...)
 		volumes = append(volumes, volumes2...)
 	}
 
-	//解释挂载本机目录
+	// 解释挂载本机目录
 	if len(hostPathInfoList) != 0 {
 		volumeMounts3, volumes3 := explainHostPath(hostPathInfoList)
 		volumeMounts = append(volumeMounts, volumeMounts3...)
@@ -602,10 +603,10 @@ func explainVolumeMounts(mountConfigmapInfoList []MountConfigmap, mountPvcInfoLi
 // 定义configmap的解释器
 func explainConfigmap(mountConfigmapInfoList []MountConfigmap) (volumeMounts []corev1.VolumeMount, volumes []corev1.Volume) {
 	for _, mountInfo := range mountConfigmapInfoList {
-		//拼接 volumeMount.Name
+		// 拼接 volumeMount.Name
 		volumeMountNameSuffix := strings.Split(mountInfo.FileName, ".")[0]
 		volumeMountName := mountInfo.ConfigmapName + volumeMountNameSuffix
-		//给volumeMount赋值
+		// 给volumeMount赋值
 		volumeMount := corev1.VolumeMount{
 			Name:      volumeMountName,
 			MountPath: mountInfo.MountPath + "/" + mountInfo.FileName,
@@ -613,7 +614,7 @@ func explainConfigmap(mountConfigmapInfoList []MountConfigmap) (volumeMounts []c
 		}
 		volumeMounts = append(volumeMounts, volumeMount)
 
-		//给volume赋值
+		// 给volume赋值
 		volume := corev1.Volume{
 			Name: volumeMountName,
 			VolumeSource: corev1.VolumeSource{
@@ -632,16 +633,16 @@ func explainConfigmap(mountConfigmapInfoList []MountConfigmap) (volumeMounts []c
 // 定义pvc的解释器
 func explainPvc(mountPvcInfoList []MountPvc) (volumeMounts []corev1.VolumeMount, volumes []corev1.Volume) {
 	for _, mountInfo := range mountPvcInfoList {
-		//拼接 volumeMount.Name
+		// 拼接 volumeMount.Name
 		volumeMountName := mountInfo.PvcName
-		//给volumeMount赋值
+		// 给volumeMount赋值
 		volumeMount := corev1.VolumeMount{
 			Name:      volumeMountName,
 			MountPath: mountInfo.MountPath,
 		}
 		volumeMounts = append(volumeMounts, volumeMount)
 
-		//给volume赋值
+		// 给volume赋值
 		volume := corev1.Volume{
 			Name: volumeMountName,
 			VolumeSource: corev1.VolumeSource{
@@ -658,16 +659,16 @@ func explainPvc(mountPvcInfoList []MountPvc) (volumeMounts []corev1.VolumeMount,
 // explainHostPath 定义hostpath的解释器
 func explainHostPath(hostPathInfo []MountHostPath) (volumeMounts []corev1.VolumeMount, volumes []corev1.Volume) {
 	for _, mountInfo := range hostPathInfo {
-		//拼接 volumeMount.Name
+		// 拼接 volumeMount.Name
 		volumeMountName := mountInfo.Tag
-		//给volumeMount赋值
+		// 给volumeMount赋值
 		volumeMount := corev1.VolumeMount{
 			Name:      volumeMountName,
 			MountPath: mountInfo.MountPodPath,
 		}
 		volumeMounts = append(volumeMounts, volumeMount)
 
-		//给volume赋值
+		// 给volume赋值
 		volume := corev1.Volume{
 			Name: volumeMountName,
 			VolumeSource: corev1.VolumeSource{

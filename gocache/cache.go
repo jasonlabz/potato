@@ -65,6 +65,7 @@ func IncrementInt32(key string, incrementNum int32) (int32, error) {
 func DecrementInt(key string, decrementNum int) (int, error) {
 	return c.DecrementInt(key, decrementNum)
 }
+
 func Decrement(key string, decrementNum int64) error {
 	return c.Decrement(key, decrementNum)
 }

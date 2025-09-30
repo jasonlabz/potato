@@ -2,9 +2,10 @@ package jwtx
 
 import (
 	"fmt"
-	"github.com/jasonlabz/potato/log"
 	"testing"
 	"time"
+
+	"github.com/jasonlabz/potato/log"
 )
 
 func TestName(t *testing.T) {

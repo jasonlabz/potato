@@ -2,14 +2,15 @@ package storageclass
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
-	"github.com/jasonlabz/potato/kube"
-	"github.com/jasonlabz/potato/kube/options"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
+
+	"github.com/jasonlabz/potato/kube"
+	"github.com/jasonlabz/potato/kube/options"
 )
 
 func GetStorageClassList(ctx context.Context, opts ...options.ListOptionFunc) (storageList *storagev1.StorageClassList, err error) {
@@ -58,7 +59,7 @@ type CreateStorageClassRequest struct {
 
 func (c *CreateStorageClassRequest) checkParameters() error {
 	if c.StorageClassName == "" {
-		return fmt.Errorf("storageClass name is required")
+		return errors.New("storageClass name is required")
 	}
 
 	if len(c.StorageClassLabels) == 0 {
@@ -95,7 +96,7 @@ func CreateStorageClass(ctx context.Context, request CreateStorageClassRequest) 
 	}
 
 	options := metav1.CreateOptions{}
-	//创建storage
+	// 创建storage
 	storageInfo, err = kube.GetKubeClient().StorageV1().StorageClasses().Create(ctx, storageSrc, options)
 	if err != nil {
 		return nil, err

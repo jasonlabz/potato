@@ -2,6 +2,7 @@ package configx
 
 import (
 	"fmt"
+
 	"github.com/spf13/cast"
 
 	"github.com/jasonlabz/potato/configx/base"
@@ -90,7 +91,7 @@ func SearchStringSliceE(key string) ([]string, error) {
 	return cast.ToStringSliceE(Search(key))
 }
 
-func SearchStringMap(key string) map[string]interface{} {
+func SearchStringMap(key string) map[string]any {
 	return cast.ToStringMap(Search(key))
 }
 
@@ -98,7 +99,7 @@ func SearchStringMapE(key string) (map[string]string, error) {
 	return cast.ToStringMapStringE(Search(key))
 }
 
-func SearchStringMapString(key string) map[string]interface{} {
+func SearchStringMapString(key string) map[string]any {
 	return cast.ToStringMap(Search(key))
 }
 
@@ -106,12 +107,12 @@ func SearchStringMapStringE(key string) (map[string]string, error) {
 	return cast.ToStringMapStringE(Search(key))
 }
 
-func Get(configName, key string) interface{} {
+func Get(configName, key string) any {
 	v, _ := pm.Get(configName, key)
 	return v
 }
 
-func GetE(configName, key string) (interface{}, error) {
+func GetE(configName, key string) (any, error) {
 	return pm.Get(configName, key)
 }
 
@@ -175,11 +176,11 @@ func GetStringSliceE(configName, key string) ([]string, error) {
 	return cast.ToStringSliceE(v)
 }
 
-func GetStringMap(configName, key string) map[string]interface{} {
+func GetStringMap(configName, key string) map[string]any {
 	return cast.ToStringMap(Get(configName, key))
 }
 
-func GetStringMapE(configName, key string) (map[string]interface{}, error) {
+func GetStringMapE(configName, key string) (map[string]any, error) {
 	v, err := GetE(configName, key)
 	if err != nil {
 		return nil, err

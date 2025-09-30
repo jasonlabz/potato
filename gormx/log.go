@@ -98,23 +98,23 @@ func (l *Logger) LogMode(level gormLogger.LogLevel) gormLogger.Interface {
 }
 
 // Info print info
-func (l *Logger) Info(ctx context.Context, msg string, data ...interface{}) {
+func (l *Logger) Info(ctx context.Context, msg string, data ...any) {
 	if l.LogLevel >= gormLogger.Info {
-		l.l.InfoContext(ctx, fmt.Sprintf(l.infoLogMsg+msg, append([]interface{}{}, data...)...))
+		l.l.InfoContext(ctx, fmt.Sprintf(l.infoLogMsg+msg, append([]any{}, data...)...))
 	}
 }
 
 // Warn print warn messages
-func (l *Logger) Warn(ctx context.Context, msg string, data ...interface{}) {
+func (l *Logger) Warn(ctx context.Context, msg string, data ...any) {
 	if l.LogLevel >= gormLogger.Warn {
-		l.l.WarnContext(ctx, fmt.Sprintf(l.warnLogMsg+msg, append([]interface{}{}, data...)...))
+		l.l.WarnContext(ctx, fmt.Sprintf(l.warnLogMsg+msg, append([]any{}, data...)...))
 	}
 }
 
 // Error print error messages
-func (l *Logger) Error(ctx context.Context, msg string, data ...interface{}) {
+func (l *Logger) Error(ctx context.Context, msg string, data ...any) {
 	if l.LogLevel >= gormLogger.Error {
-		l.l.ErrorContext(ctx, fmt.Sprintf(l.errLogMsg+msg, append([]interface{}{}, data...)...))
+		l.l.ErrorContext(ctx, fmt.Sprintf(l.errLogMsg+msg, append([]any{}, data...)...))
 	}
 }
 

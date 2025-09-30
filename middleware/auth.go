@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	"fmt"
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -15,7 +15,7 @@ func AuthCheck() gin.HandlerFunc {
 		tokenStr := ctx.Request.Header.Get(consts.HeaderAuthorization)
 
 		if len(tokenStr) == 0 {
-			ctx.AbortWithError(http.StatusNonAuthoritativeInfo, fmt.Errorf("check token fail"))
+			ctx.AbortWithError(http.StatusNonAuthoritativeInfo, errors.New("check token fail"))
 		}
 		userInfo, err := jwtx.ParseJWTToken(tokenStr)
 		if err != nil {

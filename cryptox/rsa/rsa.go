@@ -55,7 +55,7 @@ func NewCryptoRSAWithFile(publicFile string, privateFile string) (crypto *Crypto
 func NewCryptoRSA(publicKey []byte, privateKey []byte) (crypto *CryptoRSA, err error) {
 	block, _ := pem.Decode(publicKey)
 	if block == nil {
-		return nil, fmt.Errorf("create public key error")
+		return nil, errors.New("create public key error")
 	}
 	pubInterface, err := x509.ParsePKIXPublicKey(block.Bytes)
 	if err != nil {
@@ -63,11 +63,11 @@ func NewCryptoRSA(publicKey []byte, privateKey []byte) (crypto *CryptoRSA, err e
 	}
 	pub, ok1 := pubInterface.(*rsa.PublicKey)
 	if !ok1 {
-		return nil, fmt.Errorf("public key not supported")
+		return nil, errors.New("public key not supported")
 	}
 	block, _ = pem.Decode(privateKey)
 	if block == nil {
-		return nil, fmt.Errorf("private key error")
+		return nil, errors.New("private key error")
 	}
 	private, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 	if err != nil {
@@ -75,7 +75,7 @@ func NewCryptoRSA(publicKey []byte, privateKey []byte) (crypto *CryptoRSA, err e
 	}
 	pri, ok2 := private.(*rsa.PrivateKey)
 	if !ok2 {
-		return nil, fmt.Errorf("private key not supported")
+		return nil, errors.New("private key not supported")
 	}
 	return &CryptoRSA{publicKey: pub, privateKey: pri}, nil
 }
@@ -165,7 +165,7 @@ func split(buf []byte, lim int) [][]byte {
 		chunks = append(chunks, chunk)
 	}
 	if len(buf) > 0 {
-		chunks = append(chunks, buf[:len(buf)])
+		chunks = append(chunks, buf[:])
 	}
 	return chunks
 }
@@ -222,7 +222,7 @@ func CreateKeys(keyLength int) (publicKeyPath, privateKeyPath string) {
 
 // IsExist 判断所给路径文件/文件夹是否存在
 func isExist(path string) bool {
-	_, err := os.Stat(path) //os.Stat获取文件信息
+	_, err := os.Stat(path) // os.Stat获取文件信息
 	if err != nil {
 		return errors.Is(err, fs.ErrExist)
 	}

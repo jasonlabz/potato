@@ -82,7 +82,7 @@ func (op *RedisOperator) tryMigrationDaemon(ctx context.Context) {
 			op.logger().Info(fmt.Sprintf("recived： %v, exiting redis daemon... ", s))
 			return
 		case <-timer.C:
-			op.delayQueues.Range(func(key, value interface{}) bool {
+			op.delayQueues.Range(func(key, value any) bool {
 				delayKey := key.(string)
 				wg.Add(1)
 				go func() {

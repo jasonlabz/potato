@@ -2,9 +2,10 @@ package poolx
 
 import (
 	"fmt"
-	"github.com/panjf2000/ants/v2"
 	"testing"
 	"time"
+
+	"github.com/panjf2000/ants/v2"
 )
 
 func TestName(t *testing.T) {

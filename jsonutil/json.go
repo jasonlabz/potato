@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	//ErrJSONNotValid 不是合法的json
+	// ErrJSONNotValid 不是合法的json
 	ErrJSONNotValid = errors.NewNoStackError("error json format")
 )
 
@@ -403,7 +403,7 @@ func (j *JSON) Exists(path ...any) bool {
 //	}
 //
 // 要访问到x字符串 path每层的访问路径为a,a.b,a.b.0，a.b.0.c
-func (j *JSON) Set(key string, v interface{}) error {
+func (j *JSON) Set(key string, v any) error {
 	_, err := j.rt.Set(key, ast.NewAny(v))
 	if err != nil {
 		return errors.Wrapf(err, "path(%v) set fail. val: %v", key, v)

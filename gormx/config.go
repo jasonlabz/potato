@@ -23,15 +23,16 @@ type Config struct {
 	LogMode         LogMode       `json:"log_mode"`           // 日志级别
 
 	// 可以提供以下信息自动拼装DSN
-	DBType   DatabaseType `json:"db_type"`
-	Host     string       `json:"host"`
-	Port     int          `json:"port"`
-	User     string       `json:"user"`
-	Password string       `json:"password"`
-	Database string       `json:"database"`
-	SSLMode  string       `json:"ssl_mode"`
-	TimeZone string       `json:"time_zone"`
-	Charset  string       `json:"charset"`
+	DBType DatabaseType `json:"db_type"`
+
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	User     string `json:"user"`
+	Password string `json:"password"`
+	Database string `json:"database"`
+	SSLMode  string `json:"ssl_mode"`
+	TimeZone string `json:"time_zone"`
+	Charset  string `json:"charset"`
 
 	Logger gormLogger.Interface
 }
@@ -58,7 +59,7 @@ func (c *Config) GenDSN() (dsn string) {
 
 	switch c.DBType {
 	case DatabaseTypeSQLite:
-		//dsn = c.DSN
+		// dsn = c.DSN
 	default:
 		dbName := c.Database
 		if dbName == "" {

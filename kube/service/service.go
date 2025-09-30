@@ -2,13 +2,14 @@ package service
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
-	"github.com/jasonlabz/potato/kube"
-	"github.com/jasonlabz/potato/kube/options"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
+
+	"github.com/jasonlabz/potato/kube"
+	"github.com/jasonlabz/potato/kube/options"
 )
 
 func GetServiceList(ctx context.Context, namespace string, opts ...options.ListOptionFunc) (serviceList *corev1.ServiceList, err error) {
@@ -74,15 +75,15 @@ type CreateServiceRequest struct {
 
 func (c *CreateServiceRequest) checkParameters() error {
 	if c.Namespace == "" {
-		return fmt.Errorf("namespace is required")
+		return errors.New("namespace is required")
 	}
 
 	if c.ServiceName == "" {
-		return fmt.Errorf("service name is required")
+		return errors.New("service name is required")
 	}
 
 	if c.Type == "" {
-		return fmt.Errorf("service type is required")
+		return errors.New("service type is required")
 	}
 
 	if c.ExternalTrafficPolicy == "" {
@@ -179,7 +180,7 @@ func CreateService(ctx context.Context, request CreateServiceRequest) (serviceIn
 		serviceSrc.ObjectMeta.Labels[labelKey] = labelVal
 	}
 	options := metav1.CreateOptions{}
-	//创建service
+	// 创建service
 	serviceInfo, err = kube.GetKubeClient().CoreV1().Services(request.Namespace).Create(ctx, serviceSrc, options)
 	if err != nil {
 		return nil, err

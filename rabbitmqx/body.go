@@ -152,7 +152,8 @@ type PushBody struct {
 	ConfirmedByOrder bool
 
 	// 交换机模式
-	ExchangeName  string
+	ExchangeName string
+
 	ExchangeType  ExchangeType
 	ExchangeArgs  amqp.Table
 	BindingKeyMap map[string]string
@@ -161,7 +162,8 @@ type PushBody struct {
 
 	// 队列模式
 	QueueName string
-	Args      amqp.Table
+
+	Args amqp.Table
 
 	amqp.Publishing
 }
@@ -502,8 +504,7 @@ type QueuePushBody struct {
 	amqp.Publishing
 }
 
-func (q *QueuePushBody) Validate() {
-}
+func (q *QueuePushBody) Validate() {}
 
 func (q *QueuePushBody) SetPriority(priority uint8) *QueuePushBody {
 	q.Priority = priority

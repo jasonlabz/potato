@@ -18,7 +18,6 @@ func ParseInLocation(format, value, timezone string) (time.Time, error) {
 		return time.Time{}, err
 	}
 	return time.ParseInLocation(GetLayout(format), value, location)
-
 }
 
 func ParseInLocationDirect(format, value string, timezone *time.Location) (time.Time, error) {
@@ -32,7 +31,7 @@ func Parse(format, value string) (time.Time, error) {
 
 // GetLayout convert JodaTime layout to golang stdlib time layout
 func GetLayout(format string) string {
-	//replace ? or for rune ?
+	// replace ? or for rune ?
 	formatRune := []rune(format)
 	lenFormat := len(formatRune)
 	layout := make([]byte, 0, 9)
@@ -221,7 +220,6 @@ func GetLayout(format string) string {
 		}
 	}
 	return UnsafeString(layout)
-
 }
 
 // UnsafeString returns the string under byte buffer

@@ -24,12 +24,12 @@ func NewAESCrypto(key []byte) *CryptoAES {
 	if len(key) == 0 {
 		panic("empty key")
 	}
-	block, err := aes.NewCipher(key) //用aes创建一个加密器cipher
+	block, err := aes.NewCipher(key) // 用aes创建一个加密器cipher
 	if err != nil {
 		panic(err)
 	}
-	encrypted := cipher.NewCBCEncrypter(block, key) //CBC分组模式加密
-	decrypted := cipher.NewCBCDecrypter(block, key) //CBC分组模式解密
+	encrypted := cipher.NewCBCEncrypter(block, key) // CBC分组模式加密
+	decrypted := cipher.NewCBCDecrypter(block, key) // CBC分组模式解密
 	return &CryptoAES{
 		block:         block,
 		encryptedMode: encrypted,
@@ -45,10 +45,10 @@ type CryptoAES struct {
 
 // Encrypt 加密
 func (c *CryptoAES) Encrypt(src []byte) (encryptText string, err error) {
-	blockSize := c.block.BlockSize()  //AES的分组大小为16位
-	src = zeroPadding(src, blockSize) //填充
+	blockSize := c.block.BlockSize()  // AES的分组大小为16位
+	src = zeroPadding(src, blockSize) // 填充
 	out := make([]byte, len(src))
-	c.encryptedMode.CryptBlocks(out, src) //对src进行加密，加密结果放到dst里
+	c.encryptedMode.CryptBlocks(out, src) // 对src进行加密，加密结果放到dst里
 	return base64.RawURLEncoding.EncodeToString(out), nil
 }
 
@@ -59,17 +59,16 @@ func (c *CryptoAES) Decrypt(encryptText string) (src []byte, err error) {
 		return nil, err
 	}
 	out := make([]byte, len(baseSrc))
-	c.decryptedMode.CryptBlocks(out, baseSrc) //对src进行解密，解密结果放到dst里
-	out = zeroUnPadding(out)                  //反填充
+	c.decryptedMode.CryptBlocks(out, baseSrc) // 对src进行解密，解密结果放到dst里
+	out = zeroUnPadding(out)                  // 反填充
 	return out, nil
 }
 
 // zeroPadding 填充零
 func zeroPadding(cipherText []byte, blockSize int) []byte {
 	padding := blockSize - len(cipherText)%blockSize
-	padText := bytes.Repeat([]byte{0}, padding) //剩余用0填充
+	padText := bytes.Repeat([]byte{0}, padding) // 剩余用0填充
 	return append(cipherText, padText...)
-
 }
 
 // zeroUnPadding 反填充

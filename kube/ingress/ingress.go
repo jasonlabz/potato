@@ -2,13 +2,14 @@ package ingress
 
 import (
 	"context"
-	"fmt"
+	"errors"
+
 	netv1 "k8s.io/api/networking/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
 
 	"github.com/jasonlabz/potato/kube"
 	"github.com/jasonlabz/potato/kube/options"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/watch"
 )
 
 func GetIngressList(ctx context.Context, namespace string, opts ...options.ListOptionFunc) (ingressList *netv1.IngressList, err error) {
@@ -60,11 +61,11 @@ type CreateIngressRequest struct {
 
 func (c *CreateIngressRequest) checkParameters() error {
 	if c.Namespace == "" {
-		return fmt.Errorf("namespace is required")
+		return errors.New("namespace is required")
 	}
 
 	if c.IngressName == "" {
-		return fmt.Errorf("ingress name is required")
+		return errors.New("ingress name is required")
 	}
 
 	if len(c.IngressLabels) == 0 {
@@ -122,7 +123,7 @@ func CreateIngress(ctx context.Context, request CreateIngressRequest) (ingressIn
 		ingressSrc.ObjectMeta.Labels[labelKey] = labelVal
 	}
 	options := metav1.CreateOptions{}
-	//创建ingress
+	// 创建ingress
 	ingressInfo, err = kube.GetKubeClient().NetworkingV1().Ingresses(request.Namespace).Create(ctx, ingressSrc, options)
 	if err != nil {
 		return nil, err

@@ -25,7 +25,6 @@ func NewConfigProvider(endpoint, watchKey string, fileType string) base.IProvide
 	switch fileType {
 	case "json", "toml", "yaml", "yml", "properties", "props", "prop", "env", "dotenv":
 	default:
-
 	}
 	c := &ConfigProvider{
 		endpoint: endpoint,

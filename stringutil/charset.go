@@ -1,7 +1,6 @@
 package stringutil
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/axgle/mahonia"
@@ -72,7 +71,7 @@ var charsetAlias = map[string]string{
 func GetBytes(src string, charset string) (bytes []byte, err error) {
 	enc := mahonia.NewEncoder(charset)
 	if enc == nil {
-		err = errors.New(fmt.Sprintf("unsupport charset: %s", charset))
+		err = fmt.Errorf("unsupport charset: %s", charset)
 		return
 	}
 	convertString := enc.ConvertString(src)
@@ -83,7 +82,7 @@ func GetBytes(src string, charset string) (bytes []byte, err error) {
 func NewString(bytes []byte, charset string) (dest string, err error) {
 	dec := mahonia.NewDecoder(charset)
 	if dec == nil {
-		err = errors.New(fmt.Sprintf("unsupport charset: %s", charset))
+		err = fmt.Errorf("unsupport charset: %s", charset)
 		return
 	}
 	dest = dec.ConvertString(string(bytes))
@@ -93,12 +92,12 @@ func NewString(bytes []byte, charset string) (dest string, err error) {
 func ConvertCharset(src string, srcCharset, dstCharset string) (dest string, err error) {
 	enc := mahonia.NewEncoder(srcCharset)
 	if enc == nil {
-		err = errors.New(fmt.Sprintf("unsupport charset: %s", srcCharset))
+		err = fmt.Errorf("unsupport charset: %s", srcCharset)
 		return
 	}
 	dec := mahonia.NewDecoder(dstCharset)
 	if dec == nil {
-		err = errors.New(fmt.Sprintf("unsupport charset: %s", dstCharset))
+		err = fmt.Errorf("unsupport charset: %s", dstCharset)
 		return
 	}
 	decodeSrc := enc.ConvertString(src)

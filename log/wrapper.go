@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/jasonlabz/potato/utils"
 	"go.uber.org/zap"
+
+	"github.com/jasonlabz/potato/utils"
 )
 
 type LoggerWrapper struct {

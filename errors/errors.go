@@ -132,7 +132,7 @@ func (e *Error) Error() string {
 // writeMsgTo write the error msg to a writer
 func (e *Error) writeMsgTo(w io.Writer) {
 	// current error
-	_, _ = w.Write([]byte(fmt.Sprintf("%d -> %s", e.code, e.message)))
+	_, _ = fmt.Fprintf(w, "%d -> %s", e.code, e.message)
 	// with inner error
 	if e.innerErr == nil {
 		return

@@ -11,6 +11,7 @@ import (
 type BufferPool interface {
 	// Get 从 Pool 中获取一个 *bytes.Buffer 实例, 该实例已经被 Reset
 	Get() *bytes.Buffer
+
 	// Put 把 *bytes.Buffer 放回 Pool 中
 	Put(*bytes.Buffer)
 }
@@ -33,7 +34,7 @@ type bufferPool struct {
 func NewBuffer(size int) BufferPool {
 	return &bufferPool{
 		Pool: sync.Pool{
-			New: func() interface{} {
+			New: func() any {
 				return bytes.NewBuffer(make([]byte, size))
 			},
 		},
@@ -43,7 +44,7 @@ func NewBuffer(size int) BufferPool {
 func newBufferPool(size int) unsafe.Pointer {
 	return unsafe.Pointer(&bufferPool{
 		Pool: sync.Pool{
-			New: func() interface{} {
+			New: func() any {
 				return bytes.NewBuffer(make([]byte, size))
 			},
 		},

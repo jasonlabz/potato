@@ -7,13 +7,14 @@ import (
 
 	dm "github.com/jasonlabz/gorm-dm-driver"
 	"github.com/jasonlabz/oracle"
-	"github.com/jasonlabz/potato/log"
 	"github.com/jasonlabz/sqlite"
 	"go.uber.org/zap"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlserver"
 	"gorm.io/gorm"
+
+	"github.com/jasonlabz/potato/log"
 )
 
 var (
@@ -28,7 +29,6 @@ var (
 
 func init() {
 	dbMap = &sync.Map{}
-
 }
 
 // StoreDB store database instance
@@ -83,7 +83,7 @@ func InitConfig(config *Config) (db *gorm.DB, err error) {
 	case DatabaseTypeDM:
 		dialect = dm.Open(config.DSN)
 	default:
-		return nil, errors.New(fmt.Sprintf("unsupported dbType: %s", string(config.DBType)))
+		return nil, fmt.Errorf("unsupported dbType: %s", string(config.DBType))
 	}
 
 	if config.Logger == nil {

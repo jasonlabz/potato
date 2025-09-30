@@ -20,7 +20,7 @@ func QueryBuilder() *XQuery {
 	}
 }
 
-//QueryMatchAll
+// QueryMatchAll
 /** 语法：
 GET /{索引名}/_search
 {
@@ -41,7 +41,7 @@ func (q *XQuery) QueryMatchAllBoost(boost float32) *XQuery {
 	return q
 }
 
-//QueryMatch 匹配单个字段,通过match实现全文搜索
+// QueryMatch 匹配单个字段,通过match实现全文搜索
 /** 语法：
 GET /{索引名}/_search
 {
@@ -60,6 +60,7 @@ func (q *XQuery) QueryMatch(field, text string) *XQuery {
 	}
 	return q
 }
+
 func (q *XQuery) QueryMatchBoost(field, text string, boost float32) *XQuery {
 	err := q.Query.UnmarshalJSON([]byte(fmt.Sprintf(`{"query": {"match": {"%s":{"query":"%s","boost":%f}}}}`, field, text, boost)))
 	if err != nil {
@@ -68,7 +69,7 @@ func (q *XQuery) QueryMatchBoost(field, text string, boost float32) *XQuery {
 	return q
 }
 
-//QueryMultiMatch 匹配单个字段,通过match实现全文搜索
+// QueryMultiMatch 匹配单个字段,通过match实现全文搜索
 /** 语法：
 GET /{索引名}/_search
 {

@@ -17,6 +17,7 @@ import (
 	"github.com/elastic/go-elasticsearch/v8/typedapi/indices/create"
 	indicesget "github.com/elastic/go-elasticsearch/v8/typedapi/indices/get"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/types"
+
 	"github.com/jasonlabz/potato/configx"
 	"github.com/jasonlabz/potato/log"
 )
@@ -54,9 +55,10 @@ func InitElasticSearchOperator(config *Config) (err error) {
 }
 
 type ElasticSearchOperator struct {
-	//client     *elasticsearch.Client
+	// client     *elasticsearch.Client
 	typeClient *elasticsearch.TypedClient
-	config     *Config
+
+	config *Config
 }
 
 type Config struct {
@@ -142,17 +144,17 @@ func NewElasticSearchOperator(config *Config) (op *ElasticSearchOperator, err er
 	} else {
 		log.GetLogger().Info("------- es connected success")
 	}
-	//client, err := elasticsearch.NewClient(esConfig)
-	//if err != nil {
+	// client, err := elasticsearch.NewClient(esConfig)
+	// if err != nil {
 	//	return
-	//}
-	//_, err = client.Ping()
-	//if err != nil {
+	// }
+	// _, err = client.Ping()
+	// if err != nil {
 	//	log.GetLogger().WithError(err).Error("client ping fail")
-	//}
+	// }
 	op = &ElasticSearchOperator{
 		config: config,
-		//client:     client,
+		// client:     client,
 		typeClient: typedClient,
 	}
 	return
@@ -160,7 +162,7 @@ func NewElasticSearchOperator(config *Config) (op *ElasticSearchOperator, err er
 
 func (op *ElasticSearchOperator) GetIndexList(ctx context.Context) (res []*IndexInfo, err error) {
 	response, err := esapi.CatIndicesRequest{Format: "json"}.Do(ctx, op.typeClient)
-	//indices := op.typeClient.Cat.Indices()
+	// indices := op.typeClient.Cat.Indices()
 	if err != nil {
 		return
 	}
@@ -233,8 +235,8 @@ func (op *ElasticSearchOperator) CreateIndex(ctx context.Context, indexName, map
 		log.GetLogger().WithError(err).Error("create index error: " + indexName)
 		return
 	}
-	//索引不存在则创建索引
-	//索引不存在时查询会报错，但索引不存在的时候可以直接插入
+	// 索引不存在则创建索引
+	// 索引不存在时查询会报错，但索引不存在的时候可以直接插入
 	if exists {
 		return
 	}
@@ -259,7 +261,7 @@ func (op *ElasticSearchOperator) DeleteIndex(ctx context.Context, indexName stri
 		log.GetLogger().WithError(err).Error("delete index error: " + indexName)
 		return
 	}
-	//索引不存在则退出
+	// 索引不存在则退出
 	if !exists {
 		return
 	}

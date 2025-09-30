@@ -38,8 +38,9 @@ type Once struct {
 	// Placing done first allows more compact instructions on some architectures (amd64/x86),
 	// and fewer instructions (to calculate offset) on other architectures.
 	done uint32
-	m    sync.Mutex
-	v    interface{}
+
+	m sync.Mutex
+	v any
 }
 
 // Do calls the function f if and only if Do is being called for the
@@ -62,7 +63,7 @@ type Once struct {
 //
 // If f panics, Do considers it to have returned; future calls of Do return
 // without calling f.
-func (o *Once) Do(f func() interface{}) interface{} {
+func (o *Once) Do(f func() any) any {
 	if atomic.LoadUint32(&o.done) == 0 {
 		o.doSlow(f)
 	}
@@ -70,7 +71,7 @@ func (o *Once) Do(f func() interface{}) interface{} {
 	return o.v
 }
 
-func (o *Once) doSlow(f func() interface{}) {
+func (o *Once) doSlow(f func() any) {
 	o.m.Lock()
 	defer o.m.Unlock()
 	if o.done == 0 {

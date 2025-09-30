@@ -15,12 +15,12 @@ import (
 
 // Response 响应结构体
 type Response struct {
-	Code        int         `json:"code"`                // 错误码
-	Message     string      `json:"message,omitempty"`   // 错误信息
-	ErrTrace    string      `json:"err_trace,omitempty"` // 错误追踪链路信息
-	Version     string      `json:"version"`             // 版本信息
-	CurrentTime string      `json:"current_time"`        // 接口返回时间（当前时间）
-	Data        interface{} `json:"data,omitempty"`      // 返回数据
+	Code        int    `json:"code"`                // 错误码
+	Message     string `json:"message,omitempty"`   // 错误信息
+	ErrTrace    string `json:"err_trace,omitempty"` // 错误追踪链路信息
+	Version     string `json:"version"`             // 版本信息
+	CurrentTime string `json:"current_time"`        // 接口返回时间（当前时间）
+	Data        any    `json:"data,omitempty"`      // 返回数据
 }
 
 type ResponseWithPagination struct {
@@ -29,7 +29,7 @@ type ResponseWithPagination struct {
 }
 
 // ResponseOK 返回正确结果及数据
-func ResponseOK(c *gin.Context, version string, data interface{}) {
+func ResponseOK(c *gin.Context, version string, data any) {
 	c.JSON(prepareResponse(c, version, data, nil))
 	return
 }
@@ -41,25 +41,25 @@ func ResponseErr(c *gin.Context, version string, err error) {
 }
 
 // JsonResult 返回结果Json
-func JsonResult(c *gin.Context, version string, data interface{}, err error) {
+func JsonResult(c *gin.Context, version string, data any, err error) {
 	c.JSON(prepareResponse(c, version, data, err))
 	return
 }
 
 // PaginationResult 返回结果Json带分页
-func PaginationResult(c *gin.Context, version string, data interface{}, err error, pagination *page.Pagination) {
+func PaginationResult(c *gin.Context, version string, data any, err error, pagination *page.Pagination) {
 	c.JSON(prepareResponseWithPagination(c, version, data, err, pagination))
 	return
 }
 
 // PureJsonResult 返回结果PureJson
-func PureJsonResult(c *gin.Context, version string, data interface{}, err error) {
+func PureJsonResult(c *gin.Context, version string, data any, err error) {
 	c.PureJSON(prepareResponse(c, version, data, err))
 	return
 }
 
 // prepareResponse 准备响应信息
-func prepareResponse(c *gin.Context, version string, data interface{}, err error) (int, *Response) {
+func prepareResponse(c *gin.Context, version string, data any, err error) (int, *Response) {
 	// 格式化返回数据，非数组及切片时，转为切片
 	data = handleData(data)
 	code := http.StatusOK
@@ -93,7 +93,7 @@ func prepareResponse(c *gin.Context, version string, data interface{}, err error
 }
 
 // prepareResponseWithPagination 准备响应信息
-func prepareResponseWithPagination(c *gin.Context, version string, data interface{}, err error, pagination *page.Pagination) (int, *ResponseWithPagination) {
+func prepareResponseWithPagination(c *gin.Context, version string, data any, err error, pagination *page.Pagination) (int, *ResponseWithPagination) {
 	code, resp := prepareResponse(c, version, data, err)
 	respWithPagination := &ResponseWithPagination{
 		*resp,
@@ -104,13 +104,13 @@ func prepareResponseWithPagination(c *gin.Context, version string, data interfac
 }
 
 // handleData 格式化返回数据，非数组及切片时，转为切片
-func handleData(data interface{}) interface{} {
+func handleData(data any) any {
 	v := reflect.ValueOf(data)
 	if !v.IsValid() || v.Kind() == reflect.Ptr && v.IsNil() {
-		return make([]interface{}, 0)
+		return make([]any, 0)
 	}
 	if v.Kind() == reflect.Slice || v.Kind() == reflect.Array {
 		return data
 	}
-	return []interface{}{data}
+	return []any{data}
 }

@@ -2,7 +2,7 @@ package pvc
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -75,11 +75,11 @@ type CreatePVCRequest struct {
 
 func (c *CreatePVCRequest) checkParameters() error {
 	if c.Namespace == "" {
-		return fmt.Errorf("namespace is required")
+		return errors.New("namespace is required")
 	}
 
 	if c.PvcName == "" {
-		return fmt.Errorf("pvc name is required")
+		return errors.New("pvc name is required")
 	}
 
 	if len(c.PvcLabels) == 0 {
@@ -113,7 +113,7 @@ func CreatePVC(ctx context.Context, request CreatePVCRequest) (pvcInfo *corev1.P
 			AccessModes: request.AccessModes,
 			Resources: corev1.VolumeResourceRequirements{
 				Requests: corev1.ResourceList{
-					"storage": resource.MustParse(request.Storage), //设置存储大小
+					"storage": resource.MustParse(request.Storage), // 设置存储大小
 				},
 			},
 			VolumeName: request.VolumeName,
@@ -123,13 +123,13 @@ func CreatePVC(ctx context.Context, request CreatePVCRequest) (pvcInfo *corev1.P
 	for labelKey, labelVal := range request.PvcLabels {
 		pvcSrc.ObjectMeta.Labels[labelKey] = labelVal
 	}
-	//使用存储卷名字
+	// 使用存储卷名字
 	if len(request.StorageClassName) != 0 {
 		pvcSrc.Spec.StorageClassName = &request.StorageClassName
 	}
 
 	options := metav1.CreateOptions{}
-	//创建pvc
+	// 创建pvc
 	pvcInfo, err = kube.GetKubeClient().CoreV1().PersistentVolumeClaims(request.Namespace).Create(ctx, pvcSrc, options)
 	if err != nil {
 		return nil, err

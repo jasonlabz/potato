@@ -68,7 +68,7 @@ func RequestMiddleware() gin.HandlerFunc {
 			log.String("error_message", c.Errors.ByType(gin.ErrorTypePrivate).String()),
 			log.String("response_body", string(logBytes(bodyLog.body.Bytes(), requestBodyMaxLen))),
 			log.String("path", c.Request.URL.Path),
-			log.String("cost", fmt.Sprintf("%dms", time.Now().Sub(start).Milliseconds())))
+			log.String("cost", fmt.Sprintf("%dms", time.Since(start).Milliseconds())))
 	}
 }
 

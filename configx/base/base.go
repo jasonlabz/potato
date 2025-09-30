@@ -27,14 +27,14 @@ type IProvider interface {
 }
 
 type ProviderManager struct {
-	ProviderMap sync.Map //map[string]IProvider
+	ProviderMap sync.Map // map[string]IProvider
 }
 
 func (p *ProviderManager) AddProviders(configName string, provider IProvider) {
 	p.ProviderMap.Store(configName, provider)
 }
 
-func (p *ProviderManager) Get(configName, key string) (val interface{}, err error) {
+func (p *ProviderManager) Get(configName, key string) (val any, err error) {
 	provider, ok := p.ProviderMap.Load(configName)
 	if !ok {
 		err = fmt.Errorf("config: %s not found", configName)

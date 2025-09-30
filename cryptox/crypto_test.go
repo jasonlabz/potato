@@ -2,8 +2,6 @@ package cryptox
 
 import (
 	"fmt"
-	"github.com/jasonlabz/potato/cryptox/md5"
-	"github.com/jasonlabz/potato/cryptox/rsa"
 	"log"
 	"testing"
 
@@ -11,6 +9,8 @@ import (
 	"github.com/jasonlabz/potato/cryptox/base64"
 	"github.com/jasonlabz/potato/cryptox/des"
 	"github.com/jasonlabz/potato/cryptox/hmac"
+	"github.com/jasonlabz/potato/cryptox/md5"
+	"github.com/jasonlabz/potato/cryptox/rsa"
 	"github.com/jasonlabz/potato/cryptox/sha"
 )
 
@@ -19,7 +19,7 @@ func TestAES(t *testing.T) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	//text := `RNQ��1b�A�k{b*�ui"��;�R�����`
+	// text := `RNQ��1b�A�k{b*�ui"��;�R�����`
 	fmt.Println("encryptedText:" + text)
 	plainText, err := aes.Decrypt(text)
 	if err != nil {
@@ -75,8 +75,8 @@ func TestMD5(t *testing.T) {
 }
 
 func TestRSA(t *testing.T) {
-	//rsa.CreateKeys(512)
-	//pwd := os.Getwd()
+	// rsa.CreateKeys(512)
+	// pwd := os.Getwd()
 	cryptoRSA, _ := rsa.NewCryptoRSAWithFile("./rsa/.rsa/public.pem", "./rsa/.rsa/private.pem")
 	encryptText, err := cryptoRSA.Encrypt([]byte("RSA編碼"))
 	if err != nil {

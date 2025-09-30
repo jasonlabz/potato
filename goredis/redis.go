@@ -37,7 +37,8 @@ type Config struct {
 
 	// The sentinel master name.
 	// Only failover clients.
-	MasterName       string
+	MasterName string
+
 	SentinelUsername string
 	SentinelPassword string
 }

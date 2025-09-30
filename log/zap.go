@@ -131,7 +131,7 @@ func NewLogger(opts ...Option) *LoggerWrapper {
 	}
 
 	if !configLoad {
-		log.Printf("zapx log init by default config")
+		log.Print("zapx log init by default config")
 	}
 	// 加载配置
 	loadConf(options)
@@ -152,17 +152,17 @@ func NewLogger(opts ...Option) *LoggerWrapper {
 	default:
 		logLevel = zapcore.InfoLevel
 	}
-	//日志级别
-	highPriority := zap.LevelEnablerFunc(func(lev zapcore.Level) bool { //error级别
+	// 日志级别
+	highPriority := zap.LevelEnablerFunc(func(lev zapcore.Level) bool { // error级别
 		return lev >= zap.WarnLevel
 	})
-	lowPriority := zap.LevelEnablerFunc(func(lev zapcore.Level) bool { //info和debug级别,debug级别是最低的
+	lowPriority := zap.LevelEnablerFunc(func(lev zapcore.Level) bool { // info和debug级别,debug级别是最低的
 		return lev >= logLevel
 	})
 
-	//lowLevel文件WriteSyncer
+	// lowLevel文件WriteSyncer
 	lowLevelFileWriteSyncer := getLowLevelWriterSyncer(options)
-	//highLevel文件WriteSyncer
+	// highLevel文件WriteSyncer
 	highLevelFileWriteSyncer := getHighLevelWriterSyncer(options)
 
 	// 获取编码器
@@ -177,7 +177,7 @@ func NewLogger(opts ...Option) *LoggerWrapper {
 		return zapcore.AddSync(os.Stdout)
 	}(), lowPriority)
 
-	//lowLevelFileCore 和 highLevelFileCore 加入core切片
+	// lowLevelFileCore 和 highLevelFileCore 加入core切片
 	var coreArr []zapcore.Core
 	coreArr = append(coreArr, lowLevelFileCore)
 
@@ -188,8 +188,8 @@ func NewLogger(opts ...Option) *LoggerWrapper {
 		coreArr = append(coreArr, highLevelFileCore)
 	}
 
-	//生成logger
-	zapLogger := zap.New(zapcore.NewTee(coreArr...), zap.AddCaller(), zap.AddCallerSkip(1)) //zap.AddCaller() 显示文件名 和 行号
+	// 生成logger
+	zapLogger := zap.New(zapcore.NewTee(coreArr...), zap.AddCaller(), zap.AddCallerSkip(1)) // zap.AddCaller() 显示文件名 和 行号
 
 	return &LoggerWrapper{
 		logger:   zapLogger,
@@ -199,14 +199,14 @@ func NewLogger(opts ...Option) *LoggerWrapper {
 
 // core 三个参数之  Encoder 获取编码器
 func getEncoder(options *Options) zapcore.Encoder {
-	//自定义编码配置
+	// 自定义编码配置
 	encoderConfig := zap.NewProductionEncoderConfig()
-	//encoderConfig := zap.NewDevelopmentEncoderConfig()
-	encoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout(times.MilliTimeFormat) //指定时间格式
-	encoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder                       //在日志文件中使用大写字母记录日志级别
-	//encoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder //按级别显示不同颜色，不需要的话取值zapcore.CapitalLevelEncoder就可以了
-	encoderConfig.EncodeCaller = zapcore.ShortCallerEncoder //显示短文件路径
-	//encoderConfig.EncodeCaller = zapcore.FullCallerEncoder //显示完整文件路径
+	// encoderConfig := zap.NewDevelopmentEncoderConfig()
+	encoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout(times.MilliTimeFormat) // 指定时间格式
+	encoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder                       // 在日志文件中使用大写字母记录日志级别
+	// encoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder //按级别显示不同颜色，不需要的话取值zapcore.CapitalLevelEncoder就可以了
+	encoderConfig.EncodeCaller = zapcore.ShortCallerEncoder // 显示短文件路径
+	// encoderConfig.EncodeCaller = zapcore.FullCallerEncoder //显示完整文件路径
 	encoderConfig.EncodeDuration = zapcore.SecondsDurationEncoder
 	if options.logFormat == "json" {
 		return zapcore.NewJSONEncoder(encoderConfig) // json 格式打印日志
@@ -217,25 +217,25 @@ func getEncoder(options *Options) zapcore.Encoder {
 // core 三个参数之  日志输出路径
 func getLowLevelWriterSyncer(options *Options) zapcore.WriteSyncer {
 	fileName := filepath.Join(options.basePath, options.fileName)
-	//引入第三方库 Lumberjack 加入日志切割功能
+	// 引入第三方库 Lumberjack 加入日志切割功能
 	infoLumberIO := &lumberjack.Logger{
-		Filename:   fileName,           //日志文件存放目录，如果文件夹不存在会自动创建
-		MaxSize:    options.maxSize,    //文件大小限制,单位MB
-		MaxBackups: options.maxBackups, //最大保留日志文件数量
-		MaxAge:     options.maxAge,     //日志文件保留天数
-		Compress:   options.compress,   //Compress确定是否应该使用gzip压缩已旋转的日志文件。默认值是不执行压缩。
+		Filename:   fileName,           // 日志文件存放目录，如果文件夹不存在会自动创建
+		MaxSize:    options.maxSize,    // 文件大小限制,单位MB
+		MaxBackups: options.maxBackups, // 最大保留日志文件数量
+		MaxAge:     options.maxAge,     // 日志文件保留天数
+		Compress:   options.compress,   // Compress确定是否应该使用gzip压缩已旋转的日志文件。默认值是不执行压缩。
 	}
 	return zapcore.AddSync(infoLumberIO)
 }
 
 func getHighLevelWriterSyncer(options *Options) zapcore.WriteSyncer {
-	//引入第三方库 Lumberjack 加入日志切割功能
+	// 引入第三方库 Lumberjack 加入日志切割功能
 	lumberWriteSyncer := &lumberjack.Logger{
-		Filename:   filepath.Join(options.basePath, options.fileName+".wf"), //日志文件存放目录，如果文件夹不存在会自动创建
-		MaxSize:    options.maxSize,                                         //文件大小限制,单位MB
-		MaxBackups: options.maxBackups,                                      //最大保留日志文件数量
-		MaxAge:     options.maxAge,                                          //日志文件保留天数
-		Compress:   options.compress,                                        //Compress确定是否应该使用gzip压缩已旋转的日志文件。默认值是不执行压缩。
+		Filename:   filepath.Join(options.basePath, options.fileName+".wf"), // 日志文件存放目录，如果文件夹不存在会自动创建
+		MaxSize:    options.maxSize,                                         // 文件大小限制,单位MB
+		MaxBackups: options.maxBackups,                                      // 最大保留日志文件数量
+		MaxAge:     options.maxAge,                                          // 日志文件保留天数
+		Compress:   options.compress,                                        // Compress确定是否应该使用gzip压缩已旋转的日志文件。默认值是不执行压缩。
 	}
 	return zapcore.AddSync(lumberWriteSyncer)
 }

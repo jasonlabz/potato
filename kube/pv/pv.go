@@ -2,15 +2,15 @@ package pv
 
 import (
 	"context"
-	"fmt"
-	"github.com/jasonlabz/potato/kube/options"
-	"k8s.io/apimachinery/pkg/api/resource"
+	"errors"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 
 	"github.com/jasonlabz/potato/kube"
+	"github.com/jasonlabz/potato/kube/options"
 )
 
 func GetPVList(ctx context.Context, opts ...options.ListOptionFunc) (pvList *corev1.PersistentVolumeList, err error) {
@@ -60,7 +60,7 @@ type CreatePVRequest struct {
 
 func (c *CreatePVRequest) checkParameters() error {
 	if c.PvcName == "" {
-		return fmt.Errorf("pv name is required")
+		return errors.New("pv name is required")
 	}
 
 	if len(c.PvcLabels) == 0 {
@@ -93,7 +93,7 @@ func CreatePV(ctx context.Context, request CreatePVRequest) (pvInfo *corev1.Pers
 		Spec: corev1.PersistentVolumeSpec{
 			AccessModes: request.AccessModes,
 			Capacity: corev1.ResourceList{
-				"storage": resource.MustParse(request.Storage), //设置存储大小
+				"storage": resource.MustParse(request.Storage), // 设置存储大小
 			},
 			PersistentVolumeSource: request.PersistentVolumeSource,
 		},
@@ -101,13 +101,13 @@ func CreatePV(ctx context.Context, request CreatePVRequest) (pvInfo *corev1.Pers
 	for labelKey, labelVal := range request.PvcLabels {
 		pvSrc.ObjectMeta.Labels[labelKey] = labelVal
 	}
-	//使用存储卷名字
+	// 使用存储卷名字
 	if len(request.StorageClassName) != 0 {
 		pvSrc.Spec.StorageClassName = request.StorageClassName
 	}
 
 	options := metav1.CreateOptions{}
-	//创建pv
+	// 创建pv
 	pvInfo, err = kube.GetKubeClient().CoreV1().PersistentVolumes().Create(ctx, pvSrc, options)
 	if err != nil {
 		return nil, err

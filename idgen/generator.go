@@ -1,8 +1,9 @@
 package idgen
 
 import (
-	"github.com/yitter/idgenerator-go/idgen"
 	"math/rand"
+
+	"github.com/yitter/idgenerator-go/idgen"
 )
 
 func init() {
