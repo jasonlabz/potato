@@ -1,9 +1,3 @@
-// Package middleware -----------------------------
-// @file      : recovery.go
-// @author    : jasonlabz
-// @contact   : 1783022886@qq.com
-// @time      : 2024/10/2 1:04
-// -------------------------------------------
 package middleware
 
 import (
@@ -38,8 +32,8 @@ func RecoveryLog(stack bool) gin.HandlerFunc {
 
 				httpRequest, _ := httputil.DumpRequest(c.Request, false)
 				if brokenPipe {
-					log.GetLogger().WithContext(c).WithField(log.Any("error", err),
-						log.String("request", string(httpRequest))).Error(c.Request.URL.Path)
+					log.GetLogger().WithField(log.Any("error", err),
+						log.String("request", string(httpRequest))).Error(c, c.Request.URL.Path)
 					// If the connection is dead, we can't write a status to it.
 					c.Error(err.(error)) // nolint: err check
 					c.Abort()
@@ -47,14 +41,14 @@ func RecoveryLog(stack bool) gin.HandlerFunc {
 				}
 
 				if stack {
-					logger := log.GetLogger().WithContext(c).WithField(log.Any("error", err),
+					logger := log.GetLogger().WithField(log.Any("error", err),
 						log.String("request", string(httpRequest)))
-					logger.Error("[Recovery from panic] -- stack")
-					logger.Error(string(debug.Stack()))
+					logger.Error(c, "[Recovery from panic] -- stack")
+					logger.Error(c, string(debug.Stack()))
 				} else {
-					logger := log.GetLogger().WithContext(c).WithField(log.Any("error", err))
-					logger.Error("[Recovery from panic] -- request")
-					logger.Error(string(httpRequest))
+					logger := log.GetLogger().WithField(log.Any("error", err))
+					logger.Error(c, "[Recovery from panic] -- request")
+					logger.Error(c, string(httpRequest))
 				}
 				c.AbortWithStatus(http.StatusInternalServerError)
 			}

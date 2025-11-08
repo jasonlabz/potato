@@ -52,7 +52,7 @@ func RequestMiddleware() gin.HandlerFunc {
 		c.Writer = bodyLog
 
 		start := time.Now() // Start timer
-		log.GetLogger().InfoContext(c, "	[GIN] request",
+		log.GetLogger().Info(c, "	[GIN] request",
 			log.String("proto", c.Request.Proto),
 			log.String("client_ip", c.ClientIP()),
 			log.Int64("content_length", c.Request.ContentLength),
@@ -63,7 +63,7 @@ func RequestMiddleware() gin.HandlerFunc {
 
 		c.Next()
 
-		log.GetLogger().InfoContext(c, "	[GIN] response",
+		log.GetLogger().Info(c, "	[GIN] response",
 			log.Int("status_code", c.Writer.Status()),
 			log.String("error_message", c.Errors.ByType(gin.ErrorTypePrivate).String()),
 			log.String("response_body", string(logBytes(bodyLog.body.Bytes(), requestBodyMaxLen))),

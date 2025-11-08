@@ -25,9 +25,9 @@ const (
 	Closed = 1
 )
 
-func handlePanic(op *RedisOperator) {
+func handlePanic(ctx context.Context, op *RedisOperator) {
 	if r := recover(); r != nil {
-		op.logger().Error(fmt.Sprintf("Recovered: %+v", r))
+		op.logger().Error(ctx, fmt.Sprintf("Recovered: %+v", r))
 	}
 }
 
@@ -51,7 +51,7 @@ func (op *RedisOperator) Watch(ctx context.Context, fn func(*redis.Tx) error, ke
 /**********************************************************  延迟队列 ****************************************************************/
 // tryMigrationDaemon 将到期的PublishBody迁移到ready队列等待执行
 func (op *RedisOperator) tryMigrationDaemon(ctx context.Context) {
-	defer handlePanic(op)
+	defer handlePanic(ctx, op)
 	sig := make(chan os.Signal)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGKILL)
 	timer := time.NewTimer(DefaultPollingTimes)
@@ -63,7 +63,7 @@ func (op *RedisOperator) tryMigrationDaemon(ctx context.Context) {
 		if !delayInit {
 			members, getErr := op.SMembers(ctx, CacheKeyWithDelayQueueKey)
 			if getErr != nil {
-				op.logger().ErrorContext(ctx, "redis get delay queue key error",
+				op.logger().Error(ctx, "redis get delay queue key error",
 					"tag", "redis_delay_queue_method", "err", getErr.Error())
 				continue
 			}
@@ -79,7 +79,7 @@ func (op *RedisOperator) tryMigrationDaemon(ctx context.Context) {
 
 		select {
 		case s := <-sig:
-			op.logger().InfoContext(ctx, fmt.Sprintf("recived： %v, exiting redis daemon... ", s),
+			op.logger().Info(ctx, fmt.Sprintf("recived： %v, exiting redis daemon... ", s),
 				"tag", "redis_delay_queue_method")
 			return
 		case <-timer.C:
@@ -91,7 +91,7 @@ func (op *RedisOperator) tryMigrationDaemon(ctx context.Context) {
 					delayQueueTimeout := fmt.Sprintf(DelayQueueTimeoutTemplate, delayKey)
 					migrateErr := op.migrateExpiredBody(ctx, delayQueueTimeout, delayKey)
 					if migrateErr != nil {
-						op.logger().ErrorContext(ctx, "migrate timeout message error: "+delayQueueTimeout+" -> "+delayKey,
+						op.logger().Error(ctx, "migrate timeout message error: "+delayQueueTimeout+" -> "+delayKey,
 							"tag", "redis_delay_queue_method", "err", migrateErr.Error())
 						return
 					}

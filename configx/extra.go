@@ -1,10 +1,4 @@
-// Package env -----------------------------
-// @file      : env.go
-// @author    : jasonlabz
-// @contact   : 1783022886@qq.com
-// @time      : 2024/12/28 14:03
-// -------------------------------------------
-package env
+package configx
 
 import (
 	"os"
@@ -15,25 +9,25 @@ import (
 )
 
 var (
-	workPath string
+	workDir  string
 	storeMap sync.Map
 )
 
 func init() {
-	workPath, _ = os.Getwd()
+	workDir, _ = os.Getwd()
 	storeMap = sync.Map{}
 }
 
 func Pwd() string {
-	return workPath
+	return workDir
 }
 
-func ConfPath() string {
-	confPath := filepath.Join(workPath, "conf")
+func ConfDir() string {
+	confPath := filepath.Join(workDir, "conf")
 	if utils.IsExist(confPath) {
 		return confPath
 	}
-	confPathBak := filepath.Join(workPath, "config")
+	confPathBak := filepath.Join(workDir, "config")
 	if utils.IsExist(confPathBak) {
 		return confPathBak
 	}

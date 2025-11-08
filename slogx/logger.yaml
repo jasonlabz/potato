@@ -1,7 +1,7 @@
 # 是否写入文件
 name: service
 # json|console
-format: console
+format: json
 # error|warn|info|debug|fatal
 log_level: debug
 # 文件配置

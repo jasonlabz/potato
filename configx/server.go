@@ -1,13 +1,14 @@
 package configx
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/bytedance/sonic/decoder"
-	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
 	"gopkg.in/ini.v1"
 	"gopkg.in/yaml.v3"
@@ -119,27 +120,39 @@ type LimitConf struct {
 	QueueLimit      int  `mapstructure:"queue_limit" json:"queue_limit" yaml:"queue_limit" ini:"queue_limit"`
 }
 
-// Application 服务地址端口配置
-type Application struct {
-	Host       string   `mapstructure:"host" json:"host" yaml:"host" ini:"host"`
-	Name       string   `mapstructure:"name" json:"name" yaml:"name" ini:"name"`
-	Port       int      `mapstructure:"port" json:"port" yaml:"port" ini:"port"`
-	FileServer bool     `mapstructure:"file_server" json:"file_server" yaml:"file_server" ini:"file_server"`
-	Prom       PromConf `mapstructure:"prom" json:"prom" yaml:"prom" ini:"prom"`
-	PProf      PProf    `mapstructure:"pprof" json:"pprof" yaml:"pprof" ini:"pprof"`
+// ServerConfig 新增的配置结构体
+type ServerConfig struct {
+	HTTP HTTPConfig `mapstructure:"http" json:"http" yaml:"http" ini:"http"`
+	GRPC GRPCConfig `mapstructure:"grpc" json:"grpc" yaml:"grpc" ini:"grpc"`
 }
 
-// PromConf Prometheus 配置
-type PromConf struct {
-	Enable bool   `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"` // Enable prometheus client
-	Path   string `mapstructure:"path" json:"path" yaml:"path" ini:"path"`         // Default value is "metrics", set path as needed.
-	Pusher Pusher `mapstructure:"pusher" json:"pusher" yaml:"pusher" ini:"pusher"` // 推送到 pushgateway
+type HTTPConfig struct {
+	Port         int    `mapstructure:"port" json:"port" yaml:"port" ini:"port"`
+	ReadTimeout  string `mapstructure:"read_timeout" json:"read_timeout" yaml:"read_timeout" ini:"read_timeout"`
+	WriteTimeout string `mapstructure:"write_timeout" json:"write_timeout" yaml:"write_timeout" ini:"write_timeout"`
 }
 
-// PProf 配置pprof
-type PProf struct {
-	Enable bool `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"` // Enable prometheus client
-	Port   int  `mapstructure:"port" json:"port" yaml:"port" ini:"port"`
+type GRPCConfig struct {
+	Port                 int    `mapstructure:"port" json:"port" yaml:"port" ini:"port"`
+	MaxConcurrentStreams uint32 `mapstructure:"max_concurrent_streams" json:"max_concurrent_streams" yaml:"max_concurrent_streams" ini:"max_concurrent_streams"`
+}
+
+type MonitorConfig struct {
+	Prometheus PrometheusConfig `mapstructure:"prometheus" json:"prometheus" yaml:"prometheus" ini:"prometheus"`
+	PProf      PProfConfig      `mapstructure:"pprof" json:"pprof" yaml:"pprof" ini:"pprof"`
+}
+
+type PrometheusConfig struct {
+	Enable         bool   `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"`
+	Path           string `mapstructure:"path" json:"path" yaml:"path" ini:"path"`
+	ScrapeInterval string `mapstructure:"scrape_interval" json:"scrape_interval" yaml:"scrape_interval" ini:"scrape_interval"`
+}
+
+type PProfConfig struct {
+	Enable           bool     `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"`
+	Port             int      `mapstructure:"port" json:"port" yaml:"port" ini:"port"`
+	EnabledEndpoints []string `mapstructure:"enabled_endpoints" json:"enabled_endpoints" yaml:"enabled_endpoints" ini:"enabled_endpoints"`
+	Pusher           Pusher   `mapstructure:"pusher" json:"pusher" yaml:"pusher" ini:"pusher"` // 推送到 pushgateway
 }
 
 // Pusher push to pushGateway 配置
@@ -151,8 +164,19 @@ type Pusher struct {
 	BasicAuth  string `mapstructure:"basic_auth" json:"basic_auth" yaml:"basic_auth" ini:"basic_auth"`     // Basic auth of pushgateway
 }
 
+// 更新 Application 结构体，保持向后兼容
+type Application struct {
+	Host       string        `mapstructure:"host" json:"host" yaml:"host" ini:"host"`
+	Name       string        `mapstructure:"name" json:"name" yaml:"name" ini:"name"`
+	Port       int           `mapstructure:"port" json:"port" yaml:"port" ini:"port"`
+	Debug      bool          `mapstructure:"debug" json:"debug" yaml:"debug" ini:"debug"`
+	FileServer bool          `mapstructure:"file_server" json:"file_server" yaml:"file_server" ini:"file_server"`
+	Server     ServerConfig  `mapstructure:"server" json:"server" yaml:"server" ini:"server"`
+	Monitor    MonitorConfig `mapstructure:"monitor" json:"monitor" yaml:"monitor" ini:"monitor"`
+}
+
+// 更新主配置结构体
 type Config struct {
-	Debug       bool           `mapstructure:"debug" json:"debug" yaml:"debug" ini:"debug"`
 	Application Application    `mapstructure:"application" json:"application" yaml:"application" ini:"application"`
 	Database    Database       `mapstructure:"database" json:"database" yaml:"database" ini:"database"`
 	Crypto      []CryptoConfig `mapstructure:"crypto" json:"crypto" yaml:"crypto" ini:"crypto"`
@@ -169,68 +193,137 @@ func GetConfig() *Config {
 	return applicationConfig
 }
 
-func LoadConfigFromJson(configPath string) {
+func (c *Config) GetHTTPPort() int {
+	// 优先使用新的 server.http.port 配置
+	if c.Application.Server.HTTP.Port > 0 {
+		return c.Application.Server.HTTP.Port
+	}
+	// 回退到旧的 application.port 配置
+	return c.Application.Port
+}
+
+func (c *Config) GetName() string {
+	return c.Application.Name
+}
+
+func (c *Config) IsDebugMode() bool {
+	return c.Application.Debug
+}
+
+func (c *Config) GetPrometheusConfig() PrometheusConfig {
+	return c.Application.Monitor.Prometheus
+}
+
+func (c *Config) GetPProfConfig() PProfConfig {
+	return c.Application.Monitor.PProf
+}
+
+// GetHTTPReadTimeout 获取超时时间（转换为 time.Duration）
+func (c *Config) GetHTTPReadTimeout() (time.Duration, error) {
+	if c.Application.Server.HTTP.ReadTimeout != "" {
+		return time.ParseDuration(c.Application.Server.HTTP.ReadTimeout)
+	}
+	return 30 * time.Second, nil // 默认值
+}
+
+func (c *Config) GetHTTPWriteTimeout() (time.Duration, error) {
+	if c.Application.Server.HTTP.WriteTimeout != "" {
+		return time.ParseDuration(c.Application.Server.HTTP.WriteTimeout)
+	}
+	return 30 * time.Second, nil // 默认值
+}
+
+func (c *Config) GetGRPCPort() int {
+	if c.Application.Server.GRPC.Port > 0 {
+		return c.Application.Server.GRPC.Port
+	}
+	return 8631 // 默认值
+}
+
+// Validate 配置验证
+func (c *Config) Validate() error {
+	if c.Application.Name == "" {
+		return errors.New("application name is required")
+	}
+
+	httpPort := c.GetHTTPPort()
+	if httpPort <= 0 || httpPort > 65535 {
+		return fmt.Errorf("invalid HTTP port: %d", httpPort)
+	}
+
+	grpcPort := c.GetGRPCPort()
+	if grpcPort <= 0 || grpcPort > 65535 {
+		return fmt.Errorf("invalid GRPC port: %d", grpcPort)
+	}
+
+	// 验证超时配置
+	if _, err := c.GetHTTPReadTimeout(); err != nil {
+		return fmt.Errorf("invalid HTTP read_timeout: %w", err)
+	}
+
+	if _, err := c.GetHTTPWriteTimeout(); err != nil {
+		return fmt.Errorf("invalid HTTP write_timeout: %w", err)
+	}
+
+	return nil
+}
+
+func LoadConfigFromJson(configPath string, body any) {
 	// 打开文件
-	file, _ := os.Open(configPath)
+	cf, _ := os.Open(configPath)
 	// 关闭文件
 	defer func(file *os.File) {
 		err := file.Close()
 		if err != nil {
 			panic(err)
 		}
-	}(file)
+	}(cf)
 	// NewDecoder创建一个从file读取并解码json对象的*Decoder，解码器有自己的缓冲，并可能超前读取部分json数据。
-	decoder := decoder.NewStreamDecoder(file)
+	dc := decoder.NewStreamDecoder(cf)
 	// Decode从输入流读取下一个json编码值并保存在v指向的值里
-	err := decoder.Decode(applicationConfig)
+	err := dc.Decode(body)
 	if err != nil {
 		panic(err)
 	}
 }
 
-func LoadConfigFromIni(configPath string) {
-	err := ini.MapTo(applicationConfig, configPath)
+func LoadConfigFromIni(configPath string, body any) {
+	err := ini.MapTo(body, configPath)
 	if err != nil {
 		panic(err)
 	}
 }
 
-func LoadConfigFromYaml(configPath string) {
+func LoadConfigFromYaml(configPath string, body any) {
 	file, err := os.ReadFile(configPath)
 	if err != nil {
 		panic(err)
 	}
-	err = yaml.Unmarshal(file, applicationConfig)
+	err = yaml.Unmarshal(file, body)
 	if err != nil {
 		panic(err)
 	}
 }
 
-func LoadConfigFromToml(configPath string) {
-	_, err := toml.DecodeFile(configPath, applicationConfig)
+func LoadConfigFromToml(configPath string, body any) {
+	_, err := toml.DecodeFile(configPath, body)
 	if err != nil {
 		panic(err)
 	}
 }
 
-func ParseConfigByViper(configPath, configName, configType string) {
+func ParseConfigByViper(configFile string, dest any) (err error) {
 	v := viper.New()
-	v.AddConfigPath(configPath)
-	v.SetConfigName(configName)
-	v.SetConfigType(configType)
-
-	if err := v.ReadInConfig(); err != nil {
-		panic(err)
+	v.SetConfigFile(configFile)
+	err = v.ReadInConfig()
+	if err != nil {
+		err = fmt.Errorf("failed to read config file: %w", err)
+		return
 	}
-	v.WatchConfig()
-	v.OnConfigChange(func(e fsnotify.Event) {
-		if err := v.ReadInConfig(); err != nil {
-			panic(err)
-		}
-	})
 	// 直接反序列化为Struct
-	if err := v.Unmarshal(applicationConfig); err != nil {
-		panic(err)
+	if err = v.Unmarshal(dest); err != nil {
+		err = fmt.Errorf("failed to Unmarshal: %w", err)
+		return
 	}
 	return
 }

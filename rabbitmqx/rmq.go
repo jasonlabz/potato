@@ -520,27 +520,27 @@ func (r *RabbitMQOperator) PushDelayMessage(ctx context.Context, body *PushDelay
 	}
 	for i := 0; i < RetryTimes; i++ {
 		if atomic.LoadInt32(&r.closed) == Closed {
-			r.l.ErrorContext(ctx, "rabbitmq connection is closed, push cancel", "msg_id", body.MessageId)
+			r.l.Error(ctx, "rabbitmq connection is closed, push cancel", "msg_id", body.MessageId)
 			err = errors.New("connection is closed")
 			return
 		}
 		pushErr := r.pushDelayMessageCore(ctx, body, opts...)
 		if pushErr != nil {
-			r.l.WarnContext(ctx, "[push] Push failed. after %f seconds and retry...", DefaultRetryWaitTimes.Seconds(),
+			r.l.Warn(ctx, "[push] Push failed. after %f seconds and retry...", DefaultRetryWaitTimes.Seconds(),
 				"err", pushErr.Error(), "msg_id", body.MessageId)
 			select {
 			case <-r.closeCh:
-				r.l.ErrorContext(ctx, "[push]rmq closed, push msg cancel", "msg_id", body.MessageId)
+				r.l.Error(ctx, "[push]rmq closed, push msg cancel", "msg_id", body.MessageId)
 				err = errors.New("rabbitmq connection closed")
 				return
 			case <-ticker.C:
 			}
 			continue
 		}
-		r.l.InfoContext(ctx, "[push] Push msg success.", "msg_id", body.MessageId)
+		r.l.Info(ctx, "[push] Push msg success.", "msg_id", body.MessageId)
 		return
 	}
-	r.l.InfoContext(ctx, fmt.Sprintf("[push] Push msg failed. msg ---> %s", string(body.Body)), "msg_id", body.MessageId)
+	r.l.Info(ctx, fmt.Sprintf("[push] Push msg failed. msg ---> %s", string(body.Body)), "msg_id", body.MessageId)
 	return
 }
 
@@ -645,27 +645,27 @@ func (r *RabbitMQOperator) PushExchange(ctx context.Context, body *ExchangePushB
 
 	for i := 0; i < RetryTimes; i++ {
 		if atomic.LoadInt32(&r.closed) == Closed {
-			r.l.ErrorContext(ctx, "rabbitmq connection is closed, push cancel", "msg_id", body.MessageId)
+			r.l.Error(ctx, "rabbitmq connection is closed, push cancel", "msg_id", body.MessageId)
 			err = errors.New("connection is closed")
 			return
 		}
 		pushErr := r.pushExchangeCore(ctx, body, opts...)
 		if pushErr != nil {
-			r.l.WarnContext(ctx, "[push] Push failed <error:  %s>.  after %f seconds and retry... ",
+			r.l.Warn(ctx, "[push] Push failed <error:  %s>.  after %f seconds and retry... ",
 				pushErr.Error(), DefaultRetryWaitTimes.Seconds(), "msg_id", body.MessageId)
 			select {
 			case <-r.closeCh:
-				r.l.ErrorContext(ctx, "[push]rmq closed, push msg cancel", "msg_id", body.MessageId)
+				r.l.Error(ctx, "[push]rmq closed, push msg cancel", "msg_id", body.MessageId)
 				err = errors.New("rabbitmq connection closed")
 				return
 			case <-ticker.C:
 			}
 			continue
 		}
-		r.l.InfoContext(ctx, "[push] Push msg success.", "msg_id", body.MessageId)
+		r.l.Info(ctx, "[push] Push msg success.", "msg_id", body.MessageId)
 		return
 	}
-	r.l.InfoContext(ctx, fmt.Sprintf("[push] Push msg failed. msg ---> %s", string(body.Body)), "msg_id", body.MessageId)
+	r.l.Info(ctx, fmt.Sprintf("[push] Push msg failed. msg ---> %s", string(body.Body)), "msg_id", body.MessageId)
 	return
 }
 
@@ -682,27 +682,27 @@ func (r *RabbitMQOperator) PushQueue(ctx context.Context, body *QueuePushBody, o
 	body.Validate()
 	for i := 0; i < RetryTimes; i++ {
 		if atomic.LoadInt32(&r.closed) == Closed {
-			r.l.ErrorContext(ctx, "rabbitmq connection is closed, push cancel", "msg_id", body.MessageId)
+			r.l.Error(ctx, "rabbitmq connection is closed, push cancel", "msg_id", body.MessageId)
 			err = errors.New("connection is closed")
 			return
 		}
 		pushErr := r.pushQueueCore(ctx, body, opts...)
 		if pushErr != nil {
-			r.l.WarnContext(ctx, fmt.Sprintf("[push] Push failed. after %f seconds and retry...",
+			r.l.Warn(ctx, fmt.Sprintf("[push] Push failed. after %f seconds and retry...",
 				DefaultRetryWaitTimes.Seconds()), "err", pushErr.Error(), "msg_id", body.MessageId)
 			select {
 			case <-r.closeCh:
-				r.l.ErrorContext(ctx, "[push]mq closed, push msg cancel", "msg_id", body.MessageId)
+				r.l.Error(ctx, "[push]mq closed, push msg cancel", "msg_id", body.MessageId)
 				err = errors.New("rabbitmq connection closed")
 				return
 			case <-ticker.C:
 			}
 			continue
 		}
-		r.l.InfoContext(ctx, "[push] Push msg success.", "msg_id", body.MessageId)
+		r.l.Info(ctx, "[push] Push msg success.", "msg_id", body.MessageId)
 		return
 	}
-	r.l.InfoContext(ctx, fmt.Sprintf("[push] Push msg failed. msg ---> %s", string(body.Body)), "msg_id", body.MessageId)
+	r.l.Info(ctx, fmt.Sprintf("[push] Push msg failed. msg ---> %s", string(body.Body)), "msg_id", body.MessageId)
 	return
 }
 
@@ -722,21 +722,21 @@ func (r *RabbitMQOperator) Push(ctx context.Context, body *PushBody, opts ...Opt
 		}
 		pushErr := r.pushCore(ctx, body, opts...)
 		if pushErr != nil {
-			r.l.WarnContext(ctx, "[push] Push failed. Retrying...",
+			r.l.Warn(ctx, "[push] Push failed. Retrying...",
 				"err", pushErr.Error(), "msg_id", body.MessageId)
 			select {
 			case <-r.closeCh:
-				r.l.ErrorContext(ctx, "[push]mq closed, push msg cancel", "msg_id", body.MessageId)
+				r.l.Error(ctx, "[push]mq closed, push msg cancel", "msg_id", body.MessageId)
 				err = errors.New("rabbitmq connection closed")
 				return
 			case <-ticker.C:
 			}
 			continue
 		}
-		r.l.InfoContext(ctx, "[push] Push msg success.", "msg_id", body.MessageId)
+		r.l.Info(ctx, "[push] Push msg success.", "msg_id", body.MessageId)
 		return
 	}
-	r.l.InfoContext(ctx, fmt.Sprintf("[push] Push msg failed. msg ---> %s", string(body.Body)), "msg_id", body.MessageId)
+	r.l.Info(ctx, fmt.Sprintf("[push] Push msg failed. msg ---> %s", string(body.Body)), "msg_id", body.MessageId)
 	return
 }
 
@@ -905,7 +905,7 @@ func (r *RabbitMQOperator) pushCore(ctx context.Context, body *PushBody, opts ..
 		// noWait:是否非阻塞, true为是,不等待RMQ返回信息;args:参数,传nil即可; internal:是否为内部
 		err = r.DeclareExchange(channelWrap, body.ExchangeName, string(body.ExchangeType), body.ExchangeArgs, opts...)
 		if err != nil {
-			r.l.ErrorContext(ctx, "MQ failed to declare the exchange", "err", err.Error(), "msg_id", body.MessageId)
+			r.l.Error(ctx, "MQ failed to declare the exchange", "err", err.Error(), "msg_id", body.MessageId)
 			return
 		}
 
@@ -917,14 +917,14 @@ func (r *RabbitMQOperator) pushCore(ctx context.Context, body *PushBody, opts ..
 			// true为是,不等待RMQ返回信息;args:参数,传nil即可;exclusive:是否设置排他
 			_, err = r.DeclareQueue(channelWrap, queue, table, opts...)
 			if err != nil {
-				r.l.ErrorContext(ctx, "MQ declare queue failed", "err", err.Error(), "msg_id", body.MessageId)
+				r.l.Error(ctx, "MQ declare queue failed", "err", err.Error(), "msg_id", body.MessageId)
 				return
 			}
 
 			// 队列绑定
 			err = r.BindQueue(channelWrap, body.ExchangeName, bindingKey, queue, nil, opts...)
 			if err != nil {
-				r.l.ErrorContext(ctx, "MQ binding queue failed", "err", err.Error(), "msg_id", body.MessageId)
+				r.l.Error(ctx, "MQ binding queue failed", "err", err.Error(), "msg_id", body.MessageId)
 				return
 			}
 		}
@@ -936,7 +936,7 @@ func (r *RabbitMQOperator) pushCore(ctx context.Context, body *PushBody, opts ..
 		// true为是,不等待RMQ返回信息;args:参数,传nil即可;exclusive:是否设置排他
 		_, err = r.DeclareQueue(channelWrap, body.QueueName, body.Args, opts...)
 		if err != nil {
-			r.l.ErrorContext(ctx, "MQ declare queue failed", "err", err.Error(), "msg_id", body.MessageId)
+			r.l.Error(ctx, "MQ declare queue failed", "err", err.Error(), "msg_id", body.MessageId)
 			return
 		}
 	}
@@ -965,7 +965,7 @@ func (r *RabbitMQOperator) pushCore(ctx context.Context, body *PushBody, opts ..
 	// 发送任务消息
 	err = channelWrap.channel.PublishWithContext(ctx, body.ExchangeName, body.RoutingKey, false, false, publishingMsg)
 	if err != nil {
-		r.l.ErrorContext(ctx, "MQ task failed to be sent", "err", err.Error(), "msg_id", body.MessageId)
+		r.l.Error(ctx, "MQ task failed to be sent", "err", err.Error(), "msg_id", body.MessageId)
 		return
 	}
 	if body.OpenConfirm && channelWrap.openConfirm {
@@ -991,7 +991,7 @@ func (r *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-c
 		ctxBack := context.Background()
 		defer func() {
 			if e := recover(); e != nil {
-				r.l.ErrorContext(ctxBack, fmt.Sprintf("recover_panic: %v", e))
+				r.l.Error(ctxBack, fmt.Sprintf("recover_panic: %v", e))
 			}
 		}()
 
@@ -1020,16 +1020,16 @@ func (r *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-c
 			resChan, consumerTag, innerErr = r.consumeCore(ctxBack, param, &channelWrap)
 			// Keep retrying when consumption fails
 			for innerErr != nil {
-				r.l.ErrorContext(ctxBack, fmt.Sprintf("[consume:%s] consume msg error, retrying ...", param.QueueName), "err", innerErr.Error())
+				r.l.Error(ctxBack, fmt.Sprintf("[consume:%s] consume msg error, retrying ...", param.QueueName), "err", innerErr.Error())
 				select {
 				case s := <-sig:
-					r.l.InfoContext(ctx, fmt.Sprintf("[consume:%s] recived： %v, exiting... ", param.QueueName, s))
+					r.l.Info(ctx, fmt.Sprintf("[consume:%s] recived： %v, exiting... ", param.QueueName, s))
 					return
 				case <-r.closeCh:
-					r.l.InfoContext(ctx, fmt.Sprintf("[consume:%s] rabbitmq is closed, exiting...", param.QueueName))
+					r.l.Info(ctx, fmt.Sprintf("[consume:%s] rabbitmq is closed, exiting...", param.QueueName))
 					return
 				case <-valueCh.(chan bool):
-					r.l.InfoContext(ctx, fmt.Sprintf("[consume:%s] consume cancel, exiting...", param.QueueName))
+					r.l.Info(ctx, fmt.Sprintf("[consume:%s] consume cancel, exiting...", param.QueueName))
 					_ = channelWrap.Close()
 					return
 				case <-ticker.C:
@@ -1044,22 +1044,22 @@ func (r *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-c
 		for {
 			select {
 			case s := <-sig:
-				r.l.InfoContext(ctx, fmt.Sprintf("[consume:%s] recived： %v, exiting... ", param.QueueName, s))
+				r.l.Info(ctx, fmt.Sprintf("[consume:%s] recived： %v, exiting... ", param.QueueName, s))
 				return
 			case <-r.closeCh:
-				r.l.InfoContext(ctx, fmt.Sprintf("[consume:%s] rabbitmq is closed, exiting...", param.QueueName))
+				r.l.Info(ctx, fmt.Sprintf("[consume:%s] rabbitmq is closed, exiting...", param.QueueName))
 				return
 			case <-valueCh.(chan bool):
 				r.l.Info("[consume:%s] consume cancel, exiting...", param.QueueName)
 				cancelErr := channelWrap.channel.Cancel(consumerTag, false)
 				if cancelErr != nil {
-					r.l.ErrorContext(ctx, fmt.Sprintf("[consume:%s] consume cancel error, exiting...", param.QueueName), "err", cancelErr.Error())
+					r.l.Error(ctx, fmt.Sprintf("[consume:%s] consume cancel error, exiting...", param.QueueName), "err", cancelErr.Error())
 				}
 				r.client.cancelChan.Delete(param.QueueName)
 				_ = channelWrap.Close()
 				return
 			case <-channelWrap.closeChan:
-				r.l.WarnContext(ctx, fmt.Sprintf("[consume:%s] rmq channel is closed, reconsume...", param.QueueName))
+				r.l.Warn(ctx, fmt.Sprintf("[consume:%s] rmq channel is closed, reconsume...", param.QueueName))
 				goto process
 			case item := <-resChan:
 				if len(item.Body) == 0 {
@@ -1067,16 +1067,16 @@ func (r *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-c
 				}
 				select {
 				case s := <-sig:
-					r.l.InfoContext(ctx, fmt.Sprintf("[consume:%s] recived： %v, exiting... ", param.QueueName, s))
+					r.l.Info(ctx, fmt.Sprintf("[consume:%s] recived： %v, exiting... ", param.QueueName, s))
 					return
 				case <-r.closeCh:
-					r.l.InfoContext(ctx, fmt.Sprintf("[consume:%s] rabbitmq is closed, exiting...", param.QueueName))
+					r.l.Info(ctx, fmt.Sprintf("[consume:%s] rabbitmq is closed, exiting...", param.QueueName))
 					return
 				case <-channelWrap.closeChan:
-					r.l.WarnContext(ctx, fmt.Sprintf("[consume:%s] rmq channel is closed, reconsume...", param.QueueName))
+					r.l.Warn(ctx, fmt.Sprintf("[consume:%s] rmq channel is closed, reconsume...", param.QueueName))
 					goto process
 				case contents <- item:
-					r.l.InfoContext(ctx, fmt.Sprintf("[consume:%s] recived msg success: msg_id --> %s", param.QueueName, item.MessageId))
+					r.l.Info(ctx, fmt.Sprintf("[consume:%s] recived msg success: msg_id --> %s", param.QueueName, item.MessageId))
 				}
 			case <-ticker.C:
 				continue
@@ -1117,14 +1117,14 @@ func (r *RabbitMQOperator) consumeCore(ctx context.Context, param *ConsumeBody, 
 		return
 	}
 	if err != nil {
-		r.l.ErrorContext(ctx, "MQ declare queue failed", "err", err.Error())
+		r.l.Error(ctx, "MQ declare queue failed", "err", err.Error())
 		return
 	}
 	if param.ExchangeName != "" {
 		// 绑定任务
 		err = r.BindQueue(*channelWrap, param.ExchangeName, param.RoutingKey, param.QueueName, nil, opts...)
 		if err != nil {
-			r.l.ErrorContext(ctx, "binding queue failed", "err", err.Error())
+			r.l.Error(ctx, "binding queue failed", "err", err.Error())
 			return
 		}
 	}
@@ -1132,7 +1132,7 @@ func (r *RabbitMQOperator) consumeCore(ctx context.Context, param *ConsumeBody, 
 	// 获取消费通道,确保rabbitMQ一个一个发送消息
 	err = (*channelWrap).channel.Qos(param.FetchCount, 0, true)
 	if err != nil {
-		r.l.ErrorContext(ctx, "open qos error", "err", err.Error())
+		r.l.Error(ctx, "open qos error", "err", err.Error())
 		return
 	}
 	var args amqp.Table
@@ -1142,7 +1142,7 @@ func (r *RabbitMQOperator) consumeCore(ctx context.Context, param *ConsumeBody, 
 	consumerTag = uniqueConsumerTag()
 	contents, err = (*channelWrap).channel.Consume(param.QueueName, consumerTag, param.AutoAck, false, false, false, args)
 	if err != nil {
-		r.l.ErrorContext(ctx, "The acquisition of the consumption channel is abnormal", "err", err.Error())
+		r.l.Error(ctx, "The acquisition of the consumption channel is abnormal", "err", err.Error())
 		return
 	}
 	return
@@ -1421,16 +1421,16 @@ func (r *RabbitMQOperator) Ack(ctx context.Context, msg amqp.Delivery) {
 	}()
 	select {
 	case <-r.closeCh:
-		r.l.InfoContext(ctx, "[Consume]mq closed, ack cancel for: "+msg.RoutingKey, "msg_id", msg.MessageId)
+		r.l.Info(ctx, "[Consume]mq closed, ack cancel for: "+msg.RoutingKey, "msg_id", msg.MessageId)
 		return
 	case done := <-ch:
 		if done {
-			r.l.InfoContext(ctx, "[Ack]ack done", "msg_id", msg.MessageId)
+			r.l.Info(ctx, "[Ack]ack done", "msg_id", msg.MessageId)
 		} else {
-			r.l.InfoContext(ctx, "[Ack]ack failed", "msg_id", msg.MessageId)
+			r.l.Info(ctx, "[Ack]ack failed", "msg_id", msg.MessageId)
 		}
 	case <-time.After(DefaultRetryWaitTimes * time.Second):
-		r.l.InfoContext(ctx, "[Ack]ack timeout", "msg_id", msg.MessageId)
+		r.l.Info(ctx, "[Ack]ack timeout", "msg_id", msg.MessageId)
 	}
 }
 
@@ -1447,16 +1447,16 @@ func (r *RabbitMQOperator) Nack(ctx context.Context, msg amqp.Delivery) {
 	}()
 	select {
 	case <-r.closeCh:
-		r.l.InfoContext(ctx, "[Consume]mq closed, nack cancel for: "+msg.RoutingKey, "msg_id", msg.MessageId)
+		r.l.Info(ctx, "[Consume]mq closed, nack cancel for: "+msg.RoutingKey, "msg_id", msg.MessageId)
 		return
 	case done := <-ch:
 		if done {
-			r.l.InfoContext(ctx, "[Nack]Nack done", "msg_id", msg.MessageId)
+			r.l.Info(ctx, "[Nack]Nack done", "msg_id", msg.MessageId)
 		} else {
-			r.l.InfoContext(ctx, "[Nack]Nack failed", "msg_id", msg.MessageId)
+			r.l.Info(ctx, "[Nack]Nack failed", "msg_id", msg.MessageId)
 		}
 		close(ch)
 	case <-time.After(DefaultRetryWaitTimes * time.Second):
-		r.l.InfoContext(ctx, "[Nack]Nack timeout", "msg_id", msg.MessageId)
+		r.l.Info(ctx, "[Nack]Nack timeout", "msg_id", msg.MessageId)
 	}
 }

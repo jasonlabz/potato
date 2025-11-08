@@ -31,23 +31,24 @@ func GetESOperator() *ElasticSearchOperator {
 func init() {
 	appConf := configx.GetConfig()
 	if appConf.ES.Enable {
-		err := InitElasticSearchOperator(&Config{
-			IsHttps:   appConf.ES.IsHttps,
-			Endpoints: appConf.ES.Endpoints,
-			Username:  appConf.ES.Username,
-			Password:  appConf.ES.Password,
-			APIKey:    appConf.ES.APIKey,
-			CloudID:   appConf.ES.CloudId,
-		})
+		err := InitElasticSearchOperator(context.Background(),
+			&Config{
+				IsHttps:   appConf.ES.IsHttps,
+				Endpoints: appConf.ES.Endpoints,
+				Username:  appConf.ES.Username,
+				Password:  appConf.ES.Password,
+				APIKey:    appConf.ES.APIKey,
+				CloudID:   appConf.ES.CloudId,
+			})
 		if err != nil {
-			log.GetLogger().WithError(err).Error("init ES Client error, skipping ...")
+			log.GetLogger().WithError(err).Error(context.Background(), "init ES Client error, skipping ...")
 		}
 	}
 }
 
 // InitElasticSearchOperator 负责初始化全局变量operator，NewElasticSearchOperator函数负责根据配置创建es客户端对象供外部调用
-func InitElasticSearchOperator(config *Config) (err error) {
-	operator, err = NewElasticSearchOperator(config)
+func InitElasticSearchOperator(ctx context.Context, config *Config) (err error) {
+	operator, err = NewElasticSearchOperator(ctx, config)
 	if err != nil {
 		return
 	}
@@ -87,7 +88,7 @@ type Config struct {
 }
 
 // NewElasticSearchOperator 该函数负责根据配置创建es客户端对象供外部调用
-func NewElasticSearchOperator(config *Config) (op *ElasticSearchOperator, err error) {
+func NewElasticSearchOperator(ctx context.Context, config *Config) (op *ElasticSearchOperator, err error) {
 	for i, endpoint := range config.Endpoints {
 		if !config.IsHttps && strings.HasPrefix(endpoint, "https://") {
 			config.IsHttps = true
@@ -137,12 +138,12 @@ func NewElasticSearchOperator(config *Config) (op *ElasticSearchOperator, err er
 	}
 	ok, err := typedClient.Ping().IsSuccess(context.Background())
 	if err != nil {
-		log.GetLogger().WithError(err).Error("typedClient ping fail")
+		log.GetLogger().WithError(err).Error(ctx, "typedClient ping fail")
 	}
 	if !ok {
-		log.GetLogger().WithError(err).Error("connect to es server fail")
+		log.GetLogger().WithError(err).Error(ctx, "connect to es server fail")
 	} else {
-		log.GetLogger().Info("------- es connected success")
+		log.GetLogger().Info(ctx, "------- es connected success")
 	}
 	// client, err := elasticsearch.NewClient(esConfig)
 	// if err != nil {
@@ -179,7 +180,7 @@ func (op *ElasticSearchOperator) GetIndexList(ctx context.Context) (res []*Index
 func (op *ElasticSearchOperator) CreateAlias(ctx context.Context, indexName, aliasName string, isWriteIndex bool) (err error) {
 	exists, err := op.AliasExist(ctx, aliasName)
 	if err != nil {
-		log.GetLogger().WithError(err).Error("create alias error: " + indexName)
+		log.GetLogger().WithError(err).Error(ctx, "create alias error: "+indexName)
 		return
 	}
 	if exists {
@@ -187,7 +188,7 @@ func (op *ElasticSearchOperator) CreateAlias(ctx context.Context, indexName, ali
 	}
 	_, err = op.typeClient.Indices.PutAlias(indexName, aliasName).IsWriteIndex(isWriteIndex).Do(ctx)
 	if err != nil {
-		log.GetLogger().WithError(err).Error("alias create error: " + aliasName)
+		log.GetLogger().WithError(err).Error(ctx, "alias create error: "+aliasName)
 		return
 	}
 	return
@@ -196,7 +197,7 @@ func (op *ElasticSearchOperator) CreateAlias(ctx context.Context, indexName, ali
 func (op *ElasticSearchOperator) DeleteAlias(ctx context.Context, indexName, aliasName string) (err error) {
 	exists, err := op.AliasExist(ctx, aliasName)
 	if err != nil {
-		log.GetLogger().WithError(err).Error("create alias error: " + indexName)
+		log.GetLogger().WithError(err).Error(ctx, "create alias error: "+indexName)
 		return
 	}
 	if !exists {
@@ -204,7 +205,7 @@ func (op *ElasticSearchOperator) DeleteAlias(ctx context.Context, indexName, ali
 	}
 	_, err = op.typeClient.Indices.DeleteAlias(indexName, aliasName).Do(ctx)
 	if err != nil {
-		log.GetLogger().WithError(err).Error("alias delete error: " + aliasName)
+		log.GetLogger().WithError(err).Error(ctx, "alias delete error: "+aliasName)
 		return
 	}
 	return
@@ -232,7 +233,7 @@ func (op *ElasticSearchOperator) DeleteAlias(ctx context.Context, indexName, ali
 func (op *ElasticSearchOperator) CreateIndex(ctx context.Context, indexName, mappingJson string) (err error) {
 	exists, err := op.IndexExist(ctx, indexName)
 	if err != nil {
-		log.GetLogger().WithError(err).Error("create index error: " + indexName)
+		log.GetLogger().WithError(err).Error(ctx, "create index error: "+indexName)
 		return
 	}
 	// 索引不存在则创建索引
@@ -249,7 +250,7 @@ func (op *ElasticSearchOperator) CreateIndex(ctx context.Context, indexName, map
 	}
 	_, err = op.typeClient.Indices.Create(indexName).Request(req).Do(ctx)
 	if err != nil {
-		log.GetLogger().WithError(err).Error("index create error: " + indexName)
+		log.GetLogger().WithError(err).Error(ctx, "index create error: "+indexName)
 		return
 	}
 	return
@@ -258,7 +259,7 @@ func (op *ElasticSearchOperator) CreateIndex(ctx context.Context, indexName, map
 func (op *ElasticSearchOperator) DeleteIndex(ctx context.Context, indexName string) (err error) {
 	exists, err := op.IndexExist(ctx, indexName)
 	if err != nil {
-		log.GetLogger().WithError(err).Error("delete index error: " + indexName)
+		log.GetLogger().WithError(err).Error(ctx, "delete index error: "+indexName)
 		return
 	}
 	// 索引不存在则退出
@@ -267,7 +268,7 @@ func (op *ElasticSearchOperator) DeleteIndex(ctx context.Context, indexName stri
 	}
 	_, crErr := op.typeClient.Indices.Delete(indexName).Do(ctx)
 	if crErr != nil {
-		log.GetLogger().WithError(crErr).Error("index delete error: " + indexName)
+		log.GetLogger().WithError(crErr).Error(ctx, "index delete error: "+indexName)
 		return
 	}
 	return
@@ -291,7 +292,7 @@ func (op *ElasticSearchOperator) GetAlias(ctx context.Context, indexNames ...str
 func (op *ElasticSearchOperator) GetIndexInfo(ctx context.Context, indexName string) (response indicesget.Response, err error) {
 	response, err = op.typeClient.Indices.Get(indexName).Do(ctx)
 	if err != nil {
-		log.GetLogger().WithError(err).Error("get index info error: " + indexName)
+		log.GetLogger().WithError(err).Error(ctx, "get index info error: "+indexName)
 		return
 	}
 	return
@@ -300,7 +301,7 @@ func (op *ElasticSearchOperator) GetIndexInfo(ctx context.Context, indexName str
 func (op *ElasticSearchOperator) GetDocument(ctx context.Context, indexName, docID string) (response *coreget.Response, err error) {
 	response, err = op.typeClient.Get(indexName, docID).Do(ctx)
 	if err != nil {
-		log.GetLogger().WithError(err).Error("get doc info error: " + docID)
+		log.GetLogger().WithError(err).Error(ctx, "get doc info error: "+docID)
 		return
 	}
 	return
@@ -309,7 +310,7 @@ func (op *ElasticSearchOperator) GetDocument(ctx context.Context, indexName, doc
 func (op *ElasticSearchOperator) GetDocumentCount(ctx context.Context, indexName string) (response count.Response, err error) {
 	response, err = op.typeClient.Cat.Count().Index(indexName).Do(ctx)
 	if err != nil {
-		log.GetLogger().WithError(err).Error("get doc count error: " + indexName)
+		log.GetLogger().WithError(err).Error(ctx, "get doc count error: "+indexName)
 		return
 	}
 	return
@@ -322,7 +323,7 @@ func (op *ElasticSearchOperator) SearchDocuments(ctx context.Context, indexName 
 	}
 	response, err = searchDoc.Do(ctx)
 	if err != nil {
-		log.GetLogger().WithError(err).Error("search doc error, queryStr : " + indexName)
+		log.GetLogger().WithError(err).Error(ctx, "search doc error, queryStr : "+indexName)
 		return
 	}
 	return

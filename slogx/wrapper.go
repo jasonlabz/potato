@@ -5,13 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
-
-	"github.com/jasonlabz/potato/consts"
 	"github.com/jasonlabz/potato/syncer"
 	"github.com/jasonlabz/potato/utils"
 )
@@ -42,9 +38,9 @@ func GetLogger() *LoggerWrapper {
 func slogField(ctx context.Context, contextKey ...string) (fields []any) {
 	for _, key := range contextKey {
 		value := utils.StringValue(ctx.Value(key))
-		if value == "" && key == consts.ContextTraceID {
-			value = strings.ReplaceAll(uuid.New().String(), consts.SignDash, consts.EmptyString)
-		}
+		// if value == "" && key == consts.ContextTraceID {
+		//	value = strings.ReplaceAll(uuid.New().String(), consts.SignDash, consts.EmptyString)
+		// }
 		if value == "" {
 			continue
 		}
@@ -64,11 +60,6 @@ func (l *LoggerWrapper) WithCallerSkip(callerSkip int) *LoggerWrapper {
 	return l
 }
 
-func (l *LoggerWrapper) WithContext(ctx context.Context) *LoggerWrapper {
-	l.logger = l.logger.With(slogField(ctx, l.logField...)...)
-	return l
-}
-
 func (l *LoggerWrapper) WithError(err error) *LoggerWrapper {
 	l.logger = l.logger.With(Any("error", err))
 	return l
@@ -85,59 +76,39 @@ func (l *LoggerWrapper) WithAny(attrs ...any) *LoggerWrapper {
 }
 
 // Debug logs at [LevelDebug].
-func (l *LoggerWrapper) Debug(msg string, args ...any) {
-	l.log(context.Background(), slog.LevelDebug, msg, args...)
-}
-
-func (l *LoggerWrapper) Debugf(msg string, args ...any) {
-	l.log(context.Background(), slog.LevelDebug, getMessage(msg, args))
-}
-
-// DebugContext logs at [LevelDebug] with the given context.
-func (l *LoggerWrapper) DebugContext(ctx context.Context, msg string, args ...any) {
+func (l *LoggerWrapper) Debug(ctx context.Context, msg string, args ...any) {
 	l.log(ctx, slog.LevelDebug, msg, args...)
 }
 
+func (l *LoggerWrapper) Debugf(ctx context.Context, msg string, args ...any) {
+	l.log(ctx, slog.LevelDebug, getMessage(msg, args))
+}
+
 // Info logs at [LevelInfo].
-func (l *LoggerWrapper) Info(msg string, args ...any) {
-	l.log(context.Background(), slog.LevelInfo, msg, args...)
-}
-
-func (l *LoggerWrapper) Infof(msg string, args ...any) {
-	l.log(context.Background(), slog.LevelInfo, getMessage(msg, args))
-}
-
-// InfoContext logs at [LevelInfo] with the given context.
-func (l *LoggerWrapper) InfoContext(ctx context.Context, msg string, args ...any) {
+func (l *LoggerWrapper) Info(ctx context.Context, msg string, args ...any) {
 	l.log(ctx, slog.LevelInfo, msg, args...)
 }
 
+func (l *LoggerWrapper) Infof(ctx context.Context, msg string, args ...any) {
+	l.log(ctx, slog.LevelInfo, getMessage(msg, args))
+}
+
 // Warn logs at [LevelWarn].
-func (l *LoggerWrapper) Warn(msg string, args ...any) {
-	l.log(context.Background(), slog.LevelWarn, msg, args...)
-}
-
-func (l *LoggerWrapper) Warnf(msg string, args ...any) {
-	l.log(context.Background(), slog.LevelWarn, getMessage(msg, args))
-}
-
-// WarnContext logs at [LevelWarn] with the given context.
-func (l *LoggerWrapper) WarnContext(ctx context.Context, msg string, args ...any) {
+func (l *LoggerWrapper) Warn(ctx context.Context, msg string, args ...any) {
 	l.log(ctx, slog.LevelWarn, msg, args...)
 }
 
+func (l *LoggerWrapper) Warnf(ctx context.Context, msg string, args ...any) {
+	l.log(ctx, slog.LevelWarn, getMessage(msg, args))
+}
+
 // Error logs at [LevelError].
-func (l *LoggerWrapper) Error(msg string, args ...any) {
-	l.log(context.Background(), slog.LevelError, msg, args...)
-}
-
-func (l *LoggerWrapper) Errorf(msg string, args ...any) {
-	l.log(context.Background(), slog.LevelError, getMessage(msg, args))
-}
-
-// ErrorContext logs at [LevelError] with the given context.
-func (l *LoggerWrapper) ErrorContext(ctx context.Context, msg string, args ...any) {
+func (l *LoggerWrapper) Error(ctx context.Context, msg string, args ...any) {
 	l.log(ctx, slog.LevelError, msg, args...)
+}
+
+func (l *LoggerWrapper) Errorf(ctx context.Context, msg string, args ...any) {
+	l.log(ctx, slog.LevelError, getMessage(msg, args))
 }
 
 func (l *LoggerWrapper) Sync() error {
@@ -151,13 +122,17 @@ func (l *LoggerWrapper) log(ctx context.Context, level slog.Level, msg string, a
 	if !l.logger.Enabled(ctx, level) {
 		return
 	}
+	fields := slogField(ctx, l.logField...)
+	if len(args) > 0 {
+		fields = append(fields, args...)
+	}
 	var pc uintptr
 	var pcs [1]uintptr
 	// skip [runtime.Callers, this function, this function's caller]
 	runtime.Callers(l.callerSkip, pcs[:])
 	pc = pcs[0]
 	r := slog.NewRecord(time.Now(), level, msg, pc)
-	r.Add(args...)
+	r.Add(fields...)
 	if ctx == nil {
 		ctx = context.Background()
 	}

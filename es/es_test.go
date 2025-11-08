@@ -8,7 +8,7 @@ import (
 
 func TestES(t *testing.T) {
 	ctx := context.Background()
-	cli, err := NewElasticSearchOperator(&Config{
+	cli, err := NewElasticSearchOperator(ctx, &Config{
 		Endpoints: []string{"127.0.0.1:9200"},
 		Username:  "elastic",
 		Password:  "openthedoor",

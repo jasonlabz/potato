@@ -1,6 +1,7 @@
 package jwtx
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -55,7 +56,7 @@ func (c userStdClaims) Valid() (err error) {
 	return
 }
 
-func GenerateJWTToken(m *User, d time.Duration) (string, error) {
+func GenerateJWTToken(ctx context.Context, m *User, d time.Duration) (string, error) {
 	expireTime := time.Now().Add(d)
 	stdClaims := jwt.StandardClaims{
 		ExpiresAt: expireTime.Unix(),
@@ -74,7 +75,7 @@ func GenerateJWTToken(m *User, d time.Duration) (string, error) {
 	// Sign and get the complete encoded token as a string using the secret
 	tokenString, err := token.SignedString([]byte(secretKey))
 	if err != nil {
-		log.GetLogger().WithError(err).Fatal("config is wrong, can not generate jwt")
+		log.GetLogger().WithError(err).Fatal(ctx, "config is wrong, can not generate jwt")
 	}
 	return tokenString, err
 }

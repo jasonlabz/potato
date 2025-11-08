@@ -2,6 +2,7 @@ package slogx
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"testing"
 )
@@ -14,7 +15,8 @@ func Test_Slog(t *testing.T) {
 
 func Test_Wrapper(t *testing.T) {
 	ctx := context.Background()
-	slog.InfoContext(ctx, "sadasdasdasda")
+	slog.Info(ctx, "sadasdasdasda")
 	logger := GetLogger()
-	logger.WithContext(ctx).Info("test", "hjhk", "sadasd")
+	logger.Info(ctx, "test", "hjhk", "sadasd")
+	logger.Info(ctx, "test error", errors.New("test error"))
 }

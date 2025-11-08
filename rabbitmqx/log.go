@@ -28,13 +28,13 @@ func (l *RmqLogger) Printf(msg string, args ...any) {
 }
 
 func (l *RmqLogger) Info(ctx context.Context, msg string, args ...any) {
-	l.l.InfoContext(ctx, msg, args...)
+	l.l.Info(ctx, msg, args...)
 }
 
 func (l *RmqLogger) Warn(ctx context.Context, msg string, args ...any) {
-	l.l.WarnContext(ctx, msg, args...)
+	l.l.Warn(ctx, msg, args...)
 }
 
 func (l *RmqLogger) Error(ctx context.Context, msg string, args ...any) {
-	l.l.ErrorContext(ctx, msg, args...)
+	l.l.Error(ctx, msg, args...)
 }

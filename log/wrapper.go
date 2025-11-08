@@ -39,12 +39,6 @@ func (l *LoggerWrapper) clone() *LoggerWrapper {
 	return &LoggerWrapper{logger: &cloneLogger, logField: l.logField}
 }
 
-func (l *LoggerWrapper) WithContext(ctx context.Context) *LoggerWrapper {
-	lw := l.clone()
-	lw.logger = lw.logger.With(zapField(ctx, lw.logField...)...)
-	return lw
-}
-
 func (l *LoggerWrapper) WithError(err error) *LoggerWrapper {
 	lw := l.clone()
 	lw.logger = lw.logger.With(String("error", err.Error()))
@@ -76,110 +70,65 @@ func (l *LoggerWrapper) WithAny(fields ...any) *LoggerWrapper {
 	return lw
 }
 
-func (l *LoggerWrapper) Debug(msg string, fields ...any) {
-	l.logger.Debug(msg, l.checkFields(fields)...)
+func (l *LoggerWrapper) Debug(ctx context.Context, msg string, fields ...any) {
+	l.logger.Debug(msg, l.prepareFields(ctx, fields)...)
 }
 
-func (l *LoggerWrapper) Debugf(msg string, args ...any) {
-	l.logger.Debug(getMessage(msg, args))
+func (l *LoggerWrapper) Debugf(ctx context.Context, msg string, args ...any) {
+	l.logger.Debug(getMessage(msg, args), l.prepareFields(ctx, nil)...)
 }
 
-func (l *LoggerWrapper) DebugContext(ctx context.Context, msg string, fields ...any) {
-	field := zapField(ctx, l.logField...)
-	checkFields := l.checkFields(fields)
-	if len(checkFields) > 0 {
-		field = append(field, checkFields...)
-	}
-	l.logger.Debug(msg, field...)
+func (l *LoggerWrapper) Info(ctx context.Context, msg string, fields ...any) {
+	l.logger.Info(msg, l.prepareFields(ctx, fields)...)
 }
 
-func (l *LoggerWrapper) Info(msg string, fields ...any) {
-	l.logger.Info(msg, l.checkFields(fields)...)
+func (l *LoggerWrapper) Infof(ctx context.Context, msg string, args ...any) {
+	l.logger.Info(getMessage(msg, args), l.prepareFields(ctx, nil)...)
 }
 
-func (l *LoggerWrapper) Infof(msg string, args ...any) {
-	l.logger.Info(getMessage(msg, args))
+func (l *LoggerWrapper) Warn(ctx context.Context, msg string, fields ...any) {
+	l.logger.Warn(msg, l.prepareFields(ctx, fields)...)
 }
 
-func (l *LoggerWrapper) InfoContext(ctx context.Context, msg string, fields ...any) {
-	field := zapField(ctx, l.logField...)
-	checkFields := l.checkFields(fields)
-	if len(checkFields) > 0 {
-		field = append(field, checkFields...)
-	}
-	l.logger.Info(msg, field...)
+func (l *LoggerWrapper) Warnf(ctx context.Context, msg string, args ...any) {
+	l.logger.Warn(getMessage(msg, args), l.prepareFields(ctx, nil)...)
 }
 
-func (l *LoggerWrapper) Warn(msg string, fields ...any) {
-	l.logger.Warn(msg, l.checkFields(fields)...)
+func (l *LoggerWrapper) Error(ctx context.Context, msg string, fields ...any) {
+	l.logger.Error(msg, l.prepareFields(ctx, fields)...)
 }
 
-func (l *LoggerWrapper) Warnf(msg string, args ...any) {
-	l.logger.Warn(getMessage(msg, args))
+func (l *LoggerWrapper) Errorf(ctx context.Context, msg string, args ...any) {
+	l.logger.Error(getMessage(msg, args), l.prepareFields(ctx, nil)...)
 }
 
-func (l *LoggerWrapper) WarnContext(ctx context.Context, msg string, fields ...any) {
-	field := zapField(ctx, l.logField...)
-	checkFields := l.checkFields(fields)
-	if len(checkFields) > 0 {
-		field = append(field, checkFields...)
-	}
-	l.logger.Warn(msg, field...)
+func (l *LoggerWrapper) Panic(ctx context.Context, msg string, fields ...any) {
+	l.logger.Panic(msg, l.prepareFields(ctx, fields)...)
 }
 
-func (l *LoggerWrapper) Error(msg string, fields ...any) {
-	l.logger.Error(msg, l.checkFields(fields)...)
+func (l *LoggerWrapper) Panicf(ctx context.Context, msg string, args ...any) {
+	l.logger.Panic(getMessage(msg, args), l.prepareFields(ctx, nil)...)
 }
 
-func (l *LoggerWrapper) Errorf(msg string, args ...any) {
-	l.logger.Error(getMessage(msg, args))
+func (l *LoggerWrapper) Fatal(ctx context.Context, msg string, fields ...any) {
+	l.logger.Fatal(msg, l.prepareFields(ctx, fields)...)
 }
 
-func (l *LoggerWrapper) ErrorContext(ctx context.Context, msg string, fields ...any) {
-	field := zapField(ctx, l.logField...)
-	checkFields := l.checkFields(fields)
-	if len(checkFields) > 0 {
-		field = append(field, checkFields...)
-	}
-	l.logger.Error(msg, field...)
-}
-
-func (l *LoggerWrapper) Panic(msg string, fields ...any) {
-	l.logger.Panic(msg, l.checkFields(fields)...)
-}
-
-func (l *LoggerWrapper) Panicf(msg string, args ...any) {
-	l.logger.Panic(getMessage(msg, args))
-}
-
-func (l *LoggerWrapper) PanicContext(ctx context.Context, msg string, fields ...any) {
-	field := zapField(ctx, l.logField...)
-	checkFields := l.checkFields(fields)
-	if len(checkFields) > 0 {
-		field = append(field, checkFields...)
-	}
-	l.logger.Panic(msg, field...)
-}
-
-func (l *LoggerWrapper) Fatal(msg string, fields ...any) {
-	l.logger.Fatal(msg, l.checkFields(fields)...)
-}
-
-func (l *LoggerWrapper) Fatalf(msg string, args ...any) {
-	l.logger.Panic(getMessage(msg, args))
-}
-
-func (l *LoggerWrapper) FatalContext(ctx context.Context, msg string, fields ...any) {
-	field := zapField(ctx, l.logField...)
-	checkFields := l.checkFields(fields)
-	if len(checkFields) > 0 {
-		field = append(field, checkFields...)
-	}
-	l.logger.Fatal(msg, field...)
+func (l *LoggerWrapper) Fatalf(ctx context.Context, msg string, args ...any) {
+	l.logger.Fatal(getMessage(msg, args), l.prepareFields(ctx, nil)...)
 }
 
 func (l *LoggerWrapper) Sync() {
 	_ = l.logger.Sync()
+}
+
+func (l *LoggerWrapper) prepareFields(ctx context.Context, fields []any) (field []zap.Field) {
+	field = zapField(ctx, l.logField...)
+	checkFields := l.checkFields(fields)
+	if len(checkFields) > 0 {
+		field = append(field, checkFields...)
+	}
+	return
 }
 
 func (l *LoggerWrapper) checkFields(fields []any) (checked []zap.Field) {
@@ -200,7 +149,11 @@ func (l *LoggerWrapper) checkFields(fields []any) (checked []zap.Field) {
 	}
 
 	if len(fields) == 1 {
-		checked = append(checked, zap.Any("log_field", utils.StringValue(fields[0])))
+		if err, ok := fields[0].(error); ok && err != nil {
+			checked = append(checked, zap.Error(err))
+			return
+		}
+		checked = append(checked, zap.Any("default", utils.StringValue(fields[0])))
 		return
 	}
 
@@ -262,6 +215,7 @@ func Float32(key string, val float32) zap.Field {
 }
 
 func zapField(ctx context.Context, contextKey ...string) (fields []zap.Field) {
+	fields = make([]zap.Field, 0)
 	for _, key := range contextKey {
 		value := utils.StringValue(ctx.Value(key))
 		if value == "" {

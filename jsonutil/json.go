@@ -6,8 +6,6 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/bytedance/sonic/ast"
 	"github.com/pingcap/errors"
-
-	"github.com/jasonlabz/potato/log"
 )
 
 var (
@@ -283,13 +281,8 @@ func (j *JSON) GetMap(path ...any) (map[string]*JSON, error) {
 }
 
 // String 获取字符串表示
-func (j *JSON) String() string {
-	raw, err := j.rt.Raw()
-	if err != nil {
-		log.GetLogger().WithError(err).Error("get json error")
-		return ""
-	}
-	return raw
+func (j *JSON) String() (string, error) {
+	return j.rt.Raw()
 }
 
 // IsArray 判断path路径对应的值是否是数组,对于下列json

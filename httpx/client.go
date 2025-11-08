@@ -23,8 +23,7 @@ const (
 var cli *Client
 
 func GetClient() *Client {
-	newClient := *cli
-	return &newClient
+	return cli
 }
 
 type Client struct {
@@ -44,7 +43,7 @@ func init() {
 	cli = &Client{client: c}
 }
 
-func (c *Client) SetHeaders(headers map[string]string) {
+func (c *Client) SetGlobalHeaders(headers map[string]string) {
 	c.client.SetHeaders(headers)
 	return
 }
@@ -56,12 +55,12 @@ func (c *Client) logger() (l log.Logger) {
 	return c.l
 }
 
-func (c *Client) SetToken(token string) {
+func (c *Client) SetGlobalToken(token string) {
 	c.client.SetAuthToken(token)
 	return
 }
 
-func (c *Client) SetCookies(cookies []*http.Cookie) {
+func (c *Client) SetGlobalCookies(cookies []*http.Cookie) {
 	c.client.SetCookies(cookies)
 	return
 }
@@ -72,72 +71,88 @@ func (c *Client) GetRestyClient() (cli *resty.Client) {
 }
 
 // Get get request and json response
-func (c *Client) Get(ctx context.Context, url string, result any) (err error) {
-	c.logger().InfoContext(ctx, fmt.Sprintf("HTTP Request [method:%s] [URL:%s]", http.MethodGet, url))
-	res, err := c.client.R().
-		SetResult(result).
-		SetHeader("Accept", "application/json").
-		Get(url)
+func (c *Client) Get(ctx context.Context, url string, result any, opts ...OptionFunc) (err error) {
+	c.logger().Info(ctx, fmt.Sprintf("HTTP Request [method:%s] [URL:%s]", http.MethodGet, url))
+	r := c.client.R()
+	o := &Option{}
+	if len(opts) > 0 {
+		for _, opt := range opts {
+			opt(o)
+		}
+	}
+	for k, v := range o.Headers {
+		r = r.SetHeader(k, v)
+	}
+	if len(o.Token) > 0 {
+		r = r.SetAuthToken(o.Token)
+	}
+	if len(o.Cookies) > 0 {
+		r = r.SetCookies(o.Cookies)
+	}
+	if o.Body != nil {
+		r = r.SetBody(o.Body)
+	}
+	res, err := r.SetResult(result).Get(url)
 	if err != nil {
-		c.logger().ErrorContext(ctx, err.Error())
+		c.logger().Error(ctx, err.Error())
 		return
 	}
-	c.logger().InfoContext(ctx, fmt.Sprintf("Http Response [Code]:%d [Body]:%s [Cost]:%vms", res.StatusCode(), string(res.Body()), res.Time()/time.Millisecond))
+	c.logger().Info(ctx, fmt.Sprintf("Http Response [Code]:%d [Body]:%s [Cost]:%vms", res.StatusCode(), string(res.Body()), res.Time()/time.Millisecond))
 
 	return
 }
 
-func (c *Client) Post(ctx context.Context, url string, body any, result any) (res *resty.Response, err error) {
-	return c.requestJson(ctx, url, "POST", body, result)
+func (c *Client) Post(ctx context.Context, url string, body any, result any, opts ...OptionFunc) (res *resty.Response, err error) {
+	return c.requestJson(ctx, url, "POST", body, result, opts...)
 }
 
-func (c *Client) Put(ctx context.Context, url string, body any, result any) (res *resty.Response, err error) {
-	return c.requestJson(ctx, url, "PUT", body, result)
+func (c *Client) Put(ctx context.Context, url string, body any, result any, opts ...OptionFunc) (res *resty.Response, err error) {
+	return c.requestJson(ctx, url, "PUT", body, result, opts...)
 }
 
-func (c *Client) Patch(ctx context.Context, url string, body any, result any) (res *resty.Response, err error) {
-	return c.requestJson(ctx, url, "PATCH", body, result)
+func (c *Client) Patch(ctx context.Context, url string, body any, result any, opts ...OptionFunc) (res *resty.Response, err error) {
+	return c.requestJson(ctx, url, "PATCH", body, result, opts...)
 }
 
-func (c *Client) Delete(ctx context.Context, url string, body any, result any) (res *resty.Response, err error) {
-	return c.requestJson(ctx, url, "DELETE", body, result)
+func (c *Client) Delete(ctx context.Context, url string, body any, result any, opts ...OptionFunc) (res *resty.Response, err error) {
+	return c.requestJson(ctx, url, "DELETE", body, result, opts...)
 }
 
-func (c *Client) Options(ctx context.Context, url string, body any, result any) (res *resty.Response, err error) {
-	return c.requestJson(ctx, url, "OPTIONS", body, result)
+func (c *Client) Options(ctx context.Context, url string, body any, result any, opts ...OptionFunc) (res *resty.Response, err error) {
+	return c.requestJson(ctx, url, "OPTIONS", body, result, opts...)
 }
 
-func (c *Client) Head(ctx context.Context, url string, body any, result any) (res *resty.Response, err error) {
-	return c.requestJson(ctx, url, "HEAD", body, result)
+func (c *Client) Head(ctx context.Context, url string, body any, result any, opts ...OptionFunc) (res *resty.Response, err error) {
+	return c.requestJson(ctx, url, "HEAD", body, result, opts...)
 }
 
-func (c *Client) PostForm(ctx context.Context, url string, formData map[string]string, result any) (res *resty.Response, err error) {
-	return c.requestForm(ctx, url, "POST", formData, result)
+func (c *Client) PostForm(ctx context.Context, url string, formData map[string]string, result any, opts ...OptionFunc) (res *resty.Response, err error) {
+	return c.requestForm(ctx, url, "POST", formData, result, opts...)
 }
 
-func (c *Client) PutForm(ctx context.Context, url string, formData map[string]string, result any) (res *resty.Response, err error) {
-	return c.requestForm(ctx, url, "PUT", formData, result)
+func (c *Client) PutForm(ctx context.Context, url string, formData map[string]string, result any, opts ...OptionFunc) (res *resty.Response, err error) {
+	return c.requestForm(ctx, url, "PUT", formData, result, opts...)
 }
 
-func (c *Client) PatchForm(ctx context.Context, url string, formData map[string]string, result any) (res *resty.Response, err error) {
-	return c.requestForm(ctx, url, "PATCH", formData, result)
+func (c *Client) PatchForm(ctx context.Context, url string, formData map[string]string, result any, opts ...OptionFunc) (res *resty.Response, err error) {
+	return c.requestForm(ctx, url, "PATCH", formData, result, opts...)
 }
 
-func (c *Client) DeleteForm(ctx context.Context, url string, formData map[string]string, result any) (res *resty.Response, err error) {
-	return c.requestForm(ctx, url, "DELETE", formData, result)
+func (c *Client) DeleteForm(ctx context.Context, url string, formData map[string]string, result any, opts ...OptionFunc) (res *resty.Response, err error) {
+	return c.requestForm(ctx, url, "DELETE", formData, result, opts...)
 }
 
-func (c *Client) OptionsForm(ctx context.Context, url string, formData map[string]string, result any) (res *resty.Response, err error) {
-	return c.requestForm(ctx, url, "OPTIONS", formData, result)
+func (c *Client) OptionsForm(ctx context.Context, url string, formData map[string]string, result any, opts ...OptionFunc) (res *resty.Response, err error) {
+	return c.requestForm(ctx, url, "OPTIONS", formData, result, opts...)
 }
 
-func (c *Client) HeadForm(ctx context.Context, url string, formData map[string]string, result any) (res *resty.Response, err error) {
-	return c.requestForm(ctx, url, "HEAD", formData, result)
+func (c *Client) HeadForm(ctx context.Context, url string, formData map[string]string, result any, opts ...OptionFunc) (res *resty.Response, err error) {
+	return c.requestForm(ctx, url, "HEAD", formData, result, opts...)
 }
 
 // requestForm send formData and response json
-func (c *Client) requestForm(ctx context.Context, url, method string, formData map[string]string, result any) (res *resty.Response, err error) {
-	c.logger().InfoContext(ctx, fmt.Sprintf("HTTP Request [method:%s] [URL:%s] [Form-Data:%s]", method, url,
+func (c *Client) requestForm(ctx context.Context, url, method string, formData map[string]string, result any, opts ...OptionFunc) (res *resty.Response, err error) {
+	c.logger().Info(ctx, fmt.Sprintf("HTTP Request [method:%s] [URL:%s] [Form-Data:%s]", method, url,
 		func() string {
 			if len(formData) == 0 {
 				return ""
@@ -148,10 +163,23 @@ func (c *Client) requestForm(ctx context.Context, url, method string, formData m
 			}
 			return strings.Join(strList, "&")
 		}()))
-	req := c.client.R().
-		SetHeader("Content-Type", "application/x-www-form-urlencoded").
-		SetHeader("Accept", "application/json").
-		SetFormData(formData).
+	r := c.client.R().SetHeader("Content-Type", "application/x-www-form-urlencoded")
+	o := &Option{}
+	if len(opts) > 0 {
+		for _, opt := range opts {
+			opt(o)
+		}
+	}
+	for k, v := range o.Headers {
+		r = r.SetHeader(k, v)
+	}
+	if len(o.Token) > 0 {
+		r = r.SetAuthToken(o.Token)
+	}
+	if len(o.Cookies) > 0 {
+		r = r.SetCookies(o.Cookies)
+	}
+	req := r.SetFormData(formData).
 		SetResult(result)
 
 	switch strings.ToUpper(method) {
@@ -171,27 +199,42 @@ func (c *Client) requestForm(ctx context.Context, url, method string, formData m
 		err = fmt.Errorf("form param unsupported method:[%s]", method)
 	}
 	if err != nil {
-		c.logger().ErrorContext(ctx, err.Error())
+		c.logger().Error(ctx, fmt.Sprintf("HTTP Request Error"), err)
 		return
 	}
-	c.logger().InfoContext(ctx, fmt.Sprintf("Http Response [Code]:%d [Body]:%s [Cost]:%vms", res.StatusCode(), string(res.Body()), res.Time()/time.Millisecond))
+	c.logger().Info(ctx, fmt.Sprintf("Http Response [Code]:%d [Body]:%s [Cost]:%vms",
+		res.StatusCode(), string(res.Body()), res.Time()/time.Millisecond))
 
 	return res, err
 }
 
 // requestJson send json and response json
-func (c *Client) requestJson(ctx context.Context, url, method string, body any, result any) (res *resty.Response, err error) {
-	c.logger().InfoContext(ctx, fmt.Sprintf("HTTP Request [method:%s] [URL:%s] [Body:%s]", method, url, func() string {
+func (c *Client) requestJson(ctx context.Context, url, method string, body any, result any, opts ...OptionFunc) (res *resty.Response, err error) {
+	c.logger().Info(ctx, fmt.Sprintf("HTTP Request [method:%s] [URL:%s] [Body:%s]", method, url, func() string {
 		marshal, marErr := sonic.Marshal(body)
 		if marErr != nil {
 			return ""
 		}
 		return string(marshal)
 	}()))
-	req := c.client.R().
-		SetHeader("Content-Type", "application/json").
-		SetHeader("Accept", "application/json").
-		SetBody(body).
+
+	r := c.client.R().SetHeader("Content-Type", "application/json")
+	o := &Option{}
+	if len(opts) > 0 {
+		for _, opt := range opts {
+			opt(o)
+		}
+	}
+	for k, v := range o.Headers {
+		r = r.SetHeader(k, v)
+	}
+	if len(o.Token) > 0 {
+		r = r.SetAuthToken(o.Token)
+	}
+	if len(o.Cookies) > 0 {
+		r = r.SetCookies(o.Cookies)
+	}
+	req := r.SetBody(body).
 		SetResult(result)
 
 	switch strings.ToUpper(method) {
@@ -212,10 +255,11 @@ func (c *Client) requestJson(ctx context.Context, url, method string, body any, 
 	}
 
 	if err != nil {
-		c.logger().ErrorContext(ctx, err.Error())
+		c.logger().Error(ctx, err.Error())
 		return
 	}
-	c.logger().InfoContext(ctx, fmt.Sprintf("Http Response [Code]:%d [Body]:%s [Cost]:%vms", res.StatusCode(), string(res.Body()), res.Time()/time.Millisecond))
+	c.logger().Info(ctx, fmt.Sprintf("Http Response [Code]:%d [Body]:%s [Cost]:%vms",
+		res.StatusCode(), string(res.Body()), res.Time()/time.Millisecond))
 
 	return
 }
