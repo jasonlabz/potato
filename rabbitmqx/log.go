@@ -24,7 +24,7 @@ type RmqLogger struct {
 }
 
 func (l *RmqLogger) Printf(msg string, args ...any) {
-	l.l.Info(msg, args...)
+	l.l.Info(context.Background(), msg, args...)
 }
 
 func (l *RmqLogger) Info(ctx context.Context, msg string, args ...any) {
