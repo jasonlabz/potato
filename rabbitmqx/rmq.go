@@ -509,7 +509,7 @@ func (r *RabbitMQOperator) PushChannel(ctx context.Context, channelWrap *Channel
 }
 
 func (r *RabbitMQOperator) PushDelayMessage(ctx context.Context, body *PushDelayBody, opts ...OptionFunc) (err error) {
-	defer handlePanic(r)
+	defer handlePanic(ctx, r)
 	if body.MessageId == "" {
 		body.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
 	}
@@ -637,7 +637,7 @@ func (r *RabbitMQOperator) pushDelayMessageCore(ctx context.Context, body *PushD
 
 // PushExchange 向交换机推送消息
 func (r *RabbitMQOperator) PushExchange(ctx context.Context, body *ExchangePushBody, opts ...OptionFunc) (err error) {
-	defer handlePanic(r)
+	defer handlePanic(ctx, r)
 	if body.MessageId == "" {
 		body.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
 	}
@@ -673,7 +673,7 @@ func (r *RabbitMQOperator) PushExchange(ctx context.Context, body *ExchangePushB
 
 // PushQueue 向队列推送消息
 func (r *RabbitMQOperator) PushQueue(ctx context.Context, body *QueuePushBody, opts ...OptionFunc) (err error) {
-	defer handlePanic(r)
+	defer handlePanic(ctx, r)
 	if body.MessageId == "" {
 		body.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
 	}
@@ -710,7 +710,7 @@ func (r *RabbitMQOperator) PushQueue(ctx context.Context, body *QueuePushBody, o
 
 // Push 向交换机或者队列推送消息
 func (r *RabbitMQOperator) Push(ctx context.Context, body *PushBody, opts ...OptionFunc) (err error) {
-	defer handlePanic(r)
+	defer handlePanic(ctx, r)
 	if body.MessageId == "" {
 		body.MessageId = strings.ReplaceAll(uuid.NewString(), "-", "")
 	}
