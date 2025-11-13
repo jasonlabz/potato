@@ -40,12 +40,12 @@ func init() {
 		mqConf := &MQConfig{}
 		err := utils.CopyStruct(appConf.Rabbitmq, mqConf)
 		if err != nil {
-			zapx.GetLogger().WithError(err).Error("copy rmq config error, skipping ...")
+			zapx.GetLogger().WithError(err).Error(context.Background(), "copy rmq config error, skipping ...")
 			return
 		}
 		err = InitRabbitMQOperator(mqConf)
 		if err != nil {
-			zapx.GetLogger().WithError(err).Error("init rmq Client error, skipping ...")
+			zapx.GetLogger().WithError(err).Error(context.Background(), "init rmq Client error, skipping ...")
 		}
 	}
 }
@@ -182,7 +182,7 @@ func NewRabbitMQOperator(config *MQConfig, opts ...ConnOption) (op *RabbitMQOper
 	go func() {
 		_, connectErr := op.tryReConnect(true)
 		if connectErr != nil {
-			op.l.Warn("daemon progress of reconnection has exited.", "error", err.Error())
+			op.l.Warn(ctx, "daemon progress of reconnection has exited.", "error", err.Error())
 		}
 	}()
 
@@ -329,7 +329,7 @@ func (r *RabbitMQOperator) connect() (err error) {
 			break
 		}
 		<-ticker.C
-		r.l.Warn(fmt.Sprintf("wait %f seconds for retry to connect...", DefaultRetryWaitTimes.Seconds()))
+		r.l.Warn(context.Background(), fmt.Sprintf("wait %f seconds for retry to connect...", DefaultRetryWaitTimes.Seconds()))
 	}
 
 	if err != nil {
@@ -347,6 +347,7 @@ func (r *RabbitMQOperator) tryReConnect(daemon bool) (connected bool, err error)
 	ticker := time.NewTicker(DefaultRetryWaitTimes)
 	defer ticker.Stop()
 	var count int
+	var ctx =  context.Background()
 	for {
 		// var err error
 		if !r.isReady && atomic.LoadInt32(&r.closed) != Closed {
@@ -361,7 +362,7 @@ func (r *RabbitMQOperator) tryReConnect(daemon bool) (connected bool, err error)
 				r.client.conn.NotifyClose(r.client.closeConnNotify)
 				r.isReady = true
 				r.client.connMu.Unlock() // 释放锁
-				r.l.Info("rabbitmq connect success[addr:%s]", r.config.addr())
+				r.l.Info(ctx,"rabbitmq connect success[addr:%s]", r.config.addr())
 				continue
 			}
 
@@ -376,10 +377,10 @@ func (r *RabbitMQOperator) tryReConnect(daemon bool) (connected bool, err error)
 
 			select {
 			case s := <-sig:
-				r.l.Infof("received signal：[%v], exiting... ", s)
+				r.l.Infof(context.Background(),"received signal：[%v], exiting... ", s)
 				return false, fmt.Errorf("connect fail, received signal：[%v]", s)
 			case <-r.closeCh:
-				r.l.Info("rabbitmq is closed, exiting...")
+				r.l.Info(context.Background(),"rabbitmq is closed, exiting...")
 				return false, errors.New("connect fail, rabbitmq is closed")
 			case <-ticker.C:
 			}
@@ -391,16 +392,16 @@ func (r *RabbitMQOperator) tryReConnect(daemon bool) (connected bool, err error)
 
 		select {
 		case s := <-sig:
-			r.l.Info("received signal：[%v], exiting daemon program... ", s)
+			r.l.Info(context.Background(),"received signal：[%v], exiting daemon program... ", s)
 			return false, fmt.Errorf("received signal：[%v], exiting daemon program", s)
 		case <-r.closeCh:
-			r.l.Info("rabbitmq is closed, exiting daemon program...")
+			r.l.Info(ctx, "rabbitmq is closed, exiting daemon program...")
 			return false, errors.New("rabbitmq is closed, exiting daemon program")
 		case <-r.client.closeConnNotify:
 			r.isReady = false
 			// r.client.channelCache = sync.Map{}
 			// r.client.chCloseListener = sync.Map{}
-			r.l.Error("rabbitmq disconnects unexpectedly, retrying...")
+			r.l.Error(ctx, "rabbitmq disconnects unexpectedly, retrying...")
 		}
 	}
 	return connected, nil
@@ -411,18 +412,19 @@ func (r *RabbitMQOperator) confirmOne(confirms <-chan amqp.Confirmation) (ok boo
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGKILL)
 
+	var ctx =  context.Background()
 	select {
 	case s := <-sig:
-		r.l.Info(fmt.Sprintf("recived： %v, exiting... ", s))
+		r.l.Info(ctx, fmt.Sprintf("recived： %v, exiting... ", s))
 		return
 	case <-r.closeCh:
-		r.l.Info("rabbitmq is closed, confirm canceled, exiting...")
+		r.l.Info(ctx, "rabbitmq is closed, confirm canceled, exiting...")
 		return
 	case confirmed := <-confirms:
 		if confirmed.Ack {
 			ok = true
 		} else {
-			r.l.Warn(fmt.Sprintf("confirmed delivery false of delivery tag: %d", confirmed.DeliveryTag))
+			r.l.Warn(ctx, fmt.Sprintf("confirmed delivery false of delivery tag: %d", confirmed.DeliveryTag))
 		}
 	}
 	return
@@ -716,7 +718,7 @@ func (r *RabbitMQOperator) Push(ctx context.Context, body *PushBody, opts ...Opt
 	defer ticker.Stop()
 	for i := 0; i < RetryTimes; i++ {
 		if atomic.LoadInt32(&r.closed) == Closed {
-			r.l.Error("rabbitmq connection is closed, push cancel")
+			r.l.Error(ctx, "rabbitmq connection is closed, push cancel")
 			err = errors.New("connection is closed")
 			return
 		}
@@ -1050,7 +1052,7 @@ func (r *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-c
 				r.l.Info(ctx, fmt.Sprintf("[consume:%s] rabbitmq is closed, exiting...", param.QueueName))
 				return
 			case <-valueCh.(chan bool):
-				r.l.Info("[consume:%s] consume cancel, exiting...", param.QueueName)
+				r.l.Info(ctx, "[consume:%s] consume cancel, exiting...", param.QueueName)
 				cancelErr := channelWrap.channel.Cancel(consumerTag, false)
 				if cancelErr != nil {
 					r.l.Error(ctx, fmt.Sprintf("[consume:%s] consume cancel error, exiting...", param.QueueName), "err", cancelErr.Error())
@@ -1306,7 +1308,7 @@ func (r *RabbitMQOperator) CancelQueue(queueName string) (err error) {
 		}
 		<-ticker.C
 	}
-	r.l.Warn(fmt.Sprintf("cancel consumer timeout：%s", queueName))
+	r.l.Warn(context.Background(), fmt.Sprintf("cancel consumer timeout：%s", queueName))
 	return
 }
 
