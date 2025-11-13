@@ -129,8 +129,8 @@ func WithEvictionContext(ctx context.Context) ConnOption {
 	}
 }
 
-func handlePanic(r *RabbitMQOperator) {
+func handlePanic(ctx context.Context, r *RabbitMQOperator) {
 	if re := recover(); re != nil {
-		r.l.Error(fmt.Sprintf("Handler panicked: %v\nStack: %s", re, debug.Stack()))
+		r.l.Error(ctx, fmt.Sprintf("Handler panicked: %v\nStack: %s", re, debug.Stack()))
 	}
 }
