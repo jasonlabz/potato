@@ -13,11 +13,25 @@ var consumerSeq uint64
 
 const consumerTagLengthMax = 0xFF // see writeShortstr
 
+// PushBodyInterface 推送消息体接口
+type PushBodyInterface interface {
+	GetMessageId() string
+	SetMessageId(string)
+	GetBody() []byte
+}
+
 // PushDelayBody 生产延迟消息body参数设置，兼容交换机和队列两种模式
 type PushDelayBody struct {
 	ExchangePushBody
 	DelayTime time.Duration
 }
+
+// GetMessageId 为各个Body类型实现接口
+func (p *PushDelayBody) GetMessageId() string { return p.MessageId }
+
+func (p *PushDelayBody) SetMessageId(id string) { p.MessageId = id }
+
+func (p *PushDelayBody) GetBody() []byte { return p.Body }
 
 func (p *PushDelayBody) setArgs(key string, value any, queues ...string) *PushDelayBody {
 	if p.QueueArgs == nil {
@@ -167,6 +181,12 @@ type PushBody struct {
 
 	amqp.Publishing
 }
+
+func (p *PushBody) GetMessageId() string { return p.MessageId }
+
+func (p *PushBody) SetMessageId(id string) { p.MessageId = id }
+
+func (p *PushBody) GetBody() []byte { return p.Body }
 
 func (p *PushBody) Validate() {
 	if len(p.BindingKeyMap) == 0 {
@@ -356,6 +376,12 @@ type ExchangePushBody struct {
 	amqp.Publishing
 }
 
+func (e *ExchangePushBody) GetMessageId() string { return e.MessageId }
+
+func (e *ExchangePushBody) SetMessageId(id string) { e.MessageId = id }
+
+func (e *ExchangePushBody) GetBody() []byte { return e.Body }
+
 func (e *ExchangePushBody) Validate() {
 	if string(e.ExchangeType) == "" {
 		//  default exchangeType is fanout
@@ -503,6 +529,12 @@ type QueuePushBody struct {
 	Args             amqp.Table
 	amqp.Publishing
 }
+
+func (q *QueuePushBody) GetMessageId() string { return q.MessageId }
+
+func (q *QueuePushBody) SetMessageId(id string) { q.MessageId = id }
+
+func (q *QueuePushBody) GetBody() []byte { return q.Body }
 
 func (q *QueuePushBody) Validate() {}
 
