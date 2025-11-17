@@ -48,19 +48,26 @@ type KafkaConfig struct {
 
 // Database 连接配置
 type Database struct {
-	Enable          bool   `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"`
-	DBType          string `mapstructure:"db_type" json:"db_type" yaml:"db_type" ini:"db_type"`
-	DSN             string `mapstructure:"dsn" json:"dsn" yaml:"dsn" ini:"dsn"`
-	LogMode         string `mapstructure:"log_mode" json:"log_mode" yaml:"log_mode" ini:"log_mode"`
+	Enable  bool   `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"`
+	DBType  string `mapstructure:"db_type" json:"db_type" yaml:"db_type" ini:"db_type"`
+	DSN     string `mapstructure:"dsn" json:"dsn" yaml:"dsn" ini:"dsn"`
+	LogMode string `mapstructure:"log_mode" json:"log_mode" yaml:"log_mode" ini:"log_mode"`
+
 	Host            string `mapstructure:"host" json:"host" yaml:"host" ini:"host"`
 	Port            int    `mapstructure:"port" json:"port" yaml:"port" ini:"port"`
-	DBName          string `mapstructure:"db_name" json:"db_name" yaml:"db_name" ini:"db_name"`
-	Username        string `mapstructure:"username" json:"username" yaml:"username" ini:"username"`
+	User            string `mapstructure:"user" json:"user" yaml:"user" ini:"user"`
 	Password        string `mapstructure:"password" json:"password" yaml:"password" ini:"password"`
+	Database        string `mapstructure:"database" json:"database" yaml:"database" ini:"database"`
+	Args            []ARG  `mapstructure:"args" json:"args" yaml:"args" ini:"args"`
 	Charset         string `mapstructure:"charset" json:"charset" yaml:"charset" ini:"charset"`
 	MaxIdleConn     int    `mapstructure:"max_idle_conn" json:"max_idle_conn" yaml:"max_idle_conn" ini:"max_idle_conn"`
 	MaxOpenConn     int    `mapstructure:"max_open_conn" json:"max_open_conn" yaml:"max_open_conn" ini:"max_open_conn"`
 	ConnMaxLifeTime int64  `mapstructure:"conn_max_life_time" json:"conn_max_life_time" yaml:"conn_max_life_time" ini:"conn_max_life_time"`
+}
+
+type ARG struct {
+	Name  string `mapstructure:"name" json:"name" yaml:"name" ini:"name"`
+	Value string `mapstructure:"value" json:"value" yaml:"value" ini:"value"`
 }
 
 // RedisConfig 连接配置
@@ -164,7 +171,7 @@ type Pusher struct {
 	BasicAuth  string `mapstructure:"basic_auth" json:"basic_auth" yaml:"basic_auth" ini:"basic_auth"`     // Basic auth of pushgateway
 }
 
-// 更新 Application 结构体，保持向后兼容
+// Application 配置
 type Application struct {
 	Host       string        `mapstructure:"host" json:"host" yaml:"host" ini:"host"`
 	Name       string        `mapstructure:"name" json:"name" yaml:"name" ini:"name"`
