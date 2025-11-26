@@ -318,8 +318,9 @@ func (op *ElasticSearchOperator) GetDocumentCount(ctx context.Context, indexName
 
 func (op *ElasticSearchOperator) SearchDocuments(ctx context.Context, indexName string, request *XRequest) (response *search.Response, err error) {
 	searchDoc := op.typeClient.Search().Index(indexName)
-	if request != nil {
-		searchDoc.Request(request.Build())
+	var req *search.Request
+	if req, err = request.Build(); request != nil && err != nil {
+		searchDoc.Request(req)
 	}
 	response, err = searchDoc.Do(ctx)
 	if err != nil {

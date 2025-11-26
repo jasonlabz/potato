@@ -55,7 +55,7 @@ type Database struct {
 
 	Host            string `mapstructure:"host" json:"host" yaml:"host" ini:"host"`
 	Port            int    `mapstructure:"port" json:"port" yaml:"port" ini:"port"`
-	User            string `mapstructure:"user" json:"user" yaml:"user" ini:"user"`
+	Username        string `mapstructure:"username" json:"user" yaml:"username" ini:"username"`
 	Password        string `mapstructure:"password" json:"password" yaml:"password" ini:"password"`
 	Database        string `mapstructure:"database" json:"database" yaml:"database" ini:"database"`
 	Args            []ARG  `mapstructure:"args" json:"args" yaml:"args" ini:"args"`
