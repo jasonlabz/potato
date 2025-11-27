@@ -9,17 +9,19 @@ import (
 	"time"
 
 	"github.com/bytedance/sonic"
-	"github.com/elastic/go-elasticsearch/v8"
-	"github.com/elastic/go-elasticsearch/v8/esapi"
-	"github.com/elastic/go-elasticsearch/v8/typedapi/cat/count"
-	coreget "github.com/elastic/go-elasticsearch/v8/typedapi/core/get"
-	"github.com/elastic/go-elasticsearch/v8/typedapi/core/search"
-	"github.com/elastic/go-elasticsearch/v8/typedapi/indices/create"
-	indicesget "github.com/elastic/go-elasticsearch/v8/typedapi/indices/get"
-	"github.com/elastic/go-elasticsearch/v8/typedapi/types"
+	"github.com/elastic/go-elasticsearch/v9"
+	"github.com/elastic/go-elasticsearch/v9/esapi"
+	"github.com/elastic/go-elasticsearch/v9/typedapi/cat/count"
+	coreget "github.com/elastic/go-elasticsearch/v9/typedapi/core/get"
+	"github.com/elastic/go-elasticsearch/v9/typedapi/core/search"
+	"github.com/elastic/go-elasticsearch/v9/typedapi/indices/create"
+	indicesget "github.com/elastic/go-elasticsearch/v9/typedapi/indices/get"
+	"github.com/elastic/go-elasticsearch/v9/typedapi/indices/putmapping"
+	"github.com/elastic/go-elasticsearch/v9/typedapi/types"
 
 	"github.com/jasonlabz/potato/configx"
 	"github.com/jasonlabz/potato/log"
+	"github.com/jasonlabz/potato/pointer"
 )
 
 var operator *ElasticSearchOperator
@@ -56,7 +58,7 @@ func InitElasticSearchOperator(ctx context.Context, config *Config) (err error) 
 }
 
 type ElasticSearchOperator struct {
-	// client     *elasticsearch.Client
+	// client     *elasticsearch.Client // 通用客户端
 	typeClient *elasticsearch.TypedClient
 
 	config *Config
@@ -136,7 +138,7 @@ func NewElasticSearchOperator(ctx context.Context, config *Config) (op *ElasticS
 	if err != nil {
 		return
 	}
-	ok, err := typedClient.Ping().IsSuccess(context.Background())
+	ok, err := typedClient.Ping().IsSuccess(ctx)
 	if err != nil {
 		log.GetLogger().WithError(err).Error(ctx, "typedClient ping fail")
 	}
@@ -145,13 +147,14 @@ func NewElasticSearchOperator(ctx context.Context, config *Config) (op *ElasticS
 	} else {
 		log.GetLogger().Info(ctx, "------- es connected success")
 	}
+	// 通用客户端
 	// client, err := elasticsearch.NewClient(esConfig)
 	// if err != nil {
 	//	return
 	// }
 	// _, err = client.Ping()
 	// if err != nil {
-	//	log.GetLogger().WithError(err).Error("client ping fail")
+	//	log.GetLogger().WithError(err).Error(ctx, "client ping fail")
 	// }
 	op = &ElasticSearchOperator{
 		config: config,
@@ -256,6 +259,43 @@ func (op *ElasticSearchOperator) CreateIndex(ctx context.Context, indexName, map
 	return
 }
 
+// CreateIndexWithAlias 创建索引并设置别名（原子操作）
+func (op *ElasticSearchOperator) CreateIndexWithAlias(ctx context.Context, indexName, aliasName, mappingJson string) (err error) {
+	exists, err := op.IndexExist(ctx, indexName)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+
+	req := create.NewRequest()
+	if mappingJson != "" {
+		req, err = req.FromJSON(mappingJson)
+		if err != nil {
+			return err
+		}
+	}
+
+	// 在创建索引时直接设置别名
+	if aliasName != "" {
+		alias := types.NewAlias()
+		alias.IsWriteIndex = pointer.Bool(true)
+		aliases := map[string]types.Alias{
+			aliasName: *alias,
+		}
+		req.Aliases = aliases
+	}
+
+	_, err = op.typeClient.Indices.Create(indexName).Request(req).Do(ctx)
+	if err != nil {
+		log.GetLogger().WithError(err).Error(ctx, "create index with alias error: "+indexName)
+		return err
+	}
+
+	return nil
+}
+
 func (op *ElasticSearchOperator) DeleteIndex(ctx context.Context, indexName string) (err error) {
 	exists, err := op.IndexExist(ctx, indexName)
 	if err != nil {
@@ -298,6 +338,99 @@ func (op *ElasticSearchOperator) GetIndexInfo(ctx context.Context, indexName str
 	return
 }
 
+// Reindex 重新索引
+func (op *ElasticSearchOperator) Reindex(ctx context.Context, sourceIndex []string, destIndex string, script types.ScriptVariant) (err error) {
+	source := types.NewReindexSource()
+	target := types.NewReindexDestination()
+	source.Index = sourceIndex
+	target.Index = destIndex
+	reindexRequest := op.typeClient.Reindex().
+		Source(source).
+		Dest(target).
+		WaitForCompletion(true)
+
+	if script != nil {
+		reindexRequest = reindexRequest.Script(script)
+	}
+
+	_, err = reindexRequest.Do(ctx)
+	if err != nil {
+		log.GetLogger().WithError(err).Error(ctx, "reindex error")
+		return
+	}
+	return
+}
+
+// ReindexAsync 异步重新索引
+func (op *ElasticSearchOperator) ReindexAsync(ctx context.Context, sourceIndex []string, destIndex string, script types.ScriptVariant) (taskID string, err error) {
+	source := types.NewReindexSource()
+	target := types.NewReindexDestination()
+	source.Index = sourceIndex
+	target.Index = destIndex
+	reindexRequest := op.typeClient.Reindex().
+		Source(source).
+		Dest(target).
+		WaitForCompletion(false) // 异步执行
+
+	if script != nil {
+		reindexRequest = reindexRequest.Script(script)
+	}
+
+	response, err := reindexRequest.Do(ctx)
+	if err != nil {
+		log.GetLogger().WithError(err).Error(ctx, "async reindex error")
+		return
+	}
+
+	taskID = *response.Task
+	return
+}
+
+// GetIndexMapping 获取索引映射
+func (op *ElasticSearchOperator) GetIndexMapping(ctx context.Context, indexName string) (mapping *types.TypeMapping, err error) {
+	response, err := op.typeClient.Indices.GetMapping().Index(indexName).Do(ctx)
+	if err != nil {
+		log.GetLogger().WithError(err).Error(ctx, "get index mapping error: "+indexName)
+		return
+	}
+
+	if indexMapping, exists := response[indexName]; exists {
+		mapping = &indexMapping.Mappings
+	}
+	return
+}
+
+// UpdateIndexMapping 更新索引映射
+func (op *ElasticSearchOperator) UpdateIndexMapping(ctx context.Context, indexName string, mappingJson string) (err error) {
+	req, err := putmapping.NewRequest().FromJSON(mappingJson)
+	if err != nil {
+		log.GetLogger().WithError(err).Error(ctx, "update index mapping error: "+indexName, err)
+		return
+	}
+	_, err = op.typeClient.Indices.
+		PutMapping(indexName).
+		Request(req).
+		Do(ctx)
+	if err != nil {
+		log.GetLogger().WithError(err).Error(ctx, "update index mapping error: "+indexName)
+		return
+	}
+	return
+}
+
+// RefreshIndex 刷新索引
+func (op *ElasticSearchOperator) RefreshIndex(ctx context.Context, indexName string) (err error) {
+	_, err = op.typeClient.Indices.
+		Refresh().
+		Index(indexName).
+		Do(ctx)
+	if err != nil {
+		log.GetLogger().WithError(err).Error(ctx, "refresh index error: "+indexName)
+		return
+	}
+	return
+}
+
 func (op *ElasticSearchOperator) GetDocument(ctx context.Context, indexName, docID string) (response *coreget.Response, err error) {
 	response, err = op.typeClient.Get(indexName, docID).Do(ctx)
 	if err != nil {
@@ -317,15 +450,83 @@ func (op *ElasticSearchOperator) GetDocumentCount(ctx context.Context, indexName
 }
 
 func (op *ElasticSearchOperator) SearchDocuments(ctx context.Context, indexName string, request *XRequest) (response *search.Response, err error) {
-	searchDoc := op.typeClient.Search().Index(indexName)
-	var req *search.Request
-	if req, err = request.Build(); request != nil && err != nil {
-		searchDoc.Request(req)
-	}
+	searchDoc := op.typeClient.
+		Search().
+		Index(indexName).
+		Request(request.Build())
 	response, err = searchDoc.Do(ctx)
 	if err != nil {
 		log.GetLogger().WithError(err).Error(ctx, "search doc error, queryStr : "+indexName)
 		return
+	}
+	return
+}
+
+// IndexDocument 索引/创建文档
+func (op *ElasticSearchOperator) IndexDocument(ctx context.Context, indexName, docID string, document any) (err error) {
+	_, err = op.typeClient.Index(indexName).
+		Id(docID).
+		Document(document).
+		Do(ctx)
+	if err != nil {
+		log.GetLogger().WithError(err).Error(ctx, "index document error: "+docID)
+		return
+	}
+	return
+}
+
+// UpdateDocument 更新文档
+func (op *ElasticSearchOperator) UpdateDocument(ctx context.Context, indexName, docID string, update any) (err error) {
+	_, err = op.typeClient.Update(indexName, docID).
+		Doc(update).
+		Do(ctx)
+	if err != nil {
+		log.GetLogger().WithError(err).Error(ctx, "update document error: "+docID)
+		return
+	}
+	return
+}
+
+// DeleteDocument 删除文档
+func (op *ElasticSearchOperator) DeleteDocument(ctx context.Context, indexName, docID string) (err error) {
+	_, err = op.typeClient.Delete(indexName, docID).
+		Do(ctx)
+	if err != nil {
+		log.GetLogger().WithError(err).Error(ctx, "delete document error: "+docID)
+		return
+	}
+	return
+}
+
+// GetClusterHealth 获取集群健康状态
+func (op *ElasticSearchOperator) GetClusterHealth(ctx context.Context) (health map[string]any, err error) {
+	response, err := op.typeClient.Cluster.Health().Do(ctx)
+	if err != nil {
+		log.GetLogger().WithError(err).Error(ctx, "get cluster health error")
+		return
+	}
+
+	// 转换为 map 方便使用
+	data, _ := sonic.Marshal(response)
+	err = sonic.Unmarshal(data, &health)
+	if err != nil {
+		return nil, err
+	}
+	return
+}
+
+// GetIndexStats 获取索引统计信息
+func (op *ElasticSearchOperator) GetIndexStats(ctx context.Context, indexName string) (stats map[string]any, err error) {
+	response, err := op.typeClient.Indices.Stats().Index(indexName).Do(ctx)
+	if err != nil {
+		log.GetLogger().WithError(err).Error(ctx, "get index stats error: "+indexName)
+		return
+	}
+
+	data, _ := sonic.Marshal(response)
+	err = sonic.Unmarshal(data, &stats)
+	if err != nil {
+		return nil, err
 	}
 	return
 }

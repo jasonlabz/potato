@@ -35,7 +35,7 @@ func TestES(t *testing.T) {
 }
 
 func TestES1(t *testing.T) {
-	body := QueryBuilder()
+	body := QueryBuilder(context.Background())
 	match := body.QueryMatchBoost("hello", "world", 1.0)
 	fmt.Println(match)
 }
