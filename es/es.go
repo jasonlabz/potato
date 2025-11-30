@@ -46,10 +46,15 @@ func init() {
 				Password:           appConf.ES.Password,
 				APIKey:             appConf.ES.APIKey,
 				CloudID:            appConf.ES.CloudId,
-				InsecureSkipVerify: true,
+				CACert:             []byte(appConf.ES.CACert),
+				InsecureSkipVerify: appConf.ES.InsecureSkipVerify,
 			})
-		if err != nil {
-			log.GetLogger().WithError(err).Error(context.Background(), "init ES Client error, skipping ...")
+		if err == nil {
+			return
+		}
+		log.GetLogger().WithError(err).Error(context.Background(), "init ES Client error")
+		if appConf.ES.Strict {
+			panic(fmt.Errorf("init ES Client error: %v", err))
 		}
 	}
 }

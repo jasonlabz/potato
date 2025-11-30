@@ -18,16 +18,14 @@ type LoggerWrapper struct {
 var defaultLogger *LoggerWrapper
 var once sync.Once
 
-func init() {
+func GetLogger(opts ...zap.Option) *LoggerWrapper {
 	once.Do(func() {
 		defaultLogger = NewLogger()
 	})
 	if defaultLogger == nil {
 		panic("init logger fail!")
 	}
-}
 
-func GetLogger(opts ...zap.Option) *LoggerWrapper {
 	if len(opts) > 0 {
 		return defaultLogger.WithOptions(opts...)
 	}

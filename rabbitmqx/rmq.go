@@ -45,8 +45,12 @@ func init() {
 			return
 		}
 		err = InitRabbitMQOperator(mqConf)
-		if err != nil {
-			zapx.GetLogger().WithError(err).Error(context.Background(), "init rmq Client error, skipping ...")
+		if err == nil {
+			return
+		}
+		zapx.GetLogger().WithError(err).Error(context.Background(), "init rmq Client error")
+		if appConf.Rabbitmq.Strict {
+			panic(fmt.Errorf("init rmq Client error: %v", err))
 		}
 	}
 }

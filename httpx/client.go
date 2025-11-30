@@ -6,53 +6,85 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bytedance/sonic"
 	"github.com/go-resty/resty/v2"
 
-	"github.com/jasonlabz/potato/internal/log"
-	zapx "github.com/jasonlabz/potato/log"
+	"github.com/jasonlabz/potato/log"
 )
 
 const (
-	DefaultTimeout    = 5 * time.Second
+	DefaultTimeout    = 5000
 	DefaultRetryTimes = 3
 )
 
+var defaultConfig = &Config{
+	Timeout:            DefaultTimeout,
+	RetryCount:         DefaultRetryTimes,
+	Name:               "__common_client__",
+	InsecureSkipVerify: true,
+	commonSet:          true,
+	logger:             log.GetLogger(),
+}
+
 var cli *Client
+var once sync.Once
 
 func GetClient() *Client {
+	once.Do(func() {
+		cli = NewHttpClient(defaultConfig)
+	})
 	return cli
+}
+
+func NewHttpClient(config *Config) *Client {
+	if !config.commonSet {
+		config.Validate()
+	}
+
+	c := resty.New()
+	c.SetTimeout(time.Duration(config.Timeout) * time.Millisecond)
+	c.SetRetryMaxWaitTime(time.Duration(config.RetryWaitTime) * time.Millisecond)
+	c.SetRetryCount(config.RetryCount)
+	c.SetBaseURL(config.BasePath)
+	c.SetLogger(AdaptLogger(config.logger))
+	c.SetAllowGetMethodPayload(true)
+	c.SetDebug(config.Debug)
+	c.SetJSONMarshaler(sonic.Marshal)
+	c.SetJSONUnmarshaler(sonic.Unmarshal)
+
+	if config.Protocol == "https" {
+		c.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: config.InsecureSkipVerify})
+	}
+
+	// 1. 设置客户端证书：用于向服务器证明自己（被服务器信任）v
+	if config.CertFile != "" && config.KeyFile != "" {
+		cert, err := tls.LoadX509KeyPair(config.CertFile, config.KeyFile)
+		if err != nil {
+			panic(fmt.Errorf("ERROR loading client certificate: %s", err))
+		}
+		c.SetCertificates(cert)
+	}
+
+	// 2. 设置根证书：用于验证服务器证书（信任服务器）
+	if config.RootCertFile != "" {
+		c.SetRootCertificate(config.RootCertFile)
+	}
+
+	return &Client{client: c, l: config.logger, config: config}
 }
 
 type Client struct {
 	client *resty.Client
-	l      log.Logger
-}
-
-func SetLogger(l log.Logger) {
-	cli.l = l
-}
-
-func init() {
-	c := resty.New()
-	c.SetTimeout(DefaultTimeout)
-	c.SetRetryCount(DefaultRetryTimes)
-	c.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true})
-	cli = &Client{client: c}
+	config *Config
+	l      *log.LoggerWrapper
 }
 
 func (c *Client) SetGlobalHeaders(headers map[string]string) {
 	c.client.SetHeaders(headers)
 	return
-}
-
-func (c *Client) logger() (l log.Logger) {
-	if c.l == nil {
-		c.l = zapx.GetLogger()
-	}
-	return c.l
 }
 
 func (c *Client) SetGlobalToken(token string) {
@@ -70,8 +102,21 @@ func (c *Client) GetRestyClient() (cli *resty.Client) {
 	return
 }
 
+func (c *Client) SetLogger(logger *log.LoggerWrapper) {
+	c.client.SetLogger(AdaptLogger(logger))
+	c.l = logger
+}
+
+func (c *Client) logger() (l *log.LoggerWrapper) {
+	if c.l == nil {
+		c.l = log.GetLogger()
+	}
+	return c.l
+}
+
 // Get get request and json response
 func (c *Client) Get(ctx context.Context, url string, result any, opts ...OptionFunc) (err error) {
+	url = c.config.GetEndpoint() + url
 	c.logger().Info(ctx, fmt.Sprintf("HTTP Request [method:%s] [URL:%s]", http.MethodGet, url))
 	r := c.client.R()
 	o := &Option{}
@@ -152,6 +197,7 @@ func (c *Client) HeadForm(ctx context.Context, url string, formData map[string]s
 
 // requestForm send formData and response json
 func (c *Client) requestForm(ctx context.Context, url, method string, formData map[string]string, result any, opts ...OptionFunc) (res *resty.Response, err error) {
+	url = c.config.GetEndpoint() + url
 	c.logger().Info(ctx, fmt.Sprintf("HTTP Request [method:%s] [URL:%s] [Form-Data:%s]", method, url,
 		func() string {
 			if len(formData) == 0 {
@@ -210,6 +256,7 @@ func (c *Client) requestForm(ctx context.Context, url, method string, formData m
 
 // requestJson send json and response json
 func (c *Client) requestJson(ctx context.Context, url, method string, body any, result any, opts ...OptionFunc) (res *resty.Response, err error) {
+	url = c.config.GetEndpoint() + url
 	c.logger().Info(ctx, fmt.Sprintf("HTTP Request [method:%s] [URL:%s] [Body:%s]", method, url, func() string {
 		marshal, marErr := sonic.Marshal(body)
 		if marErr != nil {

@@ -3,41 +3,70 @@ package httpx
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 	"sync"
-	"time"
+
+	"github.com/jasonlabz/potato/log"
 )
 
 var (
-	clientMap sync.Map
+	clientMap    sync.Map
+	duplicateMap = map[string]struct{}{}
 )
 
-type ServerInfo struct {
+type Config struct {
 	Name          string
-	Port          int
+	Debug         bool
 	RetryCount    int
-	RetryWaitTime time.Duration
-	Timeout       time.Duration
-	Proto         string
+	RetryWaitTime int64 // 单位 毫秒
+	Timeout       int64 // 单位 毫秒
+	Protocol      string
 	Host          string
+	Port          int
 	BasePath      string
-	URL           string
+	Endpoint      string
+
+	CertFile           string
+	KeyFile            string
+	RootCertFile       string
+	InsecureSkipVerify bool
+	commonSet          bool
+	logger             *log.LoggerWrapper
 }
 
-func (s *ServerInfo) GetURL() string {
-	if s.URL != "" {
-		return s.URL
+func (c *Config) Validate() {
+	if c.Name == "" {
+		panic("Config must have Name, Endpoint: " + c.Host + ":" + strconv.Itoa(c.Port))
 	}
-	var url string
-	if s.Port <= 0 {
-		url = fmt.Sprintf("%s://%s/", s.Proto, s.Host)
+	if _, ok := duplicateMap[c.Name]; ok {
+		panic("service name duplicate, service: " + c.Name)
+	}
+	duplicateMap[c.Name] = struct{}{}
+
+	if c.Protocol != "https" && c.Protocol != "http" {
+		panic("Protocol must be \"http\" or \"https\", service: " + c.Name)
+	}
+
+	if c.logger == nil {
+		c.logger = log.GetLogger()
+	}
+}
+
+func (c *Config) GetEndpoint() string {
+	if c.Endpoint != "" {
+		return c.Endpoint
+	}
+	var endpoint string
+	if c.Port <= 0 {
+		endpoint = fmt.Sprintf("%s://%s/", c.Protocol, c.Host)
 	} else {
-		url = fmt.Sprintf("%s://%s:%d/", s.Proto, s.Host, s.Port)
+		endpoint = fmt.Sprintf("%s://%s:%d/", c.Protocol, c.Host, c.Port)
 	}
-	if s.BasePath != "" {
-		url += s.BasePath
+	if c.BasePath != "" {
+		endpoint += c.BasePath
 	}
-	s.URL = url
-	return s.URL
+	c.Endpoint = endpoint
+	return c.Endpoint
 }
 
 type Option struct {
@@ -78,14 +107,14 @@ func WithCookies(cookies []*http.Cookie) OptionFunc {
 	}
 }
 
-func Store(service string, value *ServerInfo) {
+func Store(service string, value *Config) {
 	clientMap.Store(service, value)
 }
 
-func Load(service string) *ServerInfo {
+func Load(service string) *Config {
 	value, ok := clientMap.Load(service)
 	if ok {
-		return value.(*ServerInfo)
+		return value.(*Config)
 	}
 	return nil
 }

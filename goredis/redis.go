@@ -2,6 +2,7 @@ package goredis
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -46,7 +47,7 @@ type Config struct {
 func init() {
 	config := configx.GetConfig()
 	if config.Redis.Enable {
-		InitRedisClient(&Config{
+		err := InitRedisClient(&Config{
 			ClientName:       config.Redis.ClientName,
 			MasterName:       config.Redis.MasterName,
 			Addrs:            config.Redis.Endpoints,
@@ -60,6 +61,13 @@ func init() {
 			SentinelUsername: config.Redis.SentinelUsername,
 			SentinelPassword: config.Redis.SentinelPassword,
 		})
+		if err == nil {
+			return
+		}
+		zapx.GetLogger().WithError(err).Error(context.Background(), "init redis Client error")
+		if config.Redis.Strict {
+			panic(fmt.Errorf("init redis Client error: %v", err))
+		}
 	}
 }
 
@@ -67,12 +75,13 @@ func GetRedisOperator() *RedisOperator {
 	return operator
 }
 
-func InitRedisClient(config *Config) {
+func InitRedisClient(config *Config) error {
 	var err error
 	operator, err = NewRedisOperator(config)
 	if err != nil {
-		panic(err)
+		return err
 	}
+	return nil
 }
 
 func (c *Config) Validate() {

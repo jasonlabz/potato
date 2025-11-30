@@ -38,6 +38,7 @@ type CryptoConfig struct {
 // KafkaConfig 配置
 type KafkaConfig struct {
 	Topic            []string `mapstructure:"topic" json:"topic" yaml:"topic" ini:"topic"`
+	Strict           bool     `mapstructure:"strict" json:"strict" yaml:"strict" ini:"strict"`
 	GroupId          string   `mapstructure:"group_id" json:"group_id" yaml:"group_id" ini:"group_id"`
 	BootstrapServers string   `mapstructure:"bootstrap_servers" json:"bootstrap_servers" yaml:"bootstrap_servers" ini:"bootstrap_servers"`
 	SecurityProtocol string   `mapstructure:"security_protocol" json:"security_protocol" yaml:"security_protocol" ini:"security_protocol"`
@@ -49,6 +50,7 @@ type KafkaConfig struct {
 // Database 连接配置
 type Database struct {
 	Enable  bool   `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"`
+	Strict  bool   `mapstructure:"strict" json:"strict" yaml:"strict" ini:"strict"`
 	DBType  string `mapstructure:"db_type" json:"db_type" yaml:"db_type" ini:"db_type"`
 	DSN     string `mapstructure:"dsn" json:"dsn" yaml:"dsn" ini:"dsn"`
 	LogMode string `mapstructure:"log_mode" json:"log_mode" yaml:"log_mode" ini:"log_mode"`
@@ -73,6 +75,7 @@ type ARG struct {
 // RedisConfig 连接配置
 type RedisConfig struct {
 	Enable           bool     `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"`
+	Strict           bool     `mapstructure:"strict" json:"strict" yaml:"strict" ini:"strict"`
 	Endpoints        []string `mapstructure:"endpoints" json:"endpoints" yaml:"endpoints" ini:"endpoints"`
 	Username         string   `mapstructure:"username" json:"username" yaml:"username" ini:"username"`
 	Password         string   `mapstructure:"password" json:"password" yaml:"password" ini:"password"`
@@ -88,17 +91,21 @@ type RedisConfig struct {
 }
 
 type Elasticsearch struct {
-	Enable    bool     `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"`
-	Endpoints []string `mapstructure:"endpoints" json:"endpoints" yaml:"endpoints" ini:"endpoints"`
-	Username  string   `mapstructure:"username" json:"username" yaml:"username" ini:"username"`
-	Password  string   `mapstructure:"password" json:"password" yaml:"password" ini:"password"`
-	IsHttps   bool     `mapstructure:"is_https" json:"is_https" yaml:"is_https" ini:"is_https"`
-	CloudId   string   `mapstructure:"cloud_id" json:"cloud_id" yaml:"cloud_id" ini:"cloud_id"`
-	APIKey    string   `mapstructure:"api_key" json:"api_key" yaml:"api_key" ini:"api_key"`
+	Enable             bool     `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"`
+	Strict             bool     `mapstructure:"strict" json:"strict" yaml:"strict" ini:"strict"`
+	Endpoints          []string `mapstructure:"endpoints" json:"endpoints" yaml:"endpoints" ini:"endpoints"`
+	Username           string   `mapstructure:"username" json:"username" yaml:"username" ini:"username"`
+	Password           string   `mapstructure:"password" json:"password" yaml:"password" ini:"password"`
+	IsHttps            bool     `mapstructure:"is_https" json:"is_https" yaml:"is_https" ini:"is_https"`
+	CloudId            string   `mapstructure:"cloud_id" json:"cloud_id" yaml:"cloud_id" ini:"cloud_id"`
+	APIKey             string   `mapstructure:"api_key" json:"api_key" yaml:"api_key" ini:"api_key"`
+	CACert             string   `mapstructure:"ca_cert" json:"ca_cert" yaml:"ca_cert" ini:"ca_cert"`                                                                          // 客户端证书, 例如："certs/client.pem"
+	InsecureSkipVerify bool     `mapstructure:"insecure_skip_verify" json:"insecure_skip_verify" yaml:"insecure_skip_verify" ini:"insecure_skip_verifyinsecure_skip_verifyv"` // 跳过证书认证，生产应为false
 }
 
 type MongodbConf struct {
 	Enable          bool   `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"`
+	Strict          bool   `mapstructure:"strict" json:"strict" yaml:"strict" ini:"strict"`
 	Host            string `mapstructure:"host" json:"host" yaml:"host" ini:"host"`
 	Port            int    `mapstructure:"port" json:"port" yaml:"port" ini:"port"`
 	Username        string `mapstructure:"username" json:"username" yaml:"username" ini:"username"`
@@ -110,6 +117,7 @@ type MongodbConf struct {
 
 type RabbitMQConf struct {
 	Enable      bool      `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"`
+	Strict      bool      `mapstructure:"strict" json:"strict" yaml:"strict" ini:"strict"`
 	Host        string    `mapstructure:"host" json:"host" yaml:"host" ini:"host"`
 	Port        int       `mapstructure:"port" json:"port" yaml:"port" ini:"port"`
 	Username    string    `mapstructure:"username" json:"username" yaml:"username" ini:"username"`
