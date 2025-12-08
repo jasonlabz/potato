@@ -47,7 +47,7 @@ type Config struct {
 func init() {
 	config := configx.GetConfig()
 	if config.Redis.Enable {
-		err := InitRedisClient(&Config{
+		op, err := NewRedisOperator(&Config{
 			ClientName:       config.Redis.ClientName,
 			MasterName:       config.Redis.MasterName,
 			Addrs:            config.Redis.Endpoints,
@@ -62,6 +62,7 @@ func init() {
 			SentinelPassword: config.Redis.SentinelPassword,
 		})
 		if err == nil {
+			operator = op
 			return
 		}
 		zapx.GetLogger().WithError(err).Error(context.Background(), "init redis Client error")
@@ -73,15 +74,6 @@ func init() {
 
 func GetRedisOperator() *RedisOperator {
 	return operator
-}
-
-func InitRedisClient(config *Config) error {
-	var err error
-	operator, err = NewRedisOperator(config)
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 func (c *Config) Validate() {

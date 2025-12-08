@@ -57,7 +57,7 @@ type Database struct {
 
 	Host            string `mapstructure:"host" json:"host" yaml:"host" ini:"host"`
 	Port            int    `mapstructure:"port" json:"port" yaml:"port" ini:"port"`
-	Username        string `mapstructure:"username" json:"user" yaml:"username" ini:"username"`
+	Username        string `mapstructure:"username" json:"username" yaml:"username" ini:"username"`
 	Password        string `mapstructure:"password" json:"password" yaml:"password" ini:"password"`
 	Database        string `mapstructure:"database" json:"database" yaml:"database" ini:"database"`
 	Args            []ARG  `mapstructure:"args" json:"args" yaml:"args" ini:"args"`
@@ -116,23 +116,22 @@ type MongodbConf struct {
 }
 
 type RabbitMQConf struct {
-	Enable      bool      `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"`
-	Strict      bool      `mapstructure:"strict" json:"strict" yaml:"strict" ini:"strict"`
-	Host        string    `mapstructure:"host" json:"host" yaml:"host" ini:"host"`
-	Port        int       `mapstructure:"port" json:"port" yaml:"port" ini:"port"`
-	Username    string    `mapstructure:"username" json:"username" yaml:"username" ini:"username"`
-	Password    string    `mapstructure:"password" json:"password" yaml:"password" ini:"password"`
-	LimitSwitch bool      `mapstructure:"limit_switch" json:"limit_switch" yaml:"limit_switch" ini:"limit_switch"`
-	LimitConf   LimitConf `mapstructure:"limit_conf" json:"limit_conf" yaml:"limit_conf" ini:"limit_conf"`
+	Enable    bool      `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"`
+	Strict    bool      `mapstructure:"strict" json:"strict" yaml:"strict" ini:"strict"`
+	Host      string    `mapstructure:"host" json:"host" yaml:"host" ini:"host"`
+	Port      int       `mapstructure:"port" json:"port" yaml:"port" ini:"port"`
+	Username  string    `mapstructure:"username" json:"username" yaml:"username" ini:"username"`
+	Password  string    `mapstructure:"password" json:"password" yaml:"password" ini:"password"`
+	LimitConf LimitConf `mapstructure:"limit_conf" json:"limit_conf" yaml:"limit_conf" ini:"limit_conf"`
 }
 
 type LimitConf struct {
-	Enable          bool `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"`
-	AttemptTimes    int  `mapstructure:"attempt_times" json:"attempt_times" yaml:"attempt_times" ini:"attempt_times"`
-	RetryTimeSecond int  `mapstructure:"retry_time_second" json:"retry_time_second" yaml:"retry_time_second" ini:"retry_time_second"`
-	PrefetchCount   int  `mapstructure:"prefetch_count" json:"prefetch_count" yaml:"prefetch_count" ini:"prefetch_count"`
-	Timeout         int  `mapstructure:"timeout" json:"timeout" yaml:"timeout" ini:"timeout"`
-	QueueLimit      int  `mapstructure:"queue_limit" json:"queue_limit" yaml:"queue_limit" ini:"queue_limit"`
+	Enable        bool  `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"`
+	AttemptTimes  int   `mapstructure:"attempt_times" json:"attempt_times" yaml:"attempt_times" ini:"attempt_times"`
+	RetryWaitTime int64 `mapstructure:"retry_wait_time" json:"retry_wait_time" yaml:"retry_wait_time" ini:"retry_wait_time"`
+	PrefetchCount int   `mapstructure:"prefetch_count" json:"prefetch_count" yaml:"prefetch_count" ini:"prefetch_count"`
+	Timeout       int64 `mapstructure:"timeout" json:"timeout" yaml:"timeout" ini:"timeout"`
+	QueueLimit    int   `mapstructure:"queue_limit" json:"queue_limit" yaml:"queue_limit" ini:"queue_limit"`
 }
 
 // ServerConfig 新增的配置结构体

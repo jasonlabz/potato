@@ -44,7 +44,7 @@ func init() {
 			zapx.GetLogger().WithError(err).Error(context.Background(), "copy rmq config error, skipping ...")
 			return
 		}
-		err = InitRabbitMQOperator(mqConf)
+		operator, err = NewRabbitMQOperator(mqConf)
 		if err == nil {
 			return
 		}
@@ -59,18 +59,13 @@ func genUUID() string {
 	return uuid.NewString()
 }
 
-// InitRabbitMQOperator 负责初始化全局变量operator
-func InitRabbitMQOperator(config *MQConfig) (err error) {
-	operator, err = NewRabbitMQOperator(config)
-	return
-}
-
 const (
 	DefaultTimeOut           = 2 * time.Second
 	DefaultRetryWaitTimes    = 2 * time.Second
 	DefaultConsumeRetryTimes = 3 * time.Second
+	DefaultRetryTimes        = 3
+	DefaultPrefetchCount     = 5
 	Closed                   = 1
-	RetryTimes               = 3
 )
 
 type ExchangeType string
@@ -83,20 +78,19 @@ const (
 
 // MQConfig 定义队列连接信息
 type MQConfig struct {
-	Username    string    `json:"username"` // 用户
-	Password    string    `json:"password"` // 密码
-	Host        string    `json:"host"`     // 服务地址
-	Port        int       `json:"port"`     // 端口
-	LimitSwitch bool      `json:"limit_switch"`
-	LimitConf   LimitConf `json:"limit_conf"`
+	Username  string    `json:"username"` // 用户
+	Password  string    `json:"password"` // 密码
+	Host      string    `json:"host"`     // 服务地址
+	Port      int       `json:"port"`     // 端口
+	LimitConf LimitConf `json:"limit_conf"`
 }
 
 type LimitConf struct {
-	AttemptTimes    int `json:"attempt_times"`
-	RetryTimeSecond int `json:"retry_time_second"`
-	PrefetchCount   int `json:"prefetch_count"`
-	Timeout         int `json:"timeout"`
-	QueueLimit      int `json:"queue_limit"`
+	AttemptTimes  int   `json:"attempt_times"`
+	RetryWaitTime int64 `json:"retry_wait_time"`
+	PrefetchCount int   `json:"prefetch_count"`
+	Timeout       int64 `json:"timeout"`
+	QueueLimit    int   `json:"queue_limit"`
 }
 
 // QueueLockManager 队列锁管理器，确保同一队列的并发操作安全
@@ -150,6 +144,18 @@ func (c *MQConfig) Validate() error {
 	}
 	if c.Port == 0 {
 		return errors.New("port is empty")
+	}
+	if c.LimitConf.AttemptTimes == 0 {
+		c.LimitConf.AttemptTimes = DefaultRetryTimes
+	}
+	if c.LimitConf.RetryWaitTime == 0 {
+		c.LimitConf.RetryWaitTime = int64(DefaultRetryWaitTimes) / 1000
+	}
+	if c.LimitConf.Timeout == 0 {
+		c.LimitConf.Timeout = int64(DefaultTimeOut) / 1000
+	}
+	if c.LimitConf.PrefetchCount == 0 {
+		c.LimitConf.PrefetchCount = DefaultPrefetchCount
 	}
 	return nil
 }
@@ -352,11 +358,11 @@ func (r *RabbitMQOperator) activateChannel(object *pool.PooledObject) error {
 
 // connect 建立 RabbitMQ 连接
 func (r *RabbitMQOperator) connect(ctx context.Context) (err error) {
-	ticker := time.NewTicker(DefaultRetryWaitTimes)
+	ticker := time.NewTicker(time.Duration(r.config.LimitConf.RetryWaitTime) * 1000)
 	defer ticker.Stop()
 
 	// 重试连接
-	for i := 0; i < RetryTimes; i++ {
+	for i := 0; i < r.config.LimitConf.AttemptTimes; i++ {
 		r.client.conn, err = amqp.DialTLS(r.config.addr(), &tls.Config{InsecureSkipVerify: true})
 		if err == nil {
 			break
@@ -367,7 +373,7 @@ func (r *RabbitMQOperator) connect(ctx context.Context) (err error) {
 	}
 
 	if err != nil {
-		return fmt.Errorf("failed to connect after %d attempts: %w", RetryTimes, err)
+		return fmt.Errorf("failed to connect after %d attempts: %w", r.config.LimitConf.AttemptTimes, err)
 	}
 
 	// 设置连接关闭通知
@@ -383,7 +389,7 @@ func (r *RabbitMQOperator) connect(ctx context.Context) (err error) {
 func (r *RabbitMQOperator) tryReConnect(daemon bool) (connected bool, err error) {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGKILL, syscall.SIGTERM)
-	ticker := time.NewTicker(DefaultRetryWaitTimes)
+	ticker := time.NewTicker(time.Duration(r.config.LimitConf.RetryWaitTime) * 1000)
 	defer ticker.Stop()
 
 	var count int
@@ -416,7 +422,7 @@ func (r *RabbitMQOperator) tryReConnect(daemon bool) (connected bool, err error)
 			// 非守护模式下的重试逻辑
 			if !daemon {
 				count++
-				if count >= RetryTimes {
+				if count >= r.config.LimitConf.AttemptTimes {
 					return false, err
 				}
 			}
@@ -704,11 +710,11 @@ func (r *RabbitMQOperator) pushWithRetry(ctx context.Context, body PushBodyInter
 		body.SetMessageId(strings.ReplaceAll(uuid.NewString(), "-", ""))
 	}
 
-	ticker := time.NewTicker(DefaultRetryWaitTimes)
+	ticker := time.NewTicker(time.Duration(r.config.LimitConf.RetryWaitTime) * 1000)
 	defer ticker.Stop()
 
 	// 重试逻辑
-	for i := 0; i < RetryTimes; i++ {
+	for i := 0; i < r.config.LimitConf.AttemptTimes; i++ {
 		if atomic.LoadInt32(&r.closed) == Closed {
 			r.l.Error(ctx, "rabbitmq connection is closed, push cancel", "msg_id", body.GetMessageId())
 			return errors.New("connection is closed")
@@ -716,7 +722,7 @@ func (r *RabbitMQOperator) pushWithRetry(ctx context.Context, body PushBodyInter
 
 		// 执行推送
 		if pushErr := pushFunc(ctx, body, opts...); pushErr != nil {
-			r.l.Warn(ctx, fmt.Sprintf("[push] Push failed after %f seconds, retrying...", DefaultRetryWaitTimes.Seconds()),
+			r.l.Warn(ctx, fmt.Sprintf("[push] Push failed after %f seconds, retrying...", (time.Duration(r.config.LimitConf.RetryWaitTime)*1000).Seconds()),
 				"err", pushErr.Error(), "msg_id", body.GetMessageId(), "retry_count", i+1)
 
 			select {
@@ -735,7 +741,7 @@ func (r *RabbitMQOperator) pushWithRetry(ctx context.Context, body PushBodyInter
 
 	r.l.Info(ctx, fmt.Sprintf("[push] Push msg failed. msg ---> %s", string(body.GetBody())),
 		"msg_id", body.GetMessageId())
-	return fmt.Errorf("push failed after %d retries", RetryTimes)
+	return fmt.Errorf("push failed after %d retries", r.config.LimitConf.AttemptTimes)
 }
 
 // createPublishingMessage 创建发布消息的通用方法
@@ -979,7 +985,7 @@ func (r *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-c
 		sig := make(chan os.Signal, 1)
 		signal.Notify(sig, syscall.SIGINT, syscall.SIGKILL)
 
-		ticker := time.NewTicker(DefaultRetryWaitTimes)
+		ticker := time.NewTicker(time.Duration(r.config.LimitConf.RetryWaitTime) * 1000)
 		defer ticker.Stop()
 		var innerErr error
 		var innerConsume bool
@@ -1077,7 +1083,7 @@ func (r *RabbitMQOperator) consumeCore(ctx context.Context, param *ConsumeBody, 
 
 	// 设置预取计数
 	if param.FetchCount == 0 {
-		param.FetchCount = 1
+		param.FetchCount = r.config.LimitConf.PrefetchCount
 	}
 
 	// 声明队列
@@ -1406,11 +1412,10 @@ func (r *RabbitMQOperator) Close(ctx context.Context) (err error) {
 	return
 }
 
-// Ack 确认消息
-// Ack 确认消息 - 简化版本，避免通道竞态条件
+// Ack 确认消息 - 避免通道竞态条件
 func (r *RabbitMQOperator) Ack(ctx context.Context, msg amqp.Delivery) {
 	// 使用带缓冲的通道和上下文控制
-	ctx, cancel := context.WithTimeout(ctx, DefaultRetryWaitTimes)
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(r.config.LimitConf.RetryWaitTime)*1000)
 	defer cancel()
 
 	resultCh := make(chan error, 1)
@@ -1435,9 +1440,8 @@ func (r *RabbitMQOperator) Ack(ctx context.Context, msg amqp.Delivery) {
 }
 
 // Nack 拒绝消息
-// Nack 拒绝消息 - 简化版本
 func (r *RabbitMQOperator) Nack(ctx context.Context, msg amqp.Delivery) {
-	ctx, cancel := context.WithTimeout(ctx, DefaultRetryWaitTimes)
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(r.config.LimitConf.RetryWaitTime)*1000)
 	defer cancel()
 
 	resultCh := make(chan error, 1)

@@ -28,7 +28,7 @@ type Config struct {
 
 	Host     string `mapstructure:"host" json:"host"`
 	Port     int    `mapstructure:"port" json:"port"`
-	User     string `mapstructure:"user" json:"user"`
+	User     string `mapstructure:"username" json:"username"`
 	Password string `mapstructure:"password" json:"password"`
 	Database string `mapstructure:"database" json:"database"`
 	Args     []ARG  `mapstructure:"args" json:"args"`
