@@ -61,6 +61,7 @@ type Database struct {
 	Charset         string       `mapstructure:"charset" json:"charset" yaml:"charset" ini:"charset"`
 	MaxIdleConn     int          `mapstructure:"max_idle_conn" json:"max_idle_conn" yaml:"max_idle_conn" ini:"max_idle_conn"`
 	MaxOpenConn     int          `mapstructure:"max_open_conn" json:"max_open_conn" yaml:"max_open_conn" ini:"max_open_conn"`
+	ConnMaxIdleTime int64        `mapstructure:"conn_max_idle_time" json:"conn_max_idle_time"` // 连接最大空闲时间
 	ConnMaxLifeTime int64        `mapstructure:"conn_max_life_time" json:"conn_max_life_time" yaml:"conn_max_life_time" ini:"conn_max_life_time"`
 }
 
