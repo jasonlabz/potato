@@ -52,19 +52,26 @@ type Database struct {
 	Enable  bool   `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"`
 	Strict  bool   `mapstructure:"strict" json:"strict" yaml:"strict" ini:"strict"`
 	DBType  string `mapstructure:"db_type" json:"db_type" yaml:"db_type" ini:"db_type"`
-	DSN     string `mapstructure:"dsn" json:"dsn" yaml:"dsn" ini:"dsn"`
 	LogMode string `mapstructure:"log_mode" json:"log_mode" yaml:"log_mode" ini:"log_mode"`
 
-	Host            string `mapstructure:"host" json:"host" yaml:"host" ini:"host"`
-	Port            int    `mapstructure:"port" json:"port" yaml:"port" ini:"port"`
-	Username        string `mapstructure:"username" json:"username" yaml:"username" ini:"username"`
-	Password        string `mapstructure:"password" json:"password" yaml:"password" ini:"password"`
-	Database        string `mapstructure:"database" json:"database" yaml:"database" ini:"database"`
-	Args            []ARG  `mapstructure:"args" json:"args" yaml:"args" ini:"args"`
-	Charset         string `mapstructure:"charset" json:"charset" yaml:"charset" ini:"charset"`
-	MaxIdleConn     int    `mapstructure:"max_idle_conn" json:"max_idle_conn" yaml:"max_idle_conn" ini:"max_idle_conn"`
-	MaxOpenConn     int    `mapstructure:"max_open_conn" json:"max_open_conn" yaml:"max_open_conn" ini:"max_open_conn"`
-	ConnMaxLifeTime int64  `mapstructure:"conn_max_life_time" json:"conn_max_life_time" yaml:"conn_max_life_time" ini:"conn_max_life_time"`
+	Connection
+	Masters         []Connection `mapstructure:"masters" json:"masters" yaml:"masters" ini:"masters"`
+	Replicas        []Connection `mapstructure:"replicas" json:"replicas" yaml:"replicas" ini:"replicas"`
+	Args            []ARG        `mapstructure:"args" json:"args" yaml:"args" ini:"args"`
+	Charset         string       `mapstructure:"charset" json:"charset" yaml:"charset" ini:"charset"`
+	MaxIdleConn     int          `mapstructure:"max_idle_conn" json:"max_idle_conn" yaml:"max_idle_conn" ini:"max_idle_conn"`
+	MaxOpenConn     int          `mapstructure:"max_open_conn" json:"max_open_conn" yaml:"max_open_conn" ini:"max_open_conn"`
+	ConnMaxLifeTime int64        `mapstructure:"conn_max_life_time" json:"conn_max_life_time" yaml:"conn_max_life_time" ini:"conn_max_life_time"`
+}
+
+type Connection struct {
+	DSN string `mapstructure:"dsn" json:"dsn" yaml:"dsn" ini:"dsn"`
+
+	Host     string `mapstructure:"host" json:"host" yaml:"host" ini:"host"`
+	Port     int    `mapstructure:"port" json:"port" yaml:"port" ini:"port"`
+	Username string `mapstructure:"username" json:"username" yaml:"username" ini:"username"`
+	Password string `mapstructure:"password" json:"password" yaml:"password" ini:"password"`
+	Database string `mapstructure:"database" json:"database" yaml:"database" ini:"database"`
 }
 
 type ARG struct {
