@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	dm "github.com/jasonlabz/gorm-dm-driver"
 	"github.com/jasonlabz/oracle"
@@ -13,6 +14,7 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlserver"
 	"gorm.io/gorm"
+	"gorm.io/plugin/dbresolver"
 
 	"github.com/jasonlabz/potato/log"
 )
@@ -54,50 +56,34 @@ func InitConfig(config *Config) (db *gorm.DB, err error) {
 		return nil, errors.New("no db config")
 	}
 
-	if config.DSN == "" &&
-		config.GenDSN() == "" {
+	dsn, replicas := config.extractDSN()
+	if dsn == "" {
 		return nil, errors.New("no db dsn")
 	}
 
 	if config.DBName == "" {
-		config.DBName = config.GenDSN()
+		config.DBName = dsn
 	}
 
 	dbLoaded, ok := dbMap.Load(config.DBName)
 	if ok {
 		return dbLoaded.(*gorm.DB), nil
 	}
-
-	var dialect gorm.Dialector
-	switch config.DBType {
-	case DatabaseTypeMySQL:
-		dialect = mysql.Open(config.DSN)
-	case DatabaseTypePostgres:
-		dialect = postgres.Open(config.DSN)
-	case DatabaseTypeSqlserver:
-		dialect = sqlserver.Open(config.DSN)
-	case DatabaseTypeOracle:
-		dialect = oracle.Open(config.DSN)
-	case DatabaseTypeSQLite:
-		dialect = sqlite.Open(config.DSN)
-	case DatabaseTypeDM:
-		dialect = dm.Open(config.DSN)
-	default:
+	dialector := getDialector(config.DBType, dsn)
+	if dialector == nil {
 		return nil, fmt.Errorf("unsupported dbType: %s", string(config.DBType))
 	}
-
 	if config.Logger == nil {
 		config.Logger = LoggerAdapter(log.GetLogger(zap.AddCallerSkip(3)))
 	}
 
-	dbOpened, err := gorm.Open(dialect, &gorm.Config{
+	gConfig := &gorm.Config{
 		Logger: config.Logger.LogMode(config.GetLogMode()),
-	})
-
+	}
+	dbOpened, err := gorm.Open(dialector, gConfig)
 	if err != nil {
 		return nil, err
 	}
-
 	sqlDB, err := dbOpened.DB()
 	if err != nil {
 		return nil, err
@@ -111,13 +97,57 @@ func InitConfig(config *Config) (db *gorm.DB, err error) {
 	if config.ConnMaxLifeTime == 0 {
 		config.ConnMaxLifeTime = defaultConfig.ConnMaxLifeTime
 	}
+	if config.ConnMaxIdleTime == 0 {
+		config.ConnMaxIdleTime = defaultConfig.ConnMaxIdleTime
+	}
 	sqlDB.SetMaxOpenConns(config.MaxOpenConn)
+	sqlDB.SetConnMaxIdleTime(time.Duration(config.ConnMaxIdleTime) * time.Millisecond)
 	sqlDB.SetMaxIdleConns(config.MaxIdleConn)
-	sqlDB.SetConnMaxLifetime(config.ConnMaxLifeTime)
+	sqlDB.SetConnMaxLifetime(time.Duration(config.ConnMaxLifeTime) * time.Millisecond)
 
+	if len(replicas[0]) > 0 && len(replicas[1]) > 0 {
+		var sourceDialectors []gorm.Dialector
+		var replicaDialectors []gorm.Dialector
+		for _, replicaDSN := range replicas[0] {
+			sourceDialectors = append(sourceDialectors, getDialector(config.DBType, replicaDSN))
+		}
+		for _, replicaDSN := range replicas[1] {
+			replicaDialectors = append(replicaDialectors, getDialector(config.DBType, replicaDSN))
+		}
+
+		dbOpened.Use(dbresolver.Register(dbresolver.Config{
+			Sources:  sourceDialectors,
+			Replicas: replicaDialectors,
+			Policy:   dbresolver.RandomPolicy{},
+		}).SetConnMaxIdleTime(time.Duration(config.ConnMaxIdleTime) * time.Millisecond).
+			SetConnMaxLifetime(time.Duration(config.ConnMaxLifeTime) * time.Millisecond).
+			SetMaxIdleConns(config.MaxIdleConn).
+			SetMaxOpenConns(config.MaxOpenConn))
+	}
 	// Store database
 	dbMap.Store(config.DBName, dbOpened)
 	return dbOpened, nil
+}
+
+func getDialector(dbType DatabaseType, dsn string) gorm.Dialector {
+	var dialect gorm.Dialector
+	switch dbType {
+	case DatabaseTypeMySQL:
+		dialect = mysql.Open(dsn)
+	case DatabaseTypePostgres:
+		dialect = postgres.Open(dsn)
+	case DatabaseTypeSqlserver:
+		dialect = sqlserver.Open(dsn)
+	case DatabaseTypeOracle:
+		dialect = oracle.Open(dsn)
+	case DatabaseTypeSQLite:
+		dialect = sqlite.Open(dsn)
+	case DatabaseTypeDM:
+		dialect = dm.Open(dsn)
+	default:
+		return nil
+	}
+	return dialect
 }
 
 func GetDB(name string) (*gorm.DB, error) {
