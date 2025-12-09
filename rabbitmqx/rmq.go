@@ -29,9 +29,6 @@ var operator *RabbitMQOperator
 
 // GetRabbitMQOperator 获取全局 RabbitMQ 操作器实例
 func GetRabbitMQOperator() *RabbitMQOperator {
-	if operator == nil {
-		panic("rabbitmq has not init")
-	}
 	return operator
 }
 

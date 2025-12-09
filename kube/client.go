@@ -10,14 +10,17 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/jasonlabz/potato/log"
 	"github.com/jasonlabz/potato/utils"
 )
 
 var client *kubernetes.Clientset
 
 func init() {
-	client = initClient()
+	var err error
+	client, err = initClient()
+	if err != nil {
+		panic(err)
+	}
 }
 
 func GetKubeClient() *kubernetes.Clientset {
@@ -25,41 +28,37 @@ func GetKubeClient() *kubernetes.Clientset {
 }
 
 // k8sRestConfig 读取kubeconfig 配置文件
-func k8sRestConfig() *rest.Config {
+func k8sRestConfig() (*rest.Config, error) {
 	kubeConfigFilePath := filepath.Join(os.Getenv("HOME"), ".kube", "config")
 	if !utils.IsExist(kubeConfigFilePath) {
 		kubeConfigFilePath = ""
 	}
-	config, err := clientcmd.BuildConfigFromFlags("", kubeConfigFilePath)
-	if err != nil {
-		log.GetLogger().WithError(err).Fatal("load kube config fail")
-	}
-	return config
+	return clientcmd.BuildConfigFromFlags("", kubeConfigFilePath)
 }
 
 // initClient 初始化 clientSet
-func initClient() *kubernetes.Clientset {
-	c, err := kubernetes.NewForConfig(k8sRestConfig())
-
+func initClient() (*kubernetes.Clientset, error) {
+	config, err := k8sRestConfig()
 	if err != nil {
-		log.GetLogger().WithError(err).Fatal("init kube clientSet fail")
+		return nil, err
 	}
-
-	return c
+	return kubernetes.NewForConfig(config)
 }
 
 // initDynamicClient 初始化 dynamicClient
-func initDynamicClient() dynamic.Interface {
-	c, err := dynamic.NewForConfig(k8sRestConfig())
-
+func initDynamicClient() (dynamic.Interface, error) {
+	config, err := k8sRestConfig()
 	if err != nil {
-		log.GetLogger().WithError(err).Fatal("init kube dynamicClient fail")
+		return nil, err
 	}
-
-	return c
+	return dynamic.NewForConfig(config)
 }
 
 // initDiscoveryClient 初始化 DiscoveryClient
-func initDiscoveryClient() *discovery.DiscoveryClient {
-	return discovery.NewDiscoveryClient(initClient().RESTClient())
+func initDiscoveryClient() (*discovery.DiscoveryClient, error) {
+	clientset, err := initClient()
+	if err != nil {
+		return nil, err
+	}
+	return discovery.NewDiscoveryClient(clientset.RESTClient()), nil
 }
