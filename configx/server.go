@@ -47,14 +47,14 @@ type KafkaConfig struct {
 	SaslPassword     string   `mapstructure:"sasl_password" json:"sasl_password" yaml:"sasl_password" ini:"sasl_password"`
 }
 
-// Database 连接配置
-type Database struct {
+// DataSource 连接配置
+type DataSource struct {
 	Enable  bool   `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"`
 	Strict  bool   `mapstructure:"strict" json:"strict" yaml:"strict" ini:"strict"`
 	DBType  string `mapstructure:"db_type" json:"db_type" yaml:"db_type" ini:"db_type"`
 	LogMode string `mapstructure:"log_mode" json:"log_mode" yaml:"log_mode" ini:"log_mode"`
 
-	Connection
+	Connection      `mapstructure:",squash"`
 	Masters         []Connection `mapstructure:"masters" json:"masters" yaml:"masters" ini:"masters"`
 	Replicas        []Connection `mapstructure:"replicas" json:"replicas" yaml:"replicas" ini:"replicas"`
 	Args            []ARG        `mapstructure:"args" json:"args" yaml:"args" ini:"args"`
@@ -200,7 +200,7 @@ type Application struct {
 // 更新主配置结构体
 type Config struct {
 	Application Application    `mapstructure:"application" json:"application" yaml:"application" ini:"application"`
-	Database    Database       `mapstructure:"database" json:"database" yaml:"database" ini:"database"`
+	DataSource  DataSource     `mapstructure:"datasource" json:"datasource" yaml:"datasource" ini:"datasource"`
 	Crypto      []CryptoConfig `mapstructure:"crypto" json:"crypto" yaml:"crypto" ini:"crypto"`
 	Kafka       KafkaConfig    `mapstructure:"kafka" json:"kafka" yaml:"kafka" ini:"kafka"`
 	Rabbitmq    RabbitMQConf   `mapstructure:"rabbitmq" json:"rabbitmq" yaml:"rabbitmq" ini:"rabbitmq"`

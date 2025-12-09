@@ -2,8 +2,6 @@ module github.com/jasonlabz/potato
 
 go 1.24.0
 
-toolchain go1.24.10
-
 require (
 	github.com/BurntSushi/toml v1.4.0
 	github.com/axgle/mahonia v0.0.0-20180208002826-3358181d7394
@@ -39,7 +37,8 @@ require (
 	gorm.io/driver/mysql v1.5.7
 	gorm.io/driver/postgres v1.5.9
 	gorm.io/driver/sqlserver v1.5.3
-	gorm.io/gorm v1.25.12
+	gorm.io/gorm v1.26.0
+	gorm.io/plugin/dbresolver v1.6.2
 	k8s.io/api v0.29.0
 	k8s.io/apimachinery v0.29.0
 	k8s.io/client-go v0.29.0

@@ -3,7 +3,7 @@
 
 gormx默认会读取conf/application.yaml下的配置：
 ```yaml
-database:
+datasource:
   enable: false                # 是否启用
   strict: true                 # 是否为下游必需，如为true则会启动时panic所遇error   
   db_type: "mysql"             # 数据库类型  "mysql|postgres|sqlserver|oracle|sqlite|dm"
@@ -14,6 +14,19 @@ database:
   username: root
   password: "*******"
   database: dbname
+  # 主从配置
+#  masters:
+#    - host: "*******"
+#      port: 8306
+#      username: root
+#      password: "*******"
+#      database: dbname
+#  replicas:
+#    - host: "*******"
+#      port: 8306
+#      username: root
+#      password: "*******"
+#      database: dbname
   args:                      # 额外参数    
     - name: charset
       value: utf8mb4
