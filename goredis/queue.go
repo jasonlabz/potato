@@ -2,6 +2,7 @@ package goredis
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -17,8 +18,8 @@ import (
 
 const (
 	CacheKeyWithDelayQueueKey = "potato_delay_queues"
-	DefaultRetryTimes         = 5 * time.Second
-	DefaultPollingTimes       = 100 * time.Millisecond
+	DefaultRetryTimeout       = 5 * time.Second
+	DefaultPollingTimeout     = 1000 * time.Millisecond
 
 	DelayQueueTimeoutTemplate = "potato_delay_queue_timeout:%s"
 
@@ -50,74 +51,190 @@ func (op *RedisOperator) Watch(ctx context.Context, fn func(*redis.Tx) error, ke
 
 /**********************************************************  延迟队列 ****************************************************************/
 // tryMigrationDaemon 将到期的PublishBody迁移到ready队列等待执行
+// tryMigrationDaemon 将到期的PublishBody迁移到ready队列等待执行
 func (op *RedisOperator) tryMigrationDaemon(ctx context.Context) {
 	defer handlePanic(ctx, op)
-	sig := make(chan os.Signal)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGKILL)
-	timer := time.NewTimer(DefaultPollingTimes)
-	defer timer.Stop()
-	var delayInit bool
-	var wg sync.WaitGroup
+
+	// 1. 信号处理优化：使用缓冲区并修正信号类型
+	sig := make(chan os.Signal, 1)                      // 添加缓冲区，避免信号丢失
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM) // SIGKILL无法被捕获
+	defer signal.Stop(sig)                              // 确保信号通知被清理
+
+	// 2. 使用Ticker替代Timer，因为这里是周期性任务
+	pollTicker := time.NewTicker(DefaultPollingTimeout)
+	defer pollTicker.Stop()
+
+	var (
+		delayInit    bool
+		retryBackoff = DefaultRetryTimeout
+		maxBackoff   = 2 * time.Minute
+	)
+
+	// 3. 初始化重试定时器
+	retryTimer := time.NewTimer(0) // 立即触发第一次初始化
+	defer retryTimer.Stop()
+
+	// 4. 并发控制：限制最大并发迁移数，避免goroutine爆炸
+	const maxConcurrentMigrations = 10
+	workerSem := make(chan struct{}, maxConcurrentMigrations)
 
 	for {
+		// 第一阶段：延迟队列初始化
 		if !delayInit {
-			members, getErr := op.SMembers(ctx, CacheKeyWithDelayQueueKey)
-			if getErr != nil {
-				op.logger().Error(ctx, "redis get delay queue key error",
-					"tag", "redis_delay_queue_method", "err", getErr.Error())
-				continue
+			select {
+			case <-retryTimer.C:
+				members, getErr := op.SMembers(ctx, CacheKeyWithDelayQueueKey)
+				if getErr != nil {
+					op.logger().Error(ctx, "redis get delay queue key error",
+						"tag", "redis_delay_queue_method", "err", getErr.Error())
+
+					// 指数退避重试，但有上限
+					retryBackoff *= 2
+					if retryBackoff > maxBackoff {
+						retryBackoff = maxBackoff
+					}
+					retryTimer.Reset(retryBackoff)
+					continue
+				}
+
+				// 初始化成功
+				for _, member := range members {
+					op.delayQueues.Store(member, true)
+				}
+				delayInit = true
+				retryBackoff = DefaultRetryTimeout // 重置退避时间
+
+				if len(members) > 0 {
+					op.logger().Info(ctx, "delay queues initialized",
+						"tag", "redis_delay_queue_method", "count", len(members))
+				}
+
+			case s := <-sig:
+				op.logger().Info(ctx, fmt.Sprintf("received signal: %v, exiting redis daemon...", s),
+					"tag", "redis_delay_queue_method")
+				return
+			case <-ctx.Done():
+				op.logger().Info(ctx, "context cancelled, exiting redis daemon",
+					"tag", "redis_delay_queue_method")
+				return
 			}
-			for _, member := range members {
-				op.delayQueues.Store(member, true)
-			}
-			delayInit = true
+			continue // 继续循环，进入主处理阶段
 		}
 
-		if atomic.LoadInt32(&op.closed) == Closed {
-			return
-		}
-
+		// 第二阶段：定期迁移处理
 		select {
+		case <-pollTicker.C:
+			if atomic.LoadInt32(&op.closed) == Closed {
+				op.logger().Info(ctx, "redis operator closed, exiting migration daemon",
+					"tag", "redis_delay_queue_method")
+				return
+			}
+
+			op.migrateExpiredBatches(ctx, workerSem)
+
 		case s := <-sig:
-			op.logger().Info(ctx, fmt.Sprintf("recived： %v, exiting redis daemon... ", s),
+			op.logger().Info(ctx, fmt.Sprintf("received signal: %v, exiting redis daemon...", s),
 				"tag", "redis_delay_queue_method")
 			return
-		case <-timer.C:
-			op.delayQueues.Range(func(key, value any) bool {
-				delayKey := key.(string)
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
-					delayQueueTimeout := fmt.Sprintf(DelayQueueTimeoutTemplate, delayKey)
-					migrateErr := op.migrateExpiredBody(ctx, delayQueueTimeout, delayKey)
-					if migrateErr != nil {
-						op.logger().Error(ctx, "migrate timeout message error: "+delayQueueTimeout+" -> "+delayKey,
-							"tag", "redis_delay_queue_method", "err", migrateErr.Error())
-						return
-					}
-				}()
-				return true
-			})
-			timer.Reset(DefaultPollingTimes)
+		case <-ctx.Done():
+			op.logger().Info(ctx, "context cancelled, exiting redis daemon",
+				"tag", "redis_delay_queue_method")
+			return
 		}
-		wg.Wait()
 	}
 }
 
-// migrateExpiredBody 执行Lua脚本
+// migrateExpiredBatches 批量迁移过期消息（优化并发控制）
+func (op *RedisOperator) migrateExpiredBatches(ctx context.Context, workerSem chan struct{}) {
+	var wg sync.WaitGroup
+
+	op.delayQueues.Range(func(key, value any) bool {
+		delayKey := key.(string)
+
+		// 获取worker槽位（限制并发）
+		select {
+		case workerSem <- struct{}{}:
+			wg.Add(1)
+			go func(queueKey string) {
+				defer wg.Done()
+				defer func() { <-workerSem }() // 释放worker槽位
+
+				op.migrateSingleQueue(ctx, queueKey)
+			}(delayKey)
+		default:
+			// worker池已满，跳过本次处理（可以记录日志）
+			// 这里保持静默，避免日志洪泛
+		}
+
+		return true
+	})
+
+	wg.Wait()
+}
+
+// migrateSingleQueue 迁移单个延迟队列（添加超时和错误处理）
+func (op *RedisOperator) migrateSingleQueue(ctx context.Context, delayKey string) {
+	// 为单个迁移操作设置超时，避免长时间阻塞
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	delayQueueTimeout := fmt.Sprintf(DelayQueueTimeoutTemplate, delayKey)
+
+	start := time.Now()
+	migrateErr := op.migrateExpiredBody(ctxWithTimeout, delayQueueTimeout, delayKey)
+	duration := time.Since(start)
+
+	if migrateErr != nil {
+		// 根据错误类型记录不同的日志级别
+		if errors.Is(ctxWithTimeout.Err(), context.DeadlineExceeded) {
+			op.logger().Warn(ctx, "migration timeout",
+				"tag", "redis_delay_queue_method",
+				"from", delayQueueTimeout,
+				"to", delayKey,
+				"duration", duration.String())
+		} else {
+			op.logger().Error(ctx, "migration failed",
+				"tag", "redis_delay_queue_method",
+				"from", delayQueueTimeout,
+				"to", delayKey,
+				"err", migrateErr.Error(),
+				"duration", duration.String())
+		}
+		return
+	}
+
+	// 记录慢查询
+	if duration > time.Second {
+		op.logger().Warn(ctx, "migration completed but took long time",
+			"tag", "redis_delay_queue_method",
+			"from", delayQueueTimeout,
+			"to", delayKey,
+			"duration", duration.String())
+	}
+}
+
+// migrateExpiredBody 执行Lua脚本（添加指标收集）
 func (op *RedisOperator) migrateExpiredBody(ctx context.Context, delayQueue, readyQueue string) (err error) {
 	currentTimeMillis := times.CurrentTimeMillis()
 	script := `
-	local expiredValues = redis.call("zrangebyscore", KEYS[1], '-inf', ARGV[1], 'limit', 0, ARGV[2])
-	if #expiredValues > 0 then 
-		redis.call('zrem', KEYS[1], unpack(expiredValues, 1, #expiredValues))
-		redis.call('rpush', KEYS[2], unpack(expiredValues, 1, #expiredValues))
-	end
-	return #expiredValues
+local expiredValues = redis.call("zrangebyscore", KEYS[1], '-inf', ARGV[1], 'limit', 0, ARGV[2])
+if #expiredValues > 0 then 
+    redis.call('zrem', KEYS[1], unpack(expiredValues, 1, #expiredValues))
+    redis.call('rpush', KEYS[2], unpack(expiredValues, 1, #expiredValues))
+end
+return #expiredValues
 `
-	res, err := op.client.Eval(ctx, script, []string{delayQueue, readyQueue}, []any{currentTimeMillis, 100}...).Result()
-	fmt.Println(res)
-	return
+	result, err := op.client.Eval(ctx, script, []string{delayQueue, readyQueue}, currentTimeMillis, 100).Result()
+
+	// 可选：记录迁移的消息数量
+	if err == nil {
+		if migratedCount, ok := result.(int64); ok && migratedCount > 0 {
+			// 可以在这里收集metrics
+			// op.metrics.recordMigratedMessages(migratedCount)
+		}
+	}
+
+	return err
 }
 
 // PushDelayMessage 往延迟队列推送消息

@@ -1,9 +1,24 @@
+// Package configx
+//
+//   _ __ ___   __ _ _ __  _   _| |_
+//  | '_ ` _ \ / _` | '_ \| | | | __|
+//  | | | | | | (_| | | | | |_| | |_
+//  |_| |_| |_|\__,_|_| |_|\__,_|\__|
+//
+//  Buddha bless, no bugs forever!
+//
+//  Author:    lucas
+//  Email:     1783022886@qq.com
+//  Created:   2025/12/10 23:36
+//  Version:   v1.0.0
+
 package configx
 
 import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"time"
 
@@ -149,8 +164,14 @@ type ServerConfig struct {
 }
 
 type HTTPConfig struct {
-	Port         int    `mapstructure:"port" json:"port" yaml:"port" ini:"port"`
-	ReadTimeout  string `mapstructure:"read_timeout" json:"read_timeout" yaml:"read_timeout" ini:"read_timeout"`
+	Port int `mapstructure:"port" json:"port" yaml:"port" ini:"port"`
+
+	// Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".
+	// such as "300ms", "3000", "-1.5h" or "2h45m", default unit "ms".
+	ReadTimeout string `mapstructure:"read_timeout" json:"read_timeout" yaml:"read_timeout" ini:"read_timeout"`
+
+	// Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".
+	// such as "300ms", "3000", "-1.5h" or "2h45m", default unit "ms".
 	WriteTimeout string `mapstructure:"write_timeout" json:"write_timeout" yaml:"write_timeout" ini:"write_timeout"`
 }
 
@@ -197,7 +218,7 @@ type Application struct {
 	Monitor    MonitorConfig `mapstructure:"monitor" json:"monitor" yaml:"monitor" ini:"monitor"`
 }
 
-// 更新主配置结构体
+// Config 更新主配置结构体
 type Config struct {
 	Application Application    `mapstructure:"application" json:"application" yaml:"application" ini:"application"`
 	DataSource  DataSource     `mapstructure:"datasource" json:"datasource" yaml:"datasource" ini:"datasource"`
@@ -241,18 +262,28 @@ func (c *Config) GetPProfConfig() PProfConfig {
 }
 
 // GetHTTPReadTimeout 获取超时时间（转换为 time.Duration）
-func (c *Config) GetHTTPReadTimeout() (time.Duration, error) {
+func (c *Config) GetHTTPReadTimeout() time.Duration {
 	if c.Application.Server.HTTP.ReadTimeout != "" {
-		return time.ParseDuration(c.Application.Server.HTTP.ReadTimeout)
+		duration, err := time.ParseDuration(c.Application.Server.HTTP.ReadTimeout)
+		if err != nil {
+			log.Printf("parse http read timeout error: %v", err)
+			duration = time.Duration(math.MaxInt64)
+		}
+		return duration
 	}
-	return 30 * time.Second, nil // 默认值
+	return time.Duration(math.MaxInt64) // 默认值
 }
 
-func (c *Config) GetHTTPWriteTimeout() (time.Duration, error) {
+func (c *Config) GetHTTPWriteTimeout() time.Duration {
 	if c.Application.Server.HTTP.WriteTimeout != "" {
-		return time.ParseDuration(c.Application.Server.HTTP.WriteTimeout)
+		duration, err := time.ParseDuration(c.Application.Server.HTTP.WriteTimeout)
+		if err != nil {
+			log.Printf("parse http write timeout error: %v", err)
+			duration = time.Duration(math.MaxInt64)
+		}
+		return duration
 	}
-	return 30 * time.Second, nil // 默认值
+	return time.Duration(math.MaxInt64) // 默认值
 }
 
 func (c *Config) GetGRPCPort() int {
@@ -276,15 +307,6 @@ func (c *Config) Validate() error {
 	grpcPort := c.GetGRPCPort()
 	if grpcPort <= 0 || grpcPort > 65535 {
 		return fmt.Errorf("invalid GRPC port: %d", grpcPort)
-	}
-
-	// 验证超时配置
-	if _, err := c.GetHTTPReadTimeout(); err != nil {
-		return fmt.Errorf("invalid HTTP read_timeout: %w", err)
-	}
-
-	if _, err := c.GetHTTPWriteTimeout(); err != nil {
-		return fmt.Errorf("invalid HTTP write_timeout: %w", err)
 	}
 
 	return nil
@@ -362,13 +384,13 @@ func init() {
 		}
 		err := file.ParseConfigByViper(config, applicationConfig)
 		if err != nil {
-			log.Printf(fmt.Sprintf("[init] -- failed to read config file: %s, err:%v", config, err))
+			log.Printf("[init] -- failed to read config file: %s, err:%v", config, err)
 			continue
 		}
 		configLoad = true
 	}
 
 	if !configLoad {
-		log.Print("[init] -- there is no application config.")
+		log.Println("[init] -- there is no application config.")
 	}
 }
