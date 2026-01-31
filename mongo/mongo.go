@@ -150,7 +150,7 @@ func NewMongoOperator(ctx context.Context, config *Config) (*MongoOperator, erro
 }
 
 type MongoRepository[T any] struct {
-	client     *mongo.Client
+	op         *MongoOperator
 	dbName     string
 	collName   string
 	collection *mongo.Collection
@@ -158,12 +158,12 @@ type MongoRepository[T any] struct {
 }
 
 // NewRepository 创建新的仓库
-func NewRepository[T any](client *mongo.Client, dbName, collName string, opts ...RepositoryOption[T]) *MongoRepository[T] {
+func NewRepository[T any](op *MongoOperator, dbName, collName string, opts ...RepositoryOption[T]) *MongoRepository[T] {
 	repo := &MongoRepository[T]{
-		client:     client,
+		op:         op,
 		dbName:     dbName,
 		collName:   collName,
-		collection: client.Database(dbName).Collection(collName),
+		collection: op.cli.Database(dbName).Collection(collName),
 		logger:     log.GetLogger(),
 	}
 
@@ -187,7 +187,7 @@ func WithLogger[T any](logger *log.LoggerWrapper) RepositoryOption[T] {
 // WithCollectionOptions 设置集合选项
 func WithCollectionOptions[T any](opts ...*options.CollectionOptions) RepositoryOption[T] {
 	return func(r *MongoRepository[T]) {
-		r.collection = r.client.Database(r.dbName).Collection(r.collName, opts...)
+		r.collection = r.op.cli.Database(r.dbName).Collection(r.collName, opts...)
 	}
 }
 
@@ -507,7 +507,7 @@ func (r *MongoRepository[T]) ListIndexes(ctx context.Context, opts ...*options.L
 
 // WithTransaction 事务操作
 func (r *MongoRepository[T]) WithTransaction(ctx context.Context, fn func(session mongo.SessionContext) error, opts *options.TransactionOptions) error {
-	session, err := r.client.StartSession()
+	session, err := r.op.cli.StartSession()
 	if err != nil {
 		return errors.Wrap(err, "start session failed")
 	}
@@ -527,7 +527,7 @@ func (r *MongoRepository[T]) WithTransaction(ctx context.Context, fn func(sessio
 
 // Transaction 事务操作（带返回值）
 func (r *MongoRepository[T]) Transaction(ctx context.Context, fn func(session mongo.SessionContext) (any, error), opts *options.TransactionOptions) (any, error) {
-	session, err := r.client.StartSession()
+	session, err := r.op.cli.StartSession()
 	if err != nil {
 		return nil, errors.Wrap(err, "start session failed")
 	}
@@ -570,12 +570,12 @@ func (r *MongoRepository[T]) GetCollection() *mongo.Collection {
 
 // GetDatabase 获取数据库
 func (r *MongoRepository[T]) GetDatabase() *mongo.Database {
-	return r.client.Database(r.dbName)
+	return r.op.cli.Database(r.dbName)
 }
 
 // CreateCollection 创建集合
 func (r *MongoRepository[T]) CreateCollection(ctx context.Context, opts ...*options.CreateCollectionOptions) error {
-	err := r.client.Database(r.dbName).CreateCollection(ctx, r.collName, opts...)
+	err := r.op.cli.Database(r.dbName).CreateCollection(ctx, r.collName, opts...)
 	if err != nil {
 		return errors.Wrap(err, "create collection failed")
 	}
@@ -593,7 +593,7 @@ func (r *MongoRepository[T]) DropCollection(ctx context.Context) error {
 
 // Exists 检查集合是否存在
 func (r *MongoRepository[T]) Exists(ctx context.Context) (bool, error) {
-	names, err := r.client.Database(r.dbName).ListCollectionNames(ctx, bson.M{"name": r.collName})
+	names, err := r.op.cli.Database(r.dbName).ListCollectionNames(ctx, bson.M{"name": r.collName})
 	if err != nil {
 		return false, errors.Wrap(err, "check collection exists failed")
 	}
