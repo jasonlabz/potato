@@ -61,11 +61,11 @@ func buildClientOptions(config *Config) *options.ClientOptions {
 		ApplyURI(config.URI).
 		SetMaxPoolSize(config.MaxPoolSize).
 		SetMinPoolSize(config.MinPoolSize).
-		SetMaxConnIdleTime(time.Duration(config.MaxConnIdleTime) * time.Second).
-		SetConnectTimeout(time.Duration(config.ConnectTimeout) * time.Second).
-		SetSocketTimeout(time.Duration(config.SocketTimeout) * time.Second).
-		SetServerSelectionTimeout(time.Duration(config.ServerSelectionTimeout) * time.Second).
-		SetHeartbeatInterval(time.Duration(config.HeartbeatInterval) * time.Second).
+		SetMaxConnIdleTime(time.Duration(config.MaxConnIdleTime) * time.Millisecond).
+		SetConnectTimeout(time.Duration(config.ConnectTimeout) * time.Millisecond).
+		SetSocketTimeout(time.Duration(config.SocketTimeout) * time.Millisecond).
+		SetServerSelectionTimeout(time.Duration(config.ServerSelectionTimeout) * time.Millisecond).
+		SetHeartbeatInterval(time.Duration(config.HeartbeatInterval) * time.Millisecond).
 		SetReadPreference(readpref.Primary()).
 		SetWriteConcern(writeconcern.Majority()).
 		SetRetryWrites(true).

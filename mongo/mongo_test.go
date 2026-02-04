@@ -17,6 +17,8 @@ package mongo
 import (
 	"context"
 	"testing"
+
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 func TestName(t *testing.T) {
@@ -37,5 +39,6 @@ func TestName(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	// NewRepository(mongoOperator)
+	repository := NewRepository[bson.M](mongoOperator, "lucas", "users")
+	// repository.InsertOne(ctx, bson.M{"name": "lucas"})
 }
