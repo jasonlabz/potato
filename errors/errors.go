@@ -94,8 +94,12 @@ func (e *Error) WithErr(err error) IError {
 	if err == nil {
 		return e
 	}
-	e.innerErr = err
-	return e
+	clone := &Error{
+		code:     e.code,
+		message:  e.message,
+		innerErr: err,
+	}
+	return clone
 }
 
 // WithMessage reset message
@@ -103,8 +107,12 @@ func (e *Error) WithMessage(msg string) IError {
 	if msg == "" {
 		return e
 	}
-	e.message = msg
-	return e
+	clone := &Error{
+		code:     e.code,
+		message:  msg,
+		innerErr: e.innerErr,
+	}
+	return clone
 }
 
 // Unwrap unwrap inner error

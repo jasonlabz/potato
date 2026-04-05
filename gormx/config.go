@@ -144,7 +144,7 @@ func (c *Config) extractDSN() (dsn string, replicas [2][]string) {
 	}
 	// 其次取从数据库dsn
 	if dsn == "" && len(replicas[1]) > 0 {
-		dsn = replicas[1][1]
+		dsn = replicas[1][0]
 	}
 
 	return dsn, replicas

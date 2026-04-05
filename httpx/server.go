@@ -91,6 +91,9 @@ func WithHeaders(headers map[string]string) OptionFunc {
 
 func WithHeader(key, value string) OptionFunc {
 	return func(o *Option) {
+		if o.Headers == nil {
+			o.Headers = make(map[string]string)
+		}
 		o.Headers[key] = value
 	}
 }

@@ -8,7 +8,7 @@ func Convert2Int32(intStr string) (int32, error) {
 }
 
 func Convert2Int64(intStr string) (int64, error) {
-	intVal, err := strconv.ParseInt(intStr, 10, 32)
+	intVal, err := strconv.ParseInt(intStr, 10, 64)
 	return intVal, err
 }
 

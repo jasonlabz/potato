@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -35,7 +36,11 @@ func RecoveryLog(stack bool) gin.HandlerFunc {
 					log.GetLogger().WithField(log.Any("error", err),
 						log.String("request", string(httpRequest))).Error(c, c.Request.URL.Path)
 					// If the connection is dead, we can't write a status to it.
-					c.Error(err.(error)) // nolint: err check
+					if e, ok := err.(error); ok {
+						_ = c.Error(e)
+					} else {
+						_ = c.Error(fmt.Errorf("%v", err))
+					}
 					c.Abort()
 					return
 				}

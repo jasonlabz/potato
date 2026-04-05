@@ -52,14 +52,30 @@ type CryptoConfig struct {
 
 // KafkaConfig 配置
 type KafkaConfig struct {
-	Topic            []string `mapstructure:"topic" json:"topic" yaml:"topic" ini:"topic"`
+	Enable           bool     `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"`
 	Strict           bool     `mapstructure:"strict" json:"strict" yaml:"strict" ini:"strict"`
+	Topic            []string `mapstructure:"topic" json:"topic" yaml:"topic" ini:"topic"`
 	GroupId          string   `mapstructure:"group_id" json:"group_id" yaml:"group_id" ini:"group_id"`
-	BootstrapServers string   `mapstructure:"bootstrap_servers" json:"bootstrap_servers" yaml:"bootstrap_servers" ini:"bootstrap_servers"`
+	BootstrapServers []string `mapstructure:"bootstrap_servers" json:"bootstrap_servers" yaml:"bootstrap_servers" ini:"bootstrap_servers"`
 	SecurityProtocol string   `mapstructure:"security_protocol" json:"security_protocol" yaml:"security_protocol" ini:"security_protocol"`
 	SaslMechanism    string   `mapstructure:"sasl_mechanism" json:"sasl_mechanism" yaml:"sasl_mechanism" ini:"sasl_mechanism"`
 	SaslUsername     string   `mapstructure:"sasl_username" json:"sasl_username" yaml:"sasl_username" ini:"sasl_username"`
 	SaslPassword     string   `mapstructure:"sasl_password" json:"sasl_password" yaml:"sasl_password" ini:"sasl_password"`
+	MaxAttempts      int      `mapstructure:"max_attempts" json:"max_attempts" yaml:"max_attempts" ini:"max_attempts"`
+	RetryWaitTime    int64    `mapstructure:"retry_wait_time" json:"retry_wait_time" yaml:"retry_wait_time" ini:"retry_wait_time"`
+}
+
+// RocketMQConfig 配置
+type RocketMQConfig struct {
+	Enable        bool     `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"`
+	Strict        bool     `mapstructure:"strict" json:"strict" yaml:"strict" ini:"strict"`
+	NameServers   []string `mapstructure:"name_servers" json:"name_servers" yaml:"name_servers" ini:"name_servers"`
+	GroupName     string   `mapstructure:"group_name" json:"group_name" yaml:"group_name" ini:"group_name"`
+	AccessKey     string   `mapstructure:"access_key" json:"access_key" yaml:"access_key" ini:"access_key"`
+	SecretKey     string   `mapstructure:"secret_key" json:"secret_key" yaml:"secret_key" ini:"secret_key"`
+	Namespace     string   `mapstructure:"namespace" json:"namespace" yaml:"namespace" ini:"namespace"`
+	RetryTimes    int      `mapstructure:"retry_times" json:"retry_times" yaml:"retry_times" ini:"retry_times"`
+	RetryWaitTime int64    `mapstructure:"retry_wait_time" json:"retry_wait_time" yaml:"retry_wait_time" ini:"retry_wait_time"`
 }
 
 // DataSource 连接配置
@@ -225,6 +241,7 @@ type Config struct {
 	Crypto      []CryptoConfig `mapstructure:"crypto" json:"crypto" yaml:"crypto" ini:"crypto"`
 	Kafka       KafkaConfig    `mapstructure:"kafka" json:"kafka" yaml:"kafka" ini:"kafka"`
 	Rabbitmq    RabbitMQConf   `mapstructure:"rabbitmq" json:"rabbitmq" yaml:"rabbitmq" ini:"rabbitmq"`
+	RocketMQ    RocketMQConfig `mapstructure:"rocketmq" json:"rocketmq" yaml:"rocketmq" ini:"rocketmq"`
 	Redis       RedisConfig    `mapstructure:"redis" json:"redis" yaml:"redis" ini:"redis"`
 	ES          Elasticsearch  `mapstructure:"es" json:"es" yaml:"es" ini:"es"`
 	Mongodb     MongodbConf    `mapstructure:"mongodb" json:"mongodb" yaml:"mongodb" ini:"mongodb"`
@@ -314,18 +331,18 @@ func (c *Config) Validate() error {
 
 func LoadConfigFromJson(configPath string, body any) {
 	// 打开文件
-	cf, _ := os.Open(configPath)
+	cf, err := os.Open(configPath)
+	if err != nil {
+		panic(fmt.Errorf("open config file %s failed: %w", configPath, err))
+	}
 	// 关闭文件
 	defer func(file *os.File) {
-		err := file.Close()
-		if err != nil {
-			panic(err)
-		}
+		_ = file.Close()
 	}(cf)
 	// NewDecoder创建一个从file读取并解码json对象的*Decoder，解码器有自己的缓冲，并可能超前读取部分json数据。
 	dc := decoder.NewStreamDecoder(cf)
 	// Decode从输入流读取下一个json编码值并保存在v指向的值里
-	err := dc.Decode(body)
+	err = dc.Decode(body)
 	if err != nil {
 		panic(err)
 	}

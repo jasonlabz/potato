@@ -51,8 +51,7 @@ func CopyStruct(src, dst any) error {
 func IsExist(path string) bool {
 	_, err := os.Stat(path) // os.Stat获取文件信息
 	if err != nil {
-		// return os.IsExist(err)
-		return errors.Is(err, fs.ErrExist)
+		return !errors.Is(err, fs.ErrNotExist)
 	}
 	return true
 }

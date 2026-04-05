@@ -15,11 +15,13 @@ func AuthCheck() gin.HandlerFunc {
 		tokenStr := ctx.Request.Header.Get(consts.HeaderAuthorization)
 
 		if len(tokenStr) == 0 {
-			ctx.AbortWithError(http.StatusNonAuthoritativeInfo, errors.New("check token fail"))
+			_ = ctx.AbortWithError(http.StatusNonAuthoritativeInfo, errors.New("check token fail"))
+			return
 		}
 		userInfo, err := jwtx.ParseJWTToken(tokenStr)
 		if err != nil {
-			ctx.AbortWithError(http.StatusNonAuthoritativeInfo, err)
+			_ = ctx.AbortWithError(http.StatusNonAuthoritativeInfo, err)
+			return
 		}
 		for key, val := range userInfo.ExtraInfo {
 			ctx.Set(key, val)

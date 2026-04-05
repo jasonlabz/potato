@@ -14,7 +14,12 @@ const (
 )
 
 func init() {
-	time.Local, _ = time.LoadLocation("Asia/Shanghai")
+	loc, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		// fallback to fixed offset UTC+8
+		loc = time.FixedZone("CST", 8*3600)
+	}
+	time.Local = loc
 }
 
 func Now() time.Time {
@@ -58,8 +63,8 @@ func ParseTime(timeStr string) (time.Time, error) {
 func GetRecentlyDayTime(n int) (startTime, endTime string) {
 	currentTime := Now()
 	oldTime := currentTime.AddDate(0, 0, -n)
-	endTime = currentTime.Format(DateFormat) + " 00:00:00"
-	startTime = oldTime.Format(DateFormat) + " 23:59:59"
+	startTime = oldTime.Format(DateFormat) + " 00:00:00"
+	endTime = currentTime.Format(DateFormat) + " 23:59:59"
 	return
 }
 

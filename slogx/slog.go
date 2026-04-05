@@ -116,7 +116,7 @@ func NewLogger(opts ...Option) *LoggerWrapper {
 
 	// 读取日志配置文件
 	var configLoad bool
-	if options.configPath != "" && utils.IsExist(options.configPath) {
+	if options.configPath != "" && !utils.IsExist(options.configPath) {
 		panic(fmt.Errorf("log config not found: %s", options.configPath))
 	}
 
