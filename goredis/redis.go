@@ -84,10 +84,10 @@ func (c *Config) Validate() {
 			c.MinIdleConns = c.MaxIdleConns/2 + 1
 		}
 	}
-	if c.MaxIdleConns == 0 && c.MinIdleConns == 5 {
+	if c.MaxIdleConns == 0 {
 		c.MaxIdleConns = 2 * c.MinIdleConns
 	}
-	if c.MaxActiveConns == 0 && c.MinIdleConns == 5 {
+	if c.MaxActiveConns == 0 {
 		c.MaxActiveConns = 3 * c.MinIdleConns
 	}
 	if c.MasterName != "" && c.mode == "" {
@@ -99,7 +99,6 @@ func (c *Config) Validate() {
 	if c.mode == "" {
 		c.mode = SingleMode
 	}
-	return
 }
 
 type RedisOperator struct {
@@ -151,7 +150,7 @@ func (op *RedisOperator) Close() (err error) {
 		return
 	}
 	err = op.client.Close()
-	op.closed = Closed
+	atomic.StoreInt32(&op.closed, Closed)
 	return
 }
 

@@ -253,10 +253,10 @@ func (op *RedisOperator) PushDelayMessage(ctx context.Context, queue string, msg
 		op.mu.Unlock()
 	}
 
-	op.client.ZAdd(ctx, delayQueueTimeout, redis.Z{
+	err = op.client.ZAdd(ctx, delayQueueTimeout, redis.Z{
 		Score:  float64(times.Now().Add(delay).UnixMilli()),
 		Member: msg,
-	})
+	}).Err()
 	return
 }
 
@@ -276,7 +276,7 @@ func (op *RedisOperator) Subscribe(ctx context.Context, channels ...string) (pub
 
 // PushMessage 往队列推送消息rpush
 func (op *RedisOperator) PushMessage(ctx context.Context, queue string, msg string) (err error) {
-	op.client.RPush(ctx, queue, msg)
+	err = op.client.RPush(ctx, queue, msg).Err()
 	return
 }
 

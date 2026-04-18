@@ -10,12 +10,21 @@ type Pagination struct {
 	Total     int64 `json:"total"`      // 一共多少条记录
 }
 
-func (p *Pagination) GetPageCount() {
+func (p *Pagination) GetPageCount() int64 {
+	if p.PageSize <= 0 {
+		p.PageCount = 0
+		return 0
+	}
 	p.PageCount = int64(math.Ceil(float64(p.Total) / float64(p.PageSize)))
-	return
+	return p.PageCount
 }
 
-func (p *Pagination) GetOffset() (offset int64) {
-	offset = (p.Page - 1) * p.PageSize
-	return
+func (p *Pagination) GetOffset() int64 {
+	if p.Page <= 0 {
+		p.Page = 1
+	}
+	if p.PageSize <= 0 {
+		p.PageSize = 10
+	}
+	return (p.Page - 1) * p.PageSize
 }

@@ -32,11 +32,12 @@ func (bf *BloomFilter) Contains(value string) bool {
 	if value == "" {
 		return false
 	}
-	ret := true
 	for _, f := range bf.Funcs {
-		ret = ret && bf.Set.Test(f.hash(value))
+		if !bf.Set.Test(f.hash(value)) {
+			return false
+		}
 	}
-	return ret
+	return true
 }
 
 type simpleHash struct {

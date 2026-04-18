@@ -44,13 +44,13 @@ type User struct {
 
 // Valid 实现 `type Claims interface` 的 `Valid() error` 方法,自定义校验内容
 func (c userStdClaims) Valid() (err error) {
-	if c.VerifyExpiresAt(time.Now().Unix(), true) == false {
+	if !c.VerifyExpiresAt(time.Now().Unix(), true) {
 		return errors.New("token is expired")
 	}
 	if !c.VerifyIssuer(AppIss, true) {
 		return errors.New("token's issuer is wrong")
 	}
-	if c.User.Audience == "" {
+	if c.User == nil || c.User.Audience == "" {
 		return errors.New("invalid user in jwt")
 	}
 	return

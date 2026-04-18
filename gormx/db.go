@@ -41,12 +41,7 @@ func StoreDB(dbName string, db *gorm.DB) error {
 	if dbName == "" {
 		return errors.New("no db name")
 	}
-	_, ok := dbMap.Load(dbName)
-	if ok {
-		return nil
-	}
-	// Store database
-	dbMap.Store(dbName, db)
+	dbMap.LoadOrStore(dbName, db)
 	return nil
 }
 
@@ -67,7 +62,9 @@ func InitConfig(config *Config) (db *gorm.DB, err error) {
 
 	dbLoaded, ok := dbMap.Load(config.DBName)
 	if ok {
-		return dbLoaded.(*gorm.DB), nil
+		if db, castOk := dbLoaded.(*gorm.DB); castOk && db != nil {
+			return db, nil
+		}
 	}
 	dialector := getDialector(config.DBType, dsn)
 	if dialector == nil {
@@ -151,19 +148,27 @@ func getDialector(dbType DatabaseType, dsn string) gorm.Dialector {
 }
 
 func GetDB(name string) (*gorm.DB, error) {
-	db, ok := dbMap.Load(name)
+	v, ok := dbMap.Load(name)
 	if !ok {
 		return nil, errors.New("no db instance")
 	}
-	return db.(*gorm.DB), nil
+	db, ok := v.(*gorm.DB)
+	if !ok || db == nil {
+		return nil, ErrDBInstanceIsNil
+	}
+	return db, nil
 }
 
 func GetDBWithPanic(name string) *gorm.DB {
-	db, ok := dbMap.Load(name)
+	v, ok := dbMap.Load(name)
 	if !ok {
-		panic("no db instance")
+		panic("no db instance: " + name)
 	}
-	return db.(*gorm.DB)
+	db, ok := v.(*gorm.DB)
+	if !ok || db == nil {
+		panic("db instance is nil: " + name)
+	}
+	return db
 }
 
 func DefaultMaster() *gorm.DB {

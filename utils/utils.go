@@ -3,7 +3,6 @@ package utils
 import (
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"io/fs"
 	"math/rand"
 	"os"
@@ -20,31 +19,25 @@ var longLetters = []byte("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQR
 
 // JSONMarshal json序列化
 func JSONMarshal(data any) string {
-	res, err := sonic.Marshal(&data)
+	res, err := sonic.Marshal(data)
 	if err != nil {
-		fmt.Println("json marsh error: ", err.Error())
 		return ""
 	}
 	return string(res)
 }
 
 // JSONUnmarshal json反序列化
-func JSONUnmarshal(data string, dest any) {
-	err := sonic.Unmarshal([]byte(data), dest)
-	if err != nil {
-		fmt.Println("json unmarsh error: ", err.Error())
-	}
-	return
+func JSONUnmarshal(data string, dest any) error {
+	return sonic.Unmarshal([]byte(data), dest)
 }
 
 // CopyStruct 利用json进行深拷贝
 func CopyStruct(src, dst any) error {
-	if tmp, err := sonic.Marshal(&src); err != nil {
-		return err
-	} else {
-		err = sonic.Unmarshal(tmp, dst)
+	tmp, err := sonic.Marshal(src)
+	if err != nil {
 		return err
 	}
+	return sonic.Unmarshal(tmp, dst)
 }
 
 // IsExist 判断所给路径文件/文件夹是否存在
@@ -130,6 +123,9 @@ func WalkDir(dirPth, suffix string) (files []string, err error) {
 	suffix = strings.ToUpper(suffix) // 忽略后缀匹配的大小写
 
 	err = filepath.Walk(dirPth, func(filename string, fi os.FileInfo, err error) error { // 遍历目录
+		if err != nil {
+			return err
+		}
 		if fi.IsDir() { // 忽略目录
 			return nil
 		}

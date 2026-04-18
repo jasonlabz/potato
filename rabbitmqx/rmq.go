@@ -146,10 +146,10 @@ func (c *MQConfig) Validate() error {
 		c.LimitConf.AttemptTimes = DefaultRetryTimes
 	}
 	if c.LimitConf.RetryWaitTime == 0 {
-		c.LimitConf.RetryWaitTime = int64(DefaultRetryWaitTimes) / 1000
+		c.LimitConf.RetryWaitTime = int64(DefaultRetryWaitTimes.Seconds())
 	}
 	if c.LimitConf.Timeout == 0 {
-		c.LimitConf.Timeout = int64(DefaultTimeOut) / 1000
+		c.LimitConf.Timeout = int64(DefaultTimeOut.Seconds())
 	}
 	if c.LimitConf.PrefetchCount == 0 {
 		c.LimitConf.PrefetchCount = DefaultPrefetchCount
@@ -355,7 +355,7 @@ func (r *RabbitMQOperator) activateChannel(object *pool.PooledObject) error {
 
 // connect 建立 RabbitMQ 连接
 func (r *RabbitMQOperator) connect(ctx context.Context) (err error) {
-	ticker := time.NewTicker(time.Duration(r.config.LimitConf.RetryWaitTime) * 1000)
+	ticker := time.NewTicker(time.Duration(r.config.LimitConf.RetryWaitTime) * time.Second)
 	defer ticker.Stop()
 
 	// 重试连接
@@ -386,7 +386,7 @@ func (r *RabbitMQOperator) connect(ctx context.Context) (err error) {
 func (r *RabbitMQOperator) tryReConnect(daemon bool) (connected bool, err error) {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGKILL, syscall.SIGTERM)
-	ticker := time.NewTicker(time.Duration(r.config.LimitConf.RetryWaitTime) * 1000)
+	ticker := time.NewTicker(time.Duration(r.config.LimitConf.RetryWaitTime) * time.Second)
 	defer ticker.Stop()
 
 	var count int
@@ -707,7 +707,7 @@ func (r *RabbitMQOperator) pushWithRetry(ctx context.Context, body PushBodyInter
 		body.SetMessageId(strings.ReplaceAll(uuid.NewString(), "-", ""))
 	}
 
-	ticker := time.NewTicker(time.Duration(r.config.LimitConf.RetryWaitTime) * 1000)
+	ticker := time.NewTicker(time.Duration(r.config.LimitConf.RetryWaitTime) * time.Second)
 	defer ticker.Stop()
 
 	// 重试逻辑
@@ -719,7 +719,7 @@ func (r *RabbitMQOperator) pushWithRetry(ctx context.Context, body PushBodyInter
 
 		// 执行推送
 		if pushErr := pushFunc(ctx, body, opts...); pushErr != nil {
-			r.l.Warn(ctx, fmt.Sprintf("[push] Push failed after %f seconds, retrying...", (time.Duration(r.config.LimitConf.RetryWaitTime)*1000).Seconds()),
+			r.l.Warn(ctx, fmt.Sprintf("[push] Push failed after %d seconds, retrying...", r.config.LimitConf.RetryWaitTime),
 				"err", pushErr.Error(), "msg_id", body.GetMessageId(), "retry_count", i+1)
 
 			select {
@@ -958,6 +958,9 @@ func (r *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-c
 	var channelWrap *ChannelWrap
 	resChan, consumerTag, err := r.consumeCore(ctx, param, &channelWrap)
 	if err != nil {
+		if channelWrap != nil {
+			_ = r.PushChannel(ctx, channelWrap)
+		}
 		return nil, err
 	}
 
@@ -966,6 +969,13 @@ func (r *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-c
 	go func() {
 		ctxBack := context.Background()
 		handlePanic(ctxBack, r)
+		defer func() {
+			// 确保通道归还
+			if channelWrap != nil {
+				_ = r.PushChannel(context.Background(), channelWrap)
+			}
+			close(contents)
+		}()
 
 		valueCh, exist := r.client.cancelChan.Load(param.QueueName)
 		if !exist {
@@ -982,7 +992,7 @@ func (r *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-c
 		sig := make(chan os.Signal, 1)
 		signal.Notify(sig, syscall.SIGINT, syscall.SIGKILL)
 
-		ticker := time.NewTicker(time.Duration(r.config.LimitConf.RetryWaitTime) * 1000)
+		ticker := time.NewTicker(time.Duration(r.config.LimitConf.RetryWaitTime) * time.Second)
 		defer ticker.Stop()
 		var innerErr error
 		var innerConsume bool
@@ -1412,7 +1422,7 @@ func (r *RabbitMQOperator) Close(ctx context.Context) (err error) {
 // Ack 确认消息 - 避免通道竞态条件
 func (r *RabbitMQOperator) Ack(ctx context.Context, msg amqp.Delivery) {
 	// 使用带缓冲的通道和上下文控制
-	ctx, cancel := context.WithTimeout(ctx, time.Duration(r.config.LimitConf.RetryWaitTime)*1000)
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(r.config.LimitConf.RetryWaitTime)*time.Second)
 	defer cancel()
 
 	resultCh := make(chan error, 1)
@@ -1438,7 +1448,7 @@ func (r *RabbitMQOperator) Ack(ctx context.Context, msg amqp.Delivery) {
 
 // Nack 拒绝消息
 func (r *RabbitMQOperator) Nack(ctx context.Context, msg amqp.Delivery) {
-	ctx, cancel := context.WithTimeout(ctx, time.Duration(r.config.LimitConf.RetryWaitTime)*1000)
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(r.config.LimitConf.RetryWaitTime)*time.Second)
 	defer cancel()
 
 	resultCh := make(chan error, 1)

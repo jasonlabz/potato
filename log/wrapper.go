@@ -38,6 +38,9 @@ func (l *LoggerWrapper) clone() *LoggerWrapper {
 }
 
 func (l *LoggerWrapper) WithError(err error) *LoggerWrapper {
+	if err == nil {
+		return l
+	}
 	lw := l.clone()
 	lw.logger = lw.logger.With(String("error", err.Error()))
 	return lw
@@ -130,7 +133,7 @@ func (l *LoggerWrapper) prepareFields(ctx context.Context, fields []any) (field 
 }
 
 func (l *LoggerWrapper) checkFields(fields []any) (checked []zap.Field) {
-	checked = make([]zap.Field, 0)
+	checked = make([]zap.Field, 0, len(fields)/2+1)
 
 	if len(fields) == 0 {
 		return
@@ -155,12 +158,12 @@ func (l *LoggerWrapper) checkFields(fields []any) (checked []zap.Field) {
 		return
 	}
 
-	for i := 0; i < len(fields)-1; {
+	for i := 0; i+1 < len(fields); i += 2 {
 		checked = append(checked, zap.Any(utils.StringValue(fields[i]), utils.StringValue(fields[i+1])))
-		if i == len(fields)-3 {
-			checked = append(checked, zap.Any("log_field", utils.StringValue(fields[i+2])))
-		}
-		i += 2
+	}
+	// 奇数个字段时，最后一个字段作为孤立字段记录
+	if len(fields)%2 != 0 {
+		checked = append(checked, zap.Any("log_extra", utils.StringValue(fields[len(fields)-1])))
 	}
 
 	return
@@ -213,7 +216,7 @@ func Float32(key string, val float32) zap.Field {
 }
 
 func zapField(ctx context.Context, contextKey ...string) (fields []zap.Field) {
-	fields = make([]zap.Field, 0)
+	fields = make([]zap.Field, 0, len(contextKey))
 	for _, key := range contextKey {
 		value := utils.StringValue(ctx.Value(key))
 		if value == "" {

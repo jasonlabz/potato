@@ -106,7 +106,8 @@ func (c *Config) extractDSN() (dsn string, replicas [2][]string) {
 	dsn = conn.genDSN()
 	replicas = [2][]string{}
 
-	if len(c.Masters) == 0 || len(c.Replicas) == 0 {
+	if len(c.Masters) == 0 && len(c.Replicas) == 0 {
+		return dsn, replicas
 	}
 
 	// 解析主数据库配置

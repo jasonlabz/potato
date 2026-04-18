@@ -130,6 +130,14 @@ func (e *Error) Equal(err IError) bool {
 	return e.Code() == err.Code()
 }
 
+// Is implements errors.Is() support - matches by error code
+func (e *Error) Is(target error) bool {
+	if t, ok := target.(*Error); ok {
+		return e.code == t.code
+	}
+	return false
+}
+
 // Error get error string
 func (e *Error) Error() string {
 	var buf bytes.Buffer

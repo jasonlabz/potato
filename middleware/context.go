@@ -52,12 +52,16 @@ func SetContext(opts ...Option) gin.HandlerFunc {
 		if traceID == "" {
 			traceID = strings.ReplaceAll(uuid.New().String(), consts.SignDash, consts.EmptyString)
 		}
+		logID := strings.ReplaceAll(uuid.New().String(), consts.SignDash, consts.EmptyString)
 		userID := ctx.Request.Header.Get(consts.HeaderUserID)
 		authorization := ctx.Request.Header.Get(consts.HeaderAuthorization)
+		clientIP := ctx.ClientIP()
 
 		ctx.Set(consts.ContextToken, authorization)
 		ctx.Set(consts.ContextUserID, userID)
 		ctx.Set(consts.ContextTraceID, traceID)
+		ctx.Set(consts.ContextLOGID, logID)
+		ctx.Set(consts.ContextClientAddr, clientIP)
 
 		ctx.Next()
 	}

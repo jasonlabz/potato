@@ -23,16 +23,16 @@ type BodyLog struct {
 	body *bytes.Buffer
 }
 
-func (bl BodyLog) Header() http.Header {
+func (bl *BodyLog) Header() http.Header {
 	return bl.ResponseWriter.Header()
 }
 
-func (bl BodyLog) Write(b []byte) (int, error) {
+func (bl *BodyLog) Write(b []byte) (int, error) {
 	bl.body.Write(b)
 	return bl.ResponseWriter.Write(b)
 }
 
-func (bl BodyLog) WriteHeader(statusCode int) {
+func (bl *BodyLog) WriteHeader(statusCode int) {
 	bl.ResponseWriter.WriteHeader(statusCode)
 }
 

@@ -1,77 +1,56 @@
-# gin-metrics
-gin-gonic/gin metrics exporter for Prometheus.
+# ginmetrics
 
+Gin 框架的 Prometheus 指标采集中间件，自动收集 HTTP 请求的性能和流量指标。
 
-## Introduction
+## 默认采集指标
 
-`gin-metrics` 为 gin HTTP 服务定义了一些监控指标，开箱即用。下边是默认监控指标的详细描述：
+| 指标名 | 类型 | 说明 |
+|--------|------|------|
+| `gin_request_total` | Counter | 请求总数 |
+| `gin_request_uv` | Counter | 独立访客数（基于 IP） |
+| `gin_uri_request_total` | Counter | 按 URI/Method/StatusCode 分类的请求数 |
+| `gin_request_body_total` | Counter | 请求体总字节数 |
+| `gin_response_body_total` | Counter | 响应体总字节数 |
+| `gin_request_duration` | Histogram | 请求处理耗时分布 |
+| `gin_slow_request_total` | Counter | 慢请求计数（默认阈值 5 秒） |
 
-
-| Metric                  | Type      | Description                                         |
-| ----------------------- | --------- | --------------------------------------------------- |
-| gin_request_total       | Counter   | 服务接收到的请求总数                |
-| gin_request_uv          | Counter   | 服务接收到的 IP 总数                     |
-| gin_uri_request_total   | Counter   | 每个 URI 接收到的服务请求数 |
-| gin_request_body_total  | Counter   | 服务接收到的请求量，单位: 字节   |
-| gin_response_body_total | Counter   | 服务返回的请求量，单位: 字节      |
-| gin_request_duration    | Histogram | 服务处理请求使用的时间         |
-| gin_slow_request_total  | Counter   | 服务接收到的慢请求计数     |
-
-
-## Installation
-
-```bash
-$ go get github.com/penglongli/gin-metrics
-```
-
-## Usage
-
-使用如下代码运行，访问：`http://localhost:8080/metrics` 即可看到暴露出来的监控指标
+## 使用示例
 
 ```go
-package main
+import "github.com/jasonlabz/potato/ginmetrics"
 
-import (
-	"github.com/gin-gonic/gin"
-	
-	"github.com/penglongli/gin-metrics/ginmetrics"
-)
+r := gin.Default()
 
-func main() {
-	r := gin.Default()
+// 获取全局 Monitor 实例
+m := ginmetrics.GetMonitor()
 
-	// get global Monitor object
-	m := ginmetrics.GetMonitor()
+// 可选：设置指标暴露路径（默认 /debug/metrics）
+m.SetMetricPath("/metrics")
+// 可选：设置慢请求阈值（默认 5 秒）
+m.SetSlowTime(10)
+// 可选：设置耗时分布桶（用于 p95, p99）
+m.SetDuration([]float64{0.1, 0.3, 1.2, 5, 10})
 
-	// +optional set metric path, default /debug/metrics
-	m.SetMetricPath("/metrics")
-	// +optional set slow time, default 5s
-	m.SetSlowTime(10)
-	// +optional set request duration, default {0.1, 0.3, 1.2, 5, 10}
-	// used to p95, p99
-	m.SetDuration([]float64{0.1, 0.3, 1.2, 5, 10})
+// 注册中间件并暴露端点
+m.Use(r)
 
-	// set middleware for gin
-	m.Use(r)
-
-	r.GET("/product/:id", func(ctx *gin.Context) {
-			"productId": ctx.Param("id"),
-		})
-	})
-	_ = r.Run()
-}
-
+r.GET("/product/:id", func(ctx *gin.Context) {
+    ctx.JSON(200, gin.H{"productId": ctx.Param("id")})
+})
+_ = r.Run()
 ```
 
-## Custom Metric
+### 仅注册中间件（不暴露端点）
 
-`gin-metric` 提供了自定义监控指标的使用方式
+```go
+m.UseWithoutExposingEndpoint(r)
+// 在其他 router 上单独暴露
+m.Expose(adminRouter)
+```
+
+## 自定义指标
 
 ### Gauge
-
-使用 `Gauge` 类型监控指标，可以通过 3 种方法来修改监控值：`SetGaugeValue`、`Inc`、`Add`
-
-首先，需要定义一个 `Gauge` 类型的监控指标：
 
 ```go
 gaugeMetric := &ginmetrics.Metric{
@@ -80,45 +59,20 @@ gaugeMetric := &ginmetrics.Metric{
     Description: "an example of gauge type metric",
     Labels:      []string{"label1"},
 }
-
-// Add metric to global monitor object
 _ = ginmetrics.GetMonitor().AddMetric(gaugeMetric)
-```
 
-**SetGaugeValue**
-
-`SetGaugeValue` 方法会直接设置监控指标的值
-
-```go
+// 设置值
 _ = ginmetrics.GetMonitor().GetMetric("example_gauge_metric").SetGaugeValue([]string{"label_value1"}, 0.1)
-```
-
-**Inc**
-
-`Inc` 方法会在监控指标值的基础上增加 1
-
-```go
+// 递增
 _ = ginmetrics.GetMonitor().GetMetric("example_gauge_metric").Inc([]string{"label_value1"})
-```
-
-**Add**
-
-`Add` 方法会为监控指标增加传入的值
-
-```go
+// 增加
 _ = ginmetrics.GetMonitor().GetMetric("example_gauge_metric").Add([]string{"label_value1"}, 0.2)
 ```
 
 ### Counter
 
-`Counter` 类型的监控指标，可以使用 `Inc` 和 `Add` 方法，但是不能使用 `SetGaugeValue` 方法
+`Counter` 类型可以使用 `Inc` 和 `Add` 方法，但不能使用 `SetGaugeValue`。
 
+### Histogram / Summary
 
-### Histogram and Summary
-
-对于 `Histogram` 和 `Summary` 类型的监控指标，需要用 `Observe` 方法来设置监控值。
-
-## Contributing
-
-如果有遇见什么问题，或者需要修改，可以  [新建 ISSUE](https://github.com/penglongli/gin-metrics/issues/new)
-或者 [新建 PullRequest](https://github.com/penglongli/gin-metrics/pulls). 
+使用 `Observe` 方法记录观测值。
