@@ -10,8 +10,9 @@ import (
 )
 
 var (
-	clientMap    sync.Map
-	duplicateMap = map[string]struct{}{}
+	clientMap     sync.Map // service name -> *Config
+	clientInstMap sync.Map // service name -> *Client (lazy initialized)
+	duplicateMap  = map[string]struct{}{}
 )
 
 type Config struct {
@@ -78,6 +79,13 @@ type Option struct {
 
 type OptionFunc func(*Option)
 
+// MultipartField 描述 multipart/form-data 上传中的一个字段
+type MultipartField struct {
+	Name     string // 表单字段名
+	FileName string // 文件名（仅文件字段需要）
+	Content  []byte // 文件内容
+}
+
 func WithHeaders(headers map[string]string) OptionFunc {
 	return func(o *Option) {
 		if len(o.Headers) == 0 {
@@ -120,4 +128,30 @@ func Load(service string) *Config {
 		return value.(*Config)
 	}
 	return nil
+}
+
+// GetServiceClient 通过 service name 获取对应的 HTTP 客户端实例（懒初始化 + 缓存）
+// 配置由 initServicer 从 conf/servicer/*.yaml 加载并通过 Store 存入
+func GetServiceClient(service string) *Client {
+	// 快速路径：已初始化的客户端直接返回
+	if inst, ok := clientInstMap.Load(service); ok {
+		return inst.(*Client)
+	}
+
+	// 加载配置
+	cfg := Load(service)
+	if cfg == nil {
+		panic("httpx: service client not found: " + service)
+	}
+
+	// 使用 sync.Once 风格保证每个 service 只初始化一次
+	// 不能用 sync.Once（因为 service 是动态的），用 LoadOrStore 原子操作
+	cfg.commonSet = true
+	client := NewHttpClient(cfg)
+	actual, loaded := clientInstMap.LoadOrStore(service, client)
+	if loaded {
+		// 另一个 goroutine 已经创建了实例，使用已存在的
+		return actual.(*Client)
+	}
+	return client
 }
