@@ -22,6 +22,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/jasonlabz/potato/grpcx"
 	"github.com/jasonlabz/potato/httpx"
 )
 
@@ -128,6 +129,27 @@ func toHttpxOpts(cfg *ralConfig) []httpx.OptionFunc {
 	return opts
 }
 
+// isGRPCService 判断服务是否为 gRPC 协议
+func isGRPCService(service string) bool {
+	grpcCfg := grpcx.Load(service)
+	if grpcCfg != nil {
+		return true
+	}
+	return false
+}
+
+// GetServiceConn 获取 gRPC 服务的客户端连接
+// 当服务协议为 grpc/grpcs 时，返回 grpcx.ClientConn 供创建类型安全的 stub
+//
+// 用法：
+//
+//	conn := ral.GetServiceConn("user_service")
+//	client := pb.NewUserServiceClient(conn.Conn())
+//	resp, err := client.GetUser(ctx, &pb.GetUserReq{...})
+func GetServiceConn(service string) *grpcx.ClientConn {
+	return grpcx.GetServiceConn(service)
+}
+
 // RAL 通过服务名获取客户端实例并发起 HTTP 请求
 //
 // service: conf/servicer/*.yaml 中配置的服务名
@@ -135,7 +157,14 @@ func toHttpxOpts(cfg *ralConfig) []httpx.OptionFunc {
 // path: 请求路径（相对于服务的 BasePath，如 /api/v1/users）
 // result: 响应体反序列化的目标对象（指针）
 // opts: 可选参数（WithBody/WithHeaders/WithQuery/WithToken/WithCookies）
+//
+// 注意：gRPC 服务不能通过此方法调用，请使用 GetServiceConn() 获取连接后通过生成的 stub 调用
 func RAL(ctx context.Context, service, method, path string, result any, opts ...RALOption) error {
+	// 检查是否为 gRPC 服务
+	if isGRPCService(service) {
+		return fmt.Errorf("ral: service %q is gRPC protocol, please use ral.GetServiceConn(%q) with generated stub instead", service, service)
+	}
+
 	cfg := &ralConfig{}
 	for _, opt := range opts {
 		opt(cfg)
@@ -143,7 +172,7 @@ func RAL(ctx context.Context, service, method, path string, result any, opts ...
 
 	c, err := httpx.GetServiceClient(service)
 	if err != nil {
-		return err
+		return fmt.Errorf("ral: %w", err)
 	}
 	fullPath := buildPath(path, cfg.query)
 	httpxOpts := toHttpxOpts(cfg)
@@ -207,6 +236,10 @@ func Delete(ctx context.Context, service, path string, result any, opts ...RALOp
 
 // PostForm 通过服务名发送 application/x-www-form-urlencoded 请求
 func PostForm(ctx context.Context, service, path string, formData map[string]string, result any, opts ...RALOption) error {
+	if isGRPCService(service) {
+		return fmt.Errorf("ral: service %q is gRPC protocol, please use ral.GetServiceConn(%q) with generated stub instead", service, service)
+	}
+
 	cfg := &ralConfig{}
 	for _, opt := range opts {
 		opt(cfg)
@@ -214,7 +247,7 @@ func PostForm(ctx context.Context, service, path string, formData map[string]str
 
 	c, err := httpx.GetServiceClient(service)
 	if err != nil {
-		return err
+		return fmt.Errorf("ral: %w", err)
 	}
 	fullPath := buildPath(path, cfg.query)
 	httpxOpts := toHttpxOpts(cfg)
@@ -225,6 +258,10 @@ func PostForm(ctx context.Context, service, path string, formData map[string]str
 
 // PostMultipart 通过服务名发送 multipart/form-data 文件上传请求
 func PostMultipart(ctx context.Context, service, path string, files []httpx.MultipartField, formFields map[string]string, result any, opts ...RALOption) error {
+	if isGRPCService(service) {
+		return fmt.Errorf("ral: service %q is gRPC protocol, please use ral.GetServiceConn(%q) with generated stub instead", service, service)
+	}
+
 	cfg := &ralConfig{}
 	for _, opt := range opts {
 		opt(cfg)
@@ -232,7 +269,7 @@ func PostMultipart(ctx context.Context, service, path string, files []httpx.Mult
 
 	c, err := httpx.GetServiceClient(service)
 	if err != nil {
-		return err
+		return fmt.Errorf("ral: %w", err)
 	}
 	fullPath := buildPath(path, cfg.query)
 	httpxOpts := toHttpxOpts(cfg)
@@ -241,7 +278,7 @@ func PostMultipart(ctx context.Context, service, path string, files []httpx.Mult
 	return err
 }
 
-// Do 基于 RalRequest 发起请求（高级用法，支持更细粒度的控制）
+// Do 基于 Request 发起请求（高级用法，支持更细粒度的控制）
 func Do(ctx context.Context, req *Request) (*Response, error) {
 	if req == nil {
 		return nil, fmt.Errorf("ral: request is nil")
