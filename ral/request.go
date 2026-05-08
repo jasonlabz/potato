@@ -20,7 +20,12 @@ import (
 	"net/url"
 )
 
-type RalRequest struct {
+type Request struct {
+	// Service 目标服务名，必填
+	//  对应 conf/servicer/*.yaml 中配置的服务名（Name 字段）
+	//  通过 httpx.GetServiceClient(service) 获取对应的客户端实例
+	Service string
+
 	// Body 是用于请求发送的 Body，可选
 	//  如果 Body 为nil，表示没有 Body，例如 GET 请求。
 	//  如果 Body 带有 Close 方法（例如 *os.File 或者 net.Conn），请求会自动调用Close方法。
@@ -94,4 +99,8 @@ type RalRequest struct {
 	//  HTTPS = true # 是否发起 HTTPS 字段
 	// 此值和配置里的值任意一个为 true，则最终为 true
 	HTTPS bool
+
+	// Result 响应体反序列化的目标对象（指针），可选
+	//  如果为 nil，则不解析响应体
+	Result any
 }

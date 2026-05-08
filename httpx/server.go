@@ -106,6 +106,12 @@ func WithHeader(key, value string) OptionFunc {
 	}
 }
 
+func WithToken(token string) OptionFunc {
+	return func(o *Option) {
+		o.Token = token
+	}
+}
+
 func WithBody(body any) OptionFunc {
 	return func(o *Option) {
 		o.Body = body
@@ -132,16 +138,16 @@ func Load(service string) *Config {
 
 // GetServiceClient 通过 service name 获取对应的 HTTP 客户端实例（懒初始化 + 缓存）
 // 配置由 initServicer 从 conf/servicer/*.yaml 加载并通过 Store 存入
-func GetServiceClient(service string) *Client {
+func GetServiceClient(service string) (*Client, error) {
 	// 快速路径：已初始化的客户端直接返回
 	if inst, ok := clientInstMap.Load(service); ok {
-		return inst.(*Client)
+		return inst.(*Client), nil
 	}
 
 	// 加载配置
 	cfg := Load(service)
 	if cfg == nil {
-		panic("httpx: service client not found: " + service)
+		return nil, fmt.Errorf("service %s not found", service)
 	}
 
 	// 使用 sync.Once 风格保证每个 service 只初始化一次
@@ -151,7 +157,7 @@ func GetServiceClient(service string) *Client {
 	actual, loaded := clientInstMap.LoadOrStore(service, client)
 	if loaded {
 		// 另一个 goroutine 已经创建了实例，使用已存在的
-		return actual.(*Client)
+		return actual.(*Client), nil
 	}
-	return client
+	return client, nil
 }

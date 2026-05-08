@@ -18,9 +18,9 @@ import (
 	"net/http"
 )
 
-// RalResponse 对 http.Response 的功能封装，和 RalRequest 配合使用，
+// Response 对 http.Response 的功能封装，和 RalRequest 配合使用，
 // 用于解析 RAL 的的 Response
-type RalResponse struct {
+type Response struct {
 	rsp *http.Response
 
 	// 可选，在 HandleResponse 前对 response 进行检查
