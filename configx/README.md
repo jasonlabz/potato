@@ -75,6 +75,128 @@ configx.LoadKey("key")      // 全局键值读取
 configx.GetEnv("ENV_NAME")  // 读取环境变量
 ```
 
+## YAML 配置参考
+
+```yaml
+application:
+  name: myapp
+  debug: false
+  server:
+    http:
+      port: 8080
+      read_timeout: 30s
+      write_timeout: 30s
+    grpc:
+      port: 8082
+      max_concurrent_streams: 100
+  monitor:
+    prometheus:
+      enable: false
+      path: "metrics"
+      scrape_interval: "15s"
+    pprof:
+      enable: false
+      port: 8080
+      enabled_endpoints: ["goroutine", "heap"]
+
+datasource:
+  enable: true
+  strict: true
+  db_type: "postgres"
+  host: "127.0.0.1"
+  port: 5432
+  username: postgres
+  password: "******"
+  database: mydb
+  args:
+    - name: sslmode
+      value: disable
+    - name: TimeZone
+      value: Asia/Shanghai
+  log_mode: "info"
+  max_idle_conn: 10
+  max_open_conn: 100
+
+redis:
+  enable: false
+  strict: true
+  endpoints:
+    - "127.0.0.1:6379"
+  password: "******"
+  index_db: 0
+  min_idle_conns: 10
+  max_idle_conns: 50
+  max_active_conns: 100
+  max_retry_times: 5
+
+rabbitmq:
+  enable: false
+  strict: true
+  host: "127.0.0.1"
+  port: 5672
+  username: guest
+  password: "******"
+  limit_conf:
+    attempt_times: 3
+    retry_wait_time: 3000
+    prefetch_count: 100
+    timeout: 5000
+
+kafka:
+  enable: false
+  strict: true
+  topic: ["my-topic"]
+  group_id: "my-group"
+  bootstrap_servers: ["127.0.0.1:9092"]
+  security_protocol: "PLAINTEXT"
+  sasl_mechanism: "PLAIN"
+
+rocketmq:
+  enable: false
+  strict: true
+  name_servers: ["127.0.0.1:9876"]
+  group_name: "my-group"
+  access_key: "ak"
+  secret_key: "sk"
+
+es:
+  enable: false
+  strict: true
+  endpoints: ["127.0.0.1:9200"]
+  username: elastic
+  password: "******"
+  is_https: false
+  insecure_skip_verify: false
+
+mongodb:
+  enable: false
+  strict: true
+  host: "127.0.0.1"
+  port: 27017
+  username: admin
+  password: "******"
+  max_pool_size: 100
+
+obs:
+  enable: false
+  strict: false
+  name: "minio-dev"                                     # client name, for multi-client lookup
+  endpoint: "127.0.0.1:9000"                            # MinIO / OBS / S3-compatible endpoint
+  region: "us-east-1"
+  access_key: "minioadmin"
+  secret_key: "minioadmin"
+  bucket: "my-bucket"
+  insecure_skip_verify: true                             # true when using HTTP or self-signed cert
+  max_retries: 3
+  timeout: 30                                            # seconds
+
+crypto:
+  - type: aes
+    key: "your-aes-key-16byte"
+  - type: des
+    key: "des-key8"
+```
+
 ## 配置校验
 
 `Validate()` 方法会检查：

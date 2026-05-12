@@ -173,6 +173,22 @@ type LimitConf struct {
 	QueueLimit    int   `mapstructure:"queue_limit" json:"queue_limit" yaml:"queue_limit" ini:"queue_limit"`
 }
 
+// OBSConfig OBS/S3 对象存储配置
+type OBSConfig struct {
+	Enable             bool   `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"`
+	Strict             bool   `mapstructure:"strict" json:"strict" yaml:"strict" ini:"strict"`
+	Name               string `mapstructure:"name" json:"name" yaml:"name" ini:"name"`
+	Protocol           string `mapstructure:"protocol" json:"protocol" yaml:"protocol" ini:"protocol"`
+	Endpoint           string `mapstructure:"endpoint" json:"endpoint" yaml:"endpoint" ini:"endpoint"`
+	Region             string `mapstructure:"region" json:"region" yaml:"region" ini:"region"`
+	AccessKey          string `mapstructure:"access_key" json:"access_key" yaml:"access_key" ini:"access_key"`
+	SecretKey          string `mapstructure:"secret_key" json:"secret_key" yaml:"secret_key" ini:"secret_key"`
+	Bucket             string `mapstructure:"bucket" json:"bucket" yaml:"bucket" ini:"bucket"`
+	InsecureSkipVerify bool   `mapstructure:"insecure_skip_verify" json:"insecure_skip_verify" yaml:"insecure_skip_verify" ini:"insecure_skip_verify"`
+	MaxRetries         int    `mapstructure:"max_retries" json:"max_retries" yaml:"max_retries" ini:"max_retries"`
+	Timeout            int64  `mapstructure:"timeout" json:"timeout" yaml:"timeout" ini:"timeout"`
+}
+
 // ServerConfig 新增的配置结构体
 type ServerConfig struct {
 	HTTP HTTPConfig `mapstructure:"http" json:"http" yaml:"http" ini:"http"`
@@ -245,6 +261,7 @@ type Config struct {
 	Redis       RedisConfig    `mapstructure:"redis" json:"redis" yaml:"redis" ini:"redis"`
 	ES          Elasticsearch  `mapstructure:"es" json:"es" yaml:"es" ini:"es"`
 	Mongodb     MongodbConf    `mapstructure:"mongodb" json:"mongodb" yaml:"mongodb" ini:"mongodb"`
+	OBS         OBSConfig      `mapstructure:"obs" json:"obs" yaml:"obs" ini:"obs"`
 }
 
 var applicationConfig = new(Config)
