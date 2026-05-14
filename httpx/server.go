@@ -59,9 +59,9 @@ func (c *Config) GetEndpoint() string {
 	}
 	var endpoint string
 	if c.Port <= 0 {
-		endpoint = fmt.Sprintf("%s://%s/", c.Protocol, c.Host)
+		endpoint = fmt.Sprintf("%s://%s", c.Protocol, c.Host)
 	} else {
-		endpoint = fmt.Sprintf("%s://%s:%d/", c.Protocol, c.Host, c.Port)
+		endpoint = fmt.Sprintf("%s://%s:%d", c.Protocol, c.Host, c.Port)
 	}
 	if c.BasePath != "" {
 		endpoint += c.BasePath
