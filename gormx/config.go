@@ -40,6 +40,7 @@ type Connection struct {
 	Username string `mapstructure:"username" json:"username" yaml:"username" ini:"username"`
 	Password string `mapstructure:"password" json:"password" yaml:"password" ini:"password"`
 	Database string `mapstructure:"database" json:"database" yaml:"database" ini:"database"`
+	Schema   string `mapstructure:"schema" json:"schema" yaml:"schema" ini:"schema"` // 数据库模式（如 PostgreSQL 的 search_path、DM 的 schema）
 
 	Args []ARG `mapstructure:"args" json:"args"`
 }
