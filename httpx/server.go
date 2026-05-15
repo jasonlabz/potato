@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 
+	"github.com/bytedance/sonic"
 	"github.com/jasonlabz/potato/log"
 )
 
@@ -14,6 +16,42 @@ var (
 	clientInstMap sync.Map // service name -> *Client (lazy initialized)
 	duplicateMap  = map[string]struct{}{}
 )
+
+func printBodyData(body any) string {
+	if body == nil {
+		return ""
+	}
+	switch v := body.(type) {
+	case string:
+		return v
+	case []byte:
+		return string(v)
+	default:
+		marshal, err := sonic.Marshal(v)
+		if err != nil {
+			return ""
+		}
+		return string(marshal)
+	}
+}
+
+func printFormData(formData map[string]string) string {
+	if len(formData) == 0 {
+		return ""
+	}
+	var builder strings.Builder
+	i := 0
+	for k, v := range formData {
+		if i > 0 {
+			builder.WriteByte('&')
+		}
+		builder.WriteString(k)
+		builder.WriteByte('=')
+		builder.WriteString(v)
+		i++
+	}
+	return builder.String()
+}
 
 type Config struct {
 	Name          string

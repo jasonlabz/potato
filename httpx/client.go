@@ -117,7 +117,6 @@ func (c *Client) logger() (l *log.LoggerWrapper) {
 
 // Get get request and json response
 func (c *Client) Get(ctx context.Context, url string, result any, opts ...OptionFunc) (err error) {
-	c.logger().Info(ctx, fmt.Sprintf("HTTP Request [method:%s] [URL:%s]", http.MethodGet, url))
 	r := c.client.R()
 	o := &Option{}
 	if len(opts) > 0 {
@@ -134,9 +133,12 @@ func (c *Client) Get(ctx context.Context, url string, result any, opts ...Option
 	if len(o.Cookies) > 0 {
 		r = r.SetCookies(o.Cookies)
 	}
+	bodyLog := ""
 	if o.Body != nil {
 		r = r.SetBody(o.Body)
+		bodyLog = fmt.Sprintf(" [Body:%s]", printBodyData(o.Body))
 	}
+	c.logger().Info(ctx, fmt.Sprintf("HTTP Request [method:%s] [URL:%s]%s", http.MethodGet, url, bodyLog))
 	res, err := r.SetResult(result).Get(url)
 	if err != nil {
 		c.logger().Error(ctx, err.Error())
@@ -210,7 +212,7 @@ func (c *Client) PutMultipart(ctx context.Context, url string, files []Multipart
 // requestMultipart 发送 multipart/form-data 请求，支持文件和普通字段混合上传
 func (c *Client) requestMultipart(ctx context.Context, url, method string, files []MultipartField, formFields map[string]string, result any, opts ...OptionFunc) (res *resty.Response, err error) {
 	c.logger().Info(ctx, fmt.Sprintf("HTTP Request [method:%s] [URL:%s] [Files:%d] [FormFields:%d]",
-		method, url, len(files), len(formFields)))
+		method, c.client.BaseURL+url, len(files), len(formFields)))
 
 	r := c.client.R()
 	o := &Option{}
@@ -258,29 +260,21 @@ func (c *Client) requestMultipart(ctx context.Context, url, method string, files
 		err = fmt.Errorf("multipart unsupported method:[%s]", method)
 	}
 
-	if err != nil {
-		c.logger().Error(ctx, err.Error())
+	if res == nil || err != nil {
+		c.logger().Error(ctx, fmt.Sprintf("HTTP Response[empty:%v] Error", res == nil), err)
 		return
 	}
-	c.logger().Info(ctx, fmt.Sprintf("Http Response [Code]:%d [Body]:%s [Cost]:%vms",
-		res.StatusCode(), string(res.Body()), res.Time()/time.Millisecond))
 
+	c.logger().Info(ctx, fmt.Sprintf("Http Response [Code:%d] [Body:%s] [Cost:%vms]",
+		res.StatusCode(), string(res.Body()), res.Time()/time.Millisecond))
 	return
 }
 
 // requestForm send formData and response json
 func (c *Client) requestForm(ctx context.Context, url, method string, formData map[string]string, result any, opts ...OptionFunc) (res *resty.Response, err error) {
-	c.logger().Info(ctx, fmt.Sprintf("HTTP Request [method:%s] [URL:%s] [Form-Data:%s]", method, url,
-		func() string {
-			if len(formData) == 0 {
-				return ""
-			}
-			var strList = make([]string, 0)
-			for key, val := range formData {
-				strList = append(strList, fmt.Sprintf("%s=%s", key, val))
-			}
-			return strings.Join(strList, "&")
-		}()))
+	c.logger().Info(ctx, fmt.Sprintf("HTTP Request [method:%s] [URL:%s] [Form-Data:%s]",
+		method, c.client.BaseURL+url,
+		printFormData(formData)))
 	r := c.client.R().SetHeader("Content-Type", "application/x-www-form-urlencoded")
 	o := &Option{}
 	if len(opts) > 0 {
@@ -316,11 +310,11 @@ func (c *Client) requestForm(ctx context.Context, url, method string, formData m
 	default:
 		err = fmt.Errorf("form param unsupported method:[%s]", method)
 	}
-	if err != nil {
-		c.logger().Error(ctx, fmt.Sprintf("HTTP Request Error"), err)
+	if res == nil || err != nil {
+		c.logger().Error(ctx, fmt.Sprintf("HTTP Response[empty:%v] Error", res == nil), err)
 		return
 	}
-	c.logger().Info(ctx, fmt.Sprintf("Http Response [Code]:%d [Body]:%s [Cost]:%vms",
+	c.logger().Info(ctx, fmt.Sprintf("Http Response [Code:%d] [Body:%s] [Cost:%vms]",
 		res.StatusCode(), string(res.Body()), res.Time()/time.Millisecond))
 
 	return res, err
@@ -328,13 +322,8 @@ func (c *Client) requestForm(ctx context.Context, url, method string, formData m
 
 // requestJson send json and response json
 func (c *Client) requestJson(ctx context.Context, url, method string, body any, result any, opts ...OptionFunc) (res *resty.Response, err error) {
-	c.logger().Info(ctx, fmt.Sprintf("HTTP Request [method:%s] [URL:%s] [Body:%s]", method, url, func() string {
-		marshal, marErr := sonic.Marshal(body)
-		if marErr != nil {
-			return ""
-		}
-		return string(marshal)
-	}()))
+	c.logger().Info(ctx, fmt.Sprintf("HTTP Request [method:%s] [URL:%s] [Body:%s]",
+		method, c.client.BaseURL+url, printBodyData(body)))
 
 	r := c.client.R().SetHeader("Content-Type", "application/json")
 	o := &Option{}
@@ -372,11 +361,11 @@ func (c *Client) requestJson(ctx context.Context, url, method string, body any, 
 		err = fmt.Errorf("body param unsupported method:[%s]", method)
 	}
 
-	if err != nil {
-		c.logger().Error(ctx, err.Error())
+	if res == nil || err != nil {
+		c.logger().Error(ctx, fmt.Sprintf("HTTP Response[empty:%v] Error", res == nil), err)
 		return
 	}
-	c.logger().Info(ctx, fmt.Sprintf("Http Response [Code]:%d [Body]:%s [Cost]:%vms",
+	c.logger().Info(ctx, fmt.Sprintf("Http Response [Code:%d] [Body:%s] [Cost:%vms]",
 		res.StatusCode(), string(res.Body()), res.Time()/time.Millisecond))
 
 	return
