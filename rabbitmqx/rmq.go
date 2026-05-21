@@ -386,6 +386,7 @@ func (r *RabbitMQOperator) connect(ctx context.Context) (err error) {
 func (r *RabbitMQOperator) tryReConnect(daemon bool) (connected bool, err error) {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGKILL, syscall.SIGTERM)
+	defer signal.Stop(sig)
 	ticker := time.NewTicker(time.Duration(r.config.LimitConf.RetryWaitTime) * time.Second)
 	defer ticker.Stop()
 
@@ -598,9 +599,8 @@ func (r *RabbitMQOperator) PushDelayMessage(ctx context.Context, body *PushDelay
 func (r *RabbitMQOperator) pushDelayMessageCore(ctx context.Context, bodyInterface PushBodyInterface, opts ...OptionFunc) (err error) {
 	body := bodyInterface.(*PushDelayBody)
 
-	// 验证延迟时间参数
-	if body.DelayTime == 0 && body.Expiration == "" {
-		return errors.New("no expire time set")
+	if err = body.Validate(); err != nil {
+		return err
 	}
 
 	// 借用通道
@@ -618,11 +618,6 @@ func (r *RabbitMQOperator) pushDelayMessageCore(ctx context.Context, bodyInterfa
 	delayStr := strconv.FormatInt(body.DelayTime.Milliseconds(), 10)
 	delayQueue := "potato_delay_queue:" + body.ExchangeName
 
-	// 设置默认交换机类型
-	if string(body.ExchangeType) == "" {
-		body.ExchangeType = Fanout
-	}
-
 	// 获取队列锁，确保同一队列的声明操作是串行的
 	queueLock := r.queueLocks.GetLock(delayQueue)
 	queueLock.Lock()
@@ -634,7 +629,7 @@ func (r *RabbitMQOperator) pushDelayMessageCore(ctx context.Context, bodyInterfa
 	}
 
 	// 声明延迟队列（死信队列）
-	if _, err = r.DeclareQueue(channelWrap, delayQueue, amqp.Table{
+	if err = r.DeclareQueue(channelWrap, delayQueue, amqp.Table{
 		"x-dead-letter-exchange":    body.ExchangeName,
 		"x-dead-letter-routing-key": body.RoutingKey,
 	}); err != nil {
@@ -650,7 +645,7 @@ func (r *RabbitMQOperator) pushDelayMessageCore(ctx context.Context, bodyInterfa
 		targetQueueLock.Lock()
 
 		// 声明目标队列
-		if _, err = r.DeclareQueue(channelWrap, queue, table, opts...); err != nil {
+		if err = r.DeclareQueue(channelWrap, queue, table, opts...); err != nil {
 			targetQueueLock.Unlock()
 			return fmt.Errorf("declare target queue failed: %w", err)
 		}
@@ -718,9 +713,9 @@ func (r *RabbitMQOperator) pushWithRetry(ctx context.Context, body PushBodyInter
 		}
 
 		// 执行推送
-		if pushErr := pushFunc(ctx, body, opts...); pushErr != nil {
+		if err = pushFunc(ctx, body, opts...); err != nil {
 			r.l.Warn(ctx, fmt.Sprintf("[push] Push failed after %d seconds, retrying...", r.config.LimitConf.RetryWaitTime),
-				"err", pushErr.Error(), "msg_id", body.GetMessageId(), "retry_count", i+1)
+				"err", err.Error(), "msg_id", body.GetMessageId(), "retry_count", i+1)
 
 			select {
 			case <-r.closeCh:
@@ -774,6 +769,10 @@ func (r *RabbitMQOperator) createPublishingMessage(publishing *amqp.Publishing) 
 func (r *RabbitMQOperator) pushQueueCore(ctx context.Context, bodyInterface PushBodyInterface, opts ...OptionFunc) (err error) {
 	body := bodyInterface.(*QueuePushBody)
 
+	if err = body.Validate(); err != nil {
+		return err
+	}
+
 	channelWrap, err := r.BorrowChannel(ctx, body.OpenConfirm)
 	if err != nil {
 		return fmt.Errorf("borrow channel failed: %w", err)
@@ -790,7 +789,7 @@ func (r *RabbitMQOperator) pushQueueCore(ctx context.Context, bodyInterface Push
 	defer queueLock.Unlock()
 
 	// 声明队列
-	if _, err = r.DeclareQueue(channelWrap, body.QueueName, body.Args, opts...); err != nil {
+	if err = r.DeclareQueue(channelWrap, body.QueueName, body.Args, opts...); err != nil {
 		return fmt.Errorf("declare queue failed: %w", err)
 	}
 
@@ -814,6 +813,10 @@ func (r *RabbitMQOperator) pushQueueCore(ctx context.Context, bodyInterface Push
 func (r *RabbitMQOperator) pushExchangeCore(ctx context.Context, bodyInterface PushBodyInterface, opts ...OptionFunc) (err error) {
 	body := bodyInterface.(*ExchangePushBody)
 
+	if err = body.Validate(); err != nil {
+		return err
+	}
+
 	channelWrap, err := r.BorrowChannel(ctx, body.OpenConfirm)
 	if err != nil {
 		return fmt.Errorf("borrow channel failed: %w", err)
@@ -823,11 +826,6 @@ func (r *RabbitMQOperator) pushExchangeCore(ctx context.Context, bodyInterface P
 			r.l.Warn(ctx, "return channel to pool failed", "err", returnErr.Error())
 		}
 	}()
-
-	// 设置默认交换机类型
-	if body.ExchangeType == "" {
-		body.ExchangeType = Fanout
-	}
 
 	if len(body.QueueArgs) == 0 {
 		body.QueueArgs = make(map[string]amqp.Table)
@@ -847,7 +845,7 @@ func (r *RabbitMQOperator) pushExchangeCore(ctx context.Context, bodyInterface P
 		queueLock.Lock()
 
 		// 声明队列
-		if _, err = r.DeclareQueue(channelWrap, queue, table, opts...); err != nil {
+		if err = r.DeclareQueue(channelWrap, queue, table, opts...); err != nil {
 			queueLock.Unlock()
 			return fmt.Errorf("declare queue failed: %w", err)
 		}
@@ -879,6 +877,10 @@ func (r *RabbitMQOperator) pushExchangeCore(ctx context.Context, bodyInterface P
 func (r *RabbitMQOperator) pushCore(ctx context.Context, bodyInterface PushBodyInterface, opts ...OptionFunc) (err error) {
 	body := bodyInterface.(*PushBody)
 
+	if err = body.Validate(); err != nil {
+		return err
+	}
+
 	channelWrap, err := r.BorrowChannel(ctx, body.OpenConfirm)
 	if err != nil {
 		return fmt.Errorf("borrow channel failed: %w", err)
@@ -904,7 +906,7 @@ func (r *RabbitMQOperator) pushCore(ctx context.Context, bodyInterface PushBodyI
 			queueLock := r.queueLocks.GetLock(queue)
 			queueLock.Lock()
 
-			if _, err = r.DeclareQueue(channelWrap, queue, table, opts...); err != nil {
+			if err = r.DeclareQueue(channelWrap, queue, table, opts...); err != nil {
 				queueLock.Unlock()
 				r.l.Error(ctx, "MQ declare queue failed", "err", err.Error(), "msg_id", body.MessageId)
 				return fmt.Errorf("declare queue failed: %w", err)
@@ -926,7 +928,7 @@ func (r *RabbitMQOperator) pushCore(ctx context.Context, bodyInterface PushBodyI
 		queueLock.Lock()
 		defer queueLock.Unlock()
 
-		if _, err = r.DeclareQueue(channelWrap, body.QueueName, body.Args, opts...); err != nil {
+		if err = r.DeclareQueue(channelWrap, body.QueueName, body.Args, opts...); err != nil {
 			r.l.Error(ctx, "MQ declare queue failed", "err", err.Error(), "msg_id", body.MessageId)
 			return fmt.Errorf("declare queue failed: %w", err)
 		}
@@ -991,7 +993,7 @@ func (r *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-c
 
 		sig := make(chan os.Signal, 1)
 		signal.Notify(sig, syscall.SIGINT, syscall.SIGKILL)
-
+		defer signal.Stop(sig)
 		ticker := time.NewTicker(time.Duration(r.config.LimitConf.RetryWaitTime) * time.Second)
 		defer ticker.Stop()
 		var innerErr error
@@ -1094,7 +1096,7 @@ func (r *RabbitMQOperator) consumeCore(ctx context.Context, param *ConsumeBody, 
 	}
 
 	// 声明队列
-	_, err = r.DeclareQueue(*channelWrap, param.QueueName, param.QueueArgs, opts...)
+	err = r.DeclareQueue(*channelWrap, param.QueueName, param.QueueArgs, opts...)
 	if err != nil {
 		return
 	}
@@ -1133,13 +1135,14 @@ func (r *RabbitMQOperator) consumeCore(ctx context.Context, param *ConsumeBody, 
 
 // Options 声明选项
 type Options struct {
-	durable    bool
-	autoDelete bool
-	exclusive  bool
-	noWait     bool
-	internal   bool
-	ifUnUsed   bool
-	ifEmpty    bool
+	durable      bool
+	autoDelete   bool
+	exclusive    bool
+	noWait       bool
+	internal     bool
+	ifUnUsed     bool
+	ifEmpty      bool
+	forceDeclare bool
 }
 
 type OptionFunc func(*Options)
@@ -1186,7 +1189,14 @@ func WithDelOptionIfUnused(ifUnUsed bool) OptionFunc {
 	}
 }
 
-// DeclareExchange 声明交换机
+// WithForceDeclare 强制声明，即使已缓存也重新 declare
+func WithForceDeclare(force bool) OptionFunc {
+	return func(options *Options) {
+		options.forceDeclare = force
+	}
+}
+
+// DeclareExchange 声明交换机（幂等，缓存后跳过）
 func (r *RabbitMQOperator) DeclareExchange(channelWrap *ChannelWrap, exchangeName,
 	exchangeType string, args amqp.Table, opts ...OptionFunc) (err error) {
 	options := &Options{
@@ -1200,40 +1210,34 @@ func (r *RabbitMQOperator) DeclareExchange(channelWrap *ChannelWrap, exchangeNam
 	}
 
 	opKey := fmt.Sprintf("declare_exchange:%s", exchangeName)
-	_, ok := r.opCache.Load(opKey)
-	if ok {
-		options.noWait = true
-	} else {
-		r.declareMu.Lock()
-		defer r.declareMu.Unlock()
-	}
-
-	err = channelWrap.channel.ExchangeDeclarePassive(exchangeName, exchangeType, options.durable, options.autoDelete, options.internal, options.noWait, args)
-	if err == nil {
-		if !ok {
-			r.opCache.Store(opKey, true)
+	if !options.forceDeclare {
+		if _, ok := r.opCache.Load(opKey); ok {
+			return nil
 		}
-		return
 	}
 
-	err = r.recheck(channelWrap)
-	if err != nil {
-		return
+	r.declareMu.Lock()
+	defer r.declareMu.Unlock()
+
+	if !options.forceDeclare {
+		if _, ok := r.opCache.Load(opKey); ok {
+			return nil
+		}
 	}
+
 	err = channelWrap.channel.ExchangeDeclare(exchangeName, exchangeType, options.durable, options.autoDelete, options.internal, options.noWait, args)
 	if err != nil {
-		return
+		return err
 	}
-
-	if !ok {
+	if !options.forceDeclare {
 		r.opCache.Store(opKey, true)
 	}
-	return
+	return nil
 }
 
-// DeclareQueue 声明队列
+// DeclareQueue 声明队列（幂等，缓存后跳过）
 func (r *RabbitMQOperator) DeclareQueue(channelWrap *ChannelWrap, queueName string,
-	args amqp.Table, opts ...OptionFunc) (queue amqp.Queue, err error) {
+	args amqp.Table, opts ...OptionFunc) error {
 	options := &Options{
 		durable:    true,
 		autoDelete: false,
@@ -1245,35 +1249,29 @@ func (r *RabbitMQOperator) DeclareQueue(channelWrap *ChannelWrap, queueName stri
 	}
 
 	opKey := fmt.Sprintf("declare_queue:%s", queueName)
-	_, ok := r.opCache.Load(opKey)
-	if ok {
-		options.noWait = true
-	} else {
-		r.declareMu.Lock()
-		defer r.declareMu.Unlock()
-	}
-
-	queue, err = channelWrap.channel.QueueDeclarePassive(queueName, options.durable, options.autoDelete, options.exclusive, options.noWait, args)
-	if err == nil {
-		if !ok {
-			r.opCache.Store(opKey, true)
+	if !options.forceDeclare {
+		if _, ok := r.opCache.Load(opKey); ok {
+			return nil
 		}
-		return
 	}
 
-	err = r.recheck(channelWrap)
-	if err != nil {
-		return
-	}
-	queue, err = channelWrap.channel.QueueDeclare(queueName, options.durable, options.autoDelete, options.exclusive, options.noWait, args)
-	if err != nil {
-		return
+	r.declareMu.Lock()
+	defer r.declareMu.Unlock()
+
+	if !options.forceDeclare {
+		if _, ok := r.opCache.Load(opKey); ok {
+			return nil
+		}
 	}
 
-	if !ok {
+	_, err := channelWrap.channel.QueueDeclare(queueName, options.durable, options.autoDelete, options.exclusive, options.noWait, args)
+	if err != nil {
+		return err
+	}
+	if !options.forceDeclare {
 		r.opCache.Store(opKey, true)
 	}
-	return
+	return nil
 }
 
 // CancelQueue 取消队列消费
@@ -1297,26 +1295,36 @@ func (r *RabbitMQOperator) CancelQueue(queueName string) (err error) {
 	return
 }
 
-// BindQueue 绑定队列到交换机
+// BindQueue 绑定队列到交换机（幂等，缓存后跳过）
 func (r *RabbitMQOperator) BindQueue(channelWrap *ChannelWrap, exchangeName, routingKey, queueName string, args amqp.Table, opts ...OptionFunc) (err error) {
 	options := &Options{
 		noWait: false,
 	}
-	opKey := fmt.Sprintf("bind_queue:%s_%s", exchangeName, queueName)
-	_, ok := r.opCache.Load(opKey)
-	if ok {
-		options.noWait = true
-	}
-
 	for _, opt := range opts {
 		opt(options)
 	}
+
+	opKey := fmt.Sprintf("bind_queue:%s_%s", exchangeName, queueName)
+	if !options.forceDeclare {
+		if _, ok := r.opCache.Load(opKey); ok {
+			return nil
+		}
+	}
+
+	r.declareMu.Lock()
+	defer r.declareMu.Unlock()
+
+	if !options.forceDeclare {
+		if _, ok := r.opCache.Load(opKey); ok {
+			return nil
+		}
+	}
+
 	err = channelWrap.channel.QueueBind(queueName, routingKey, exchangeName, options.noWait, args)
 	if err != nil {
 		return err
 	}
-
-	if !ok {
+	if !options.forceDeclare {
 		r.opCache.Store(opKey, true)
 	}
 	return
