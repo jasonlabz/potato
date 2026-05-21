@@ -1,6 +1,7 @@
 package rabbitmqx
 
 import (
+	"errors"
 	"os"
 	"strconv"
 	"sync/atomic"
@@ -32,6 +33,14 @@ func (p *PushDelayBody) GetMessageId() string { return p.MessageId }
 func (p *PushDelayBody) SetMessageId(id string) { p.MessageId = id }
 
 func (p *PushDelayBody) GetBody() []byte { return p.Body }
+
+func (p *PushDelayBody) Validate() error {
+	if p.DelayTime == 0 && p.Expiration == "" {
+		return errors.New("push delay message: no expire time set")
+	}
+	p.ExchangePushBody.Validate()
+	return nil
+}
 
 func (p *PushDelayBody) setArgs(key string, value any, queues ...string) *PushDelayBody {
 	if p.QueueArgs == nil {
@@ -89,7 +98,7 @@ func (p *PushDelayBody) SetDeadLetterExchange(exchange string, queues ...string)
 
 // SetMsgTTL 发送到队列的消息可以存活多长时间（毫秒）。简单来说,就是队列中消息的过期时间
 func (p *PushDelayBody) SetMsgTTL(duration time.Duration, queues ...string) *PushDelayBody {
-	return p.setArgs("x-message-ttl", duration, queues...)
+	return p.setArgs("x-message-ttl", duration.Milliseconds(), queues...)
 }
 
 // SetQueueMode {"x-queue-mode","lazy" }设置队列为懒人模式.
@@ -101,7 +110,7 @@ func (p *PushDelayBody) SetQueueMode(mode string, queues ...string) *PushDelayBo
 
 // SetExpireTime 队列在被自动删除（毫秒）之前可以存活多长时间。简单来说,就是队列的过期时间
 func (p *PushDelayBody) SetExpireTime(expire time.Duration, queues ...string) *PushDelayBody {
-	return p.setArgs("x-expires", expire, queues...)
+	return p.setArgs("x-expires", expire.Milliseconds(), queues...)
 }
 
 // SetQueueMasterLocator 将队列设置为主位置模式，确定在节点集群上声明时队列主机所在的规则。
@@ -188,7 +197,7 @@ func (p *PushBody) SetMessageId(id string) { p.MessageId = id }
 
 func (p *PushBody) GetBody() []byte { return p.Body }
 
-func (p *PushBody) Validate() {
+func (p *PushBody) Validate() error {
 	if len(p.BindingKeyMap) == 0 {
 		p.BindingKeyMap = map[string]string{}
 	}
@@ -223,6 +232,7 @@ func (p *PushBody) Validate() {
 			p.BindingKeyMap[queue] = queue
 		}
 	}
+	return nil
 }
 
 func (p *PushBody) SetPriority(priority uint8) *PushBody {
@@ -339,7 +349,7 @@ func (p *PushBody) SetDeadLetterExchange(exchange string, queues ...string) *Pus
 
 // SetMsgTTL 发送到队列的消息可以存活多长时间（毫秒）。简单来说,就是队列中消息的过期时间
 func (p *PushBody) SetMsgTTL(duration time.Duration, queues ...string) *PushBody {
-	return p.setArgs("x-message-ttl", duration, queues...)
+	return p.setArgs("x-message-ttl", duration.Milliseconds(), queues...)
 }
 
 // SetQueueMode {"x-queue-mode","lazy" }设置队列为懒人模式.
@@ -351,7 +361,7 @@ func (p *PushBody) SetQueueMode(mode string, queues ...string) *PushBody {
 
 // SetExpireTime 队列在被自动删除（毫秒）之前可以存活多长时间。简单来说,就是队列的过期时间
 func (p *PushBody) SetExpireTime(expire time.Duration, queues ...string) *PushBody {
-	return p.setArgs("x-expires", expire, queues...)
+	return p.setArgs("x-expires", expire.Milliseconds(), queues...)
 }
 
 // SetQueueMasterLocator 将队列设置为主位置模式，确定在节点集群上声明时队列主机所在的规则。
@@ -382,7 +392,7 @@ func (e *ExchangePushBody) SetMessageId(id string) { e.MessageId = id }
 
 func (e *ExchangePushBody) GetBody() []byte { return e.Body }
 
-func (e *ExchangePushBody) Validate() {
+func (e *ExchangePushBody) Validate() error {
 	if string(e.ExchangeType) == "" {
 		//  default exchangeType is fanout
 		e.ExchangeType = Fanout
@@ -393,6 +403,7 @@ func (e *ExchangePushBody) Validate() {
 			e.BindingKeyMap[queue] = queue
 		}
 	}
+	return nil
 }
 
 func (e *ExchangePushBody) SetPriority(priority uint8) *ExchangePushBody {
@@ -456,7 +467,7 @@ func (e *ExchangePushBody) SetDeadLetterExchange(exchange string, queues ...stri
 
 // SetMsgTTL 发送到队列的消息可以存活多长时间（毫秒）。简单来说,就是队列中消息的过期时间
 func (e *ExchangePushBody) SetMsgTTL(duration time.Duration, queues ...string) *ExchangePushBody {
-	return e.setArgs("x-message-ttl", duration, queues...)
+	return e.setArgs("x-message-ttl", duration.Milliseconds(), queues...)
 }
 
 // SetQueueMode {"x-queue-mode","lazy" }设置队列为懒人模式.
@@ -468,7 +479,7 @@ func (e *ExchangePushBody) SetQueueMode(mode string, queues ...string) *Exchange
 
 // SetExpireTime 队列在被自动删除（毫秒）之前可以存活多长时间。简单来说,就是队列的过期时间
 func (e *ExchangePushBody) SetExpireTime(expire time.Duration, queues ...string) *ExchangePushBody {
-	return e.setArgs("x-expires", expire, queues...)
+	return e.setArgs("x-expires", expire.Milliseconds(), queues...)
 }
 
 // SetQueueMasterLocator 将队列设置为主位置模式，确定在节点集群上声明时队列主机所在的规则。
@@ -536,7 +547,12 @@ func (q *QueuePushBody) SetMessageId(id string) { q.MessageId = id }
 
 func (q *QueuePushBody) GetBody() []byte { return q.Body }
 
-func (q *QueuePushBody) Validate() {}
+func (q *QueuePushBody) Validate() error {
+	if q.QueueName == "" {
+		return errors.New("push queue: queue name is empty")
+	}
+	return nil
+}
 
 func (q *QueuePushBody) SetPriority(priority uint8) *QueuePushBody {
 	q.Priority = priority
@@ -592,7 +608,7 @@ func (q *QueuePushBody) SetDeadLetterExchange(exchange string) *QueuePushBody {
 
 // SetMsgTTL 发送到队列的消息可以存活多长时间（毫秒）。简单来说,就是队列中消息的过期时间
 func (q *QueuePushBody) SetMsgTTL(duration time.Duration) *QueuePushBody {
-	return q.setArgs("x-message-ttl", duration)
+	return q.setArgs("x-message-ttl", duration.Milliseconds())
 }
 
 // SetQueueMode {"x-queue-mode","lazy" }设置队列为懒人模式.
@@ -604,7 +620,7 @@ func (q *QueuePushBody) SetQueueMode(mode string) *QueuePushBody {
 
 // SetExpireTime 队列在被自动删除（毫秒）之前可以存活多长时间。简单来说,就是队列的过期时间
 func (q *QueuePushBody) SetExpireTime(expire time.Duration) *QueuePushBody {
-	return q.setArgs("x-expires", expire)
+	return q.setArgs("x-expires", expire.Milliseconds())
 }
 
 // SetQueueMasterLocator 将队列设置为主位置模式，确定在节点集群上声明时队列主机所在的规则。
@@ -707,7 +723,7 @@ func (c *ConsumeBody) SetDeadLetterExchange(exchange string) *ConsumeBody {
 
 // SetMsgTTL 发送到队列的消息可以存活多长时间（毫秒）。简单来说,就是队列中消息的过期时间
 func (c *ConsumeBody) SetMsgTTL(duration time.Duration) *ConsumeBody {
-	return c.setArgs("x-message-ttl", duration)
+	return c.setArgs("x-message-ttl", duration.Milliseconds())
 }
 
 // SetQueueMode {"x-queue-mode","lazy" }设置队列为懒人模式.
@@ -719,7 +735,7 @@ func (c *ConsumeBody) SetQueueMode(mode string) *ConsumeBody {
 
 // SetExpireTime 队列在被自动删除（毫秒）之前可以存活多长时间。简单来说,就是队列的过期时间
 func (c *ConsumeBody) SetExpireTime(expire time.Duration) *ConsumeBody {
-	return c.setArgs("x-expires", expire)
+	return c.setArgs("x-expires", expire.Milliseconds())
 }
 
 // SetQueueMasterLocator 将队列设置为主位置模式，确定在节点集群上声明时队列主机所在的规则。
