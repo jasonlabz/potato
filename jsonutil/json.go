@@ -52,28 +52,32 @@ func GetJSONFromBytes(bytes []byte, path ...any) (*JSON, error) {
 	}, nil
 }
 
-// fromString 从字符串s中获取JSON，该函数不会检查格式合法性
+// fromString 从字符串中获取JSON（内部使用，不做格式校验）
 func fromString(s string) *JSON {
-	node := ast.NewRaw(s)
-	return &JSON{
-		rt: node,
+	astNode, err := sonic.GetFromString(s)
+	if err != nil {
+		return &JSON{}
 	}
+	return &JSON{rt: astNode}
 }
 
-// FromBytes 从字符流中b中获取JSON，该函数会检查格式合法性
+// FromBytes 从字节流中获取JSON，内部使用 sonic.Get 做 JIT 解析（与 GetJSONFromBytes 一致），
+// 避免 ast.NewBytes 延迟加载在某些场景下 GetByPath 返回空值的问题。
 func FromBytes(b []byte) (*JSON, error) {
-	if !sonic.Valid(b) {
-		return nil, errors.Wrapf(ErrJSONNotValid, "json: %v", string(b))
+	astNode, err := sonic.Get(b)
+	if err != nil {
+		return nil, errors.Wrapf(ErrJSONNotValid, "json: %v, err: %v", string(b), err)
 	}
-	return fromBytes(b), nil
+	return &JSON{rt: astNode}, nil
 }
 
-// fromBytes 从字符流b中获取JSON，该函数不会检查格式合法性
+// fromBytes 从字节流中获取JSON（内部使用，不做格式校验）
 func fromBytes(b []byte) *JSON {
-	bytesNode := ast.NewBytes(b)
-	return &JSON{
-		rt: bytesNode,
+	astNode, err := sonic.Get(b)
+	if err != nil {
+		return &JSON{}
 	}
+	return &JSON{rt: astNode}
 }
 
 // FromFile 从文件filename中获取JSON，该函数会检查格式合法性
