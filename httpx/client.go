@@ -138,7 +138,7 @@ func (c *Client) Get(ctx context.Context, url string, result any, opts ...Option
 		r = r.SetBody(o.Body)
 		bodyLog = fmt.Sprintf(" [Body:%s]", printBodyData(o.Body))
 	}
-	c.logger().Info(ctx, fmt.Sprintf("HTTP Request [method:%s] [URL:%s]%s", http.MethodGet, url, bodyLog))
+	c.logger().Info(ctx, fmt.Sprintf("HTTP Request [method:%s] [URL:%s]%s", http.MethodGet, printURL(c.client.BaseURL, url), bodyLog))
 	res, err := r.SetResult(result).Get(url)
 	if err != nil {
 		c.logger().Error(ctx, err.Error())
@@ -212,7 +212,7 @@ func (c *Client) PutMultipart(ctx context.Context, url string, files []Multipart
 // requestMultipart 发送 multipart/form-data 请求，支持文件和普通字段混合上传
 func (c *Client) requestMultipart(ctx context.Context, url, method string, files []MultipartField, formFields map[string]string, result any, opts ...OptionFunc) (res *resty.Response, err error) {
 	c.logger().Info(ctx, fmt.Sprintf("HTTP Request [method:%s] [URL:%s] [Files:%d] [FormFields:%d]",
-		method, c.client.BaseURL+url, len(files), len(formFields)))
+		method, printURL(c.client.BaseURL, url), len(files), len(formFields)))
 
 	r := c.client.R()
 	o := &Option{}
@@ -273,7 +273,7 @@ func (c *Client) requestMultipart(ctx context.Context, url, method string, files
 // requestForm send formData and response json
 func (c *Client) requestForm(ctx context.Context, url, method string, formData map[string]string, result any, opts ...OptionFunc) (res *resty.Response, err error) {
 	c.logger().Info(ctx, fmt.Sprintf("HTTP Request [method:%s] [URL:%s] [Form-Data:%s]",
-		method, c.client.BaseURL+url,
+		method, printURL(c.client.BaseURL, url),
 		printFormData(formData)))
 	r := c.client.R().SetHeader("Content-Type", "application/x-www-form-urlencoded")
 	o := &Option{}
@@ -323,7 +323,7 @@ func (c *Client) requestForm(ctx context.Context, url, method string, formData m
 // requestJson send json and response json
 func (c *Client) requestJson(ctx context.Context, url, method string, body any, result any, opts ...OptionFunc) (res *resty.Response, err error) {
 	c.logger().Info(ctx, fmt.Sprintf("HTTP Request [method:%s] [URL:%s] [Body:%s]",
-		method, c.client.BaseURL+url, printBodyData(body)))
+		method, printURL(c.client.BaseURL, url), printBodyData(body)))
 
 	r := c.client.R().SetHeader("Content-Type", "application/json")
 	o := &Option{}

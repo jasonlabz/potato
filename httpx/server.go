@@ -35,6 +35,16 @@ func printBodyData(body any) string {
 	}
 }
 
+func printURL(baseURL, url string) string {
+	if len(baseURL) == 0 {
+		return url
+	}
+	if strings.HasPrefix(url, "https://") || strings.HasPrefix(url, "http://") {
+		return url
+	}
+	return baseURL + url
+}
+
 func printFormData(formData map[string]string) string {
 	if len(formData) == 0 {
 		return ""
