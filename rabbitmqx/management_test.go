@@ -23,6 +23,20 @@ func intFromString(s string) int {
 	return n
 }
 
+func TestMQConfigAddrUsesVirtualHost(t *testing.T) {
+	addr := (&MQConfig{Host: "127.0.0.1", Port: 5672, Username: "guest", Password: "guest", VirtualHost: "tenant-a"}).addr()
+	if addr != "amqp://guest:guest@127.0.0.1:5672/tenant-a" {
+		t.Fatalf("addr = %q", addr)
+	}
+}
+
+func TestMQConfigAddrDefaultsToRootVirtualHost(t *testing.T) {
+	addr := (&MQConfig{Host: "127.0.0.1", Port: 5672, Username: "guest", Password: "guest"}).addr()
+	if addr != "amqp://guest:guest@127.0.0.1:5672/%2F" {
+		t.Fatalf("addr = %q", addr)
+	}
+}
+
 func TestNewRabbitMQManagementOperatorDoesNotConnectAMQP(t *testing.T) {
 	op := NewRabbitMQManagementOperator(&MQConfig{Host: "127.0.0.1", Port: 1, ManagementPort: 15672, Username: "guest", Password: "guest"})
 	if op == nil || op.config.Host != "127.0.0.1" {
