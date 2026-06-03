@@ -75,11 +75,13 @@ const (
 
 // MQConfig 定义队列连接信息
 type MQConfig struct {
-	Username  string    `json:"username"` // 用户
-	Password  string    `json:"password"` // 密码
-	Host      string    `json:"host"`     // 服务地址
-	Port      int       `json:"port"`     // 端口
-	LimitConf LimitConf `json:"limit_conf"`
+	Username       string    `json:"username"`        // 用户
+	Password       string    `json:"password"`        // 密码
+	Host           string    `json:"host"`            // 服务地址
+	Port           int       `json:"port"`            // 端口
+	ManagementPort int       `json:"management_port"` // 管理 API 端口
+	VirtualHost    string    `json:"virtual_host"`    // 虚拟主机
+	LimitConf      LimitConf `json:"limit_conf"`
 }
 
 type LimitConf struct {
