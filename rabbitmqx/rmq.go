@@ -162,11 +162,10 @@ func (c *MQConfig) Validate() error {
 
 // addr 构建连接地址
 func (c *MQConfig) addr() string {
-	virtualHost := c.VirtualHost
-	if virtualHost == "" {
-		virtualHost = "/"
+	if c.VirtualHost == "" {
+		return fmt.Sprintf("amqp://%s:%s@%s:%d/", c.Username, c.Password, c.Host, c.Port)
 	}
-	return fmt.Sprintf("amqp://%s:%s@%s:%d/%s", c.Username, c.Password, c.Host, c.Port, url.PathEscape(virtualHost))
+	return fmt.Sprintf("amqp://%s:%s@%s:%d/%s", c.Username, c.Password, c.Host, c.Port, url.PathEscape(c.VirtualHost))
 }
 
 // RabbitMQOperator RabbitMQ 操作器，提供消息推送和消费功能
