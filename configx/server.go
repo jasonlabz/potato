@@ -156,13 +156,15 @@ type MongodbConf struct {
 }
 
 type RabbitMQConf struct {
-	Enable    bool      `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"`
-	Strict    bool      `mapstructure:"strict" json:"strict" yaml:"strict" ini:"strict"`
-	Host      string    `mapstructure:"host" json:"host" yaml:"host" ini:"host"`
-	Port      int       `mapstructure:"port" json:"port" yaml:"port" ini:"port"`
-	Username  string    `mapstructure:"username" json:"username" yaml:"username" ini:"username"`
-	Password  string    `mapstructure:"password" json:"password" yaml:"password" ini:"password"`
-	LimitConf LimitConf `mapstructure:"limit_conf" json:"limit_conf" yaml:"limit_conf" ini:"limit_conf"`
+	Enable         bool      `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"`
+	Strict         bool      `mapstructure:"strict" json:"strict" yaml:"strict" ini:"strict"`
+	Host           string    `mapstructure:"host" json:"host" yaml:"host" ini:"host"`
+	Port           int       `mapstructure:"port" json:"port" yaml:"port" ini:"port"`
+	ManagementPort int       `mapstructure:"management_port" json:"management_port" yaml:"management_port" ini:"management_port"`
+	VirtualHost    string    `mapstructure:"virtual_host" json:"virtual_host" yaml:"virtual_host" ini:"virtual_host"`
+	Username       string    `mapstructure:"username" json:"username" yaml:"username" ini:"username"`
+	Password       string    `mapstructure:"password" json:"password" yaml:"password" ini:"password"`
+	LimitConf      LimitConf `mapstructure:"limit_conf" json:"limit_conf" yaml:"limit_conf" ini:"limit_conf"`
 }
 
 type LimitConf struct {
