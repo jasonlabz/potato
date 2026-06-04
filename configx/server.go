@@ -52,17 +52,22 @@ type CryptoConfig struct {
 
 // KafkaConfig 配置
 type KafkaConfig struct {
-	Enable           bool     `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"`
-	Strict           bool     `mapstructure:"strict" json:"strict" yaml:"strict" ini:"strict"`
-	Topic            []string `mapstructure:"topic" json:"topic" yaml:"topic" ini:"topic"`
-	GroupId          string   `mapstructure:"group_id" json:"group_id" yaml:"group_id" ini:"group_id"`
-	BootstrapServers []string `mapstructure:"bootstrap_servers" json:"bootstrap_servers" yaml:"bootstrap_servers" ini:"bootstrap_servers"`
-	SecurityProtocol string   `mapstructure:"security_protocol" json:"security_protocol" yaml:"security_protocol" ini:"security_protocol"`
-	SaslMechanism    string   `mapstructure:"sasl_mechanism" json:"sasl_mechanism" yaml:"sasl_mechanism" ini:"sasl_mechanism"`
-	SaslUsername     string   `mapstructure:"sasl_username" json:"sasl_username" yaml:"sasl_username" ini:"sasl_username"`
-	SaslPassword     string   `mapstructure:"sasl_password" json:"sasl_password" yaml:"sasl_password" ini:"sasl_password"`
-	MaxAttempts      int      `mapstructure:"max_attempts" json:"max_attempts" yaml:"max_attempts" ini:"max_attempts"`
-	RetryWaitTime    int64    `mapstructure:"retry_wait_time" json:"retry_wait_time" yaml:"retry_wait_time" ini:"retry_wait_time"`
+	Enable                bool     `mapstructure:"enable" json:"enable" yaml:"enable" ini:"enable"`
+	Strict                bool     `mapstructure:"strict" json:"strict" yaml:"strict" ini:"strict"`
+	Topic                 []string `mapstructure:"topic" json:"topic" yaml:"topic" ini:"topic"`
+	GroupId               string   `mapstructure:"group_id" json:"group_id" yaml:"group_id" ini:"group_id"`
+	BootstrapServers      []string `mapstructure:"bootstrap_servers" json:"bootstrap_servers" yaml:"bootstrap_servers" ini:"bootstrap_servers"`
+	SecurityProtocol      string   `mapstructure:"security_protocol" json:"security_protocol" yaml:"security_protocol" ini:"security_protocol"`
+	SaslMechanism         string   `mapstructure:"sasl_mechanism" json:"sasl_mechanism" yaml:"sasl_mechanism" ini:"sasl_mechanism"`
+	SaslUsername          string   `mapstructure:"sasl_username" json:"sasl_username" yaml:"sasl_username" ini:"sasl_username"`
+	SaslPassword          string   `mapstructure:"sasl_password" json:"sasl_password" yaml:"sasl_password" ini:"sasl_password"`
+	TLSCAFile             string   `mapstructure:"tls_ca_file" json:"tls_ca_file" yaml:"tls_ca_file" ini:"tls_ca_file"`
+	TLSCertFile           string   `mapstructure:"tls_cert_file" json:"tls_cert_file" yaml:"tls_cert_file" ini:"tls_cert_file"`
+	TLSKeyFile            string   `mapstructure:"tls_key_file" json:"tls_key_file" yaml:"tls_key_file" ini:"tls_key_file"`
+	TLSServerName         string   `mapstructure:"tls_server_name" json:"tls_server_name" yaml:"tls_server_name" ini:"tls_server_name"`
+	TLSInsecureSkipVerify bool     `mapstructure:"tls_insecure_skip_verify" json:"tls_insecure_skip_verify" yaml:"tls_insecure_skip_verify" ini:"tls_insecure_skip_verify"`
+	MaxAttempts           int      `mapstructure:"max_attempts" json:"max_attempts" yaml:"max_attempts" ini:"max_attempts"`
+	RetryWaitTime         int64    `mapstructure:"retry_wait_time" json:"retry_wait_time" yaml:"retry_wait_time" ini:"retry_wait_time"`
 }
 
 // RocketMQConfig 配置

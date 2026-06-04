@@ -2,12 +2,14 @@ package kafkax
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"runtime/debug"
 	"time"
 
 	"github.com/jasonlabz/potato/internal/log"
 	zapx "github.com/jasonlabz/potato/log"
+	"github.com/segmentio/kafka-go/sasl"
 )
 
 var defaultOptionConfig *ConnConfig
@@ -34,16 +36,18 @@ func DefaultConfig() *ConnConfig {
 
 // ConnConfig Kafka 连接配置
 type ConnConfig struct {
-	l              log.Logger
-	MaxAttempts    int
-	RetryWaitTime  time.Duration
-	BatchSize      int
-	BatchTimeout   time.Duration
-	ReadTimeout    time.Duration
-	WriteTimeout   time.Duration
-	CommitInterval time.Duration
-	MinBytes       int
-	MaxBytes       int
+	l                   log.Logger
+	MaxAttempts         int
+	RetryWaitTime       time.Duration
+	BatchSize           int
+	BatchTimeout        time.Duration
+	ReadTimeout         time.Duration
+	WriteTimeout        time.Duration
+	CommitInterval      time.Duration
+	MinBytes            int
+	MaxBytes            int
+	customSASLMechanism sasl.Mechanism
+	customTLSConfig     *tls.Config
 }
 
 type ConnOption func(*ConnConfig)
@@ -99,6 +103,18 @@ func WithMinBytes(n int) ConnOption {
 func WithMaxBytes(n int) ConnOption {
 	return func(c *ConnConfig) {
 		c.MaxBytes = n
+	}
+}
+
+func WithSASLMechanism(mechanism sasl.Mechanism) ConnOption {
+	return func(c *ConnConfig) {
+		c.customSASLMechanism = mechanism
+	}
+}
+
+func WithTLSConfig(cfg *tls.Config) ConnOption {
+	return func(c *ConnConfig) {
+		c.customTLSConfig = cfg
 	}
 }
 

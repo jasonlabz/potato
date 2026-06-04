@@ -148,8 +148,15 @@ kafka:
   topic: ["my-topic"]
   group_id: "my-group"
   bootstrap_servers: ["127.0.0.1:9092"]
-  security_protocol: "PLAINTEXT"
+  security_protocol: "SASL_SSL"
   sasl_mechanism: "PLAIN"
+  sasl_username: "user"
+  sasl_password: "pass"
+  tls_ca_file: "/etc/kafka/ca.pem"
+  tls_cert_file: "/etc/kafka/client.pem"
+  tls_key_file: "/etc/kafka/client-key.pem"
+  tls_server_name: "broker.example.com"
+  tls_insecure_skip_verify: false
 
 rocketmq:
   enable: false

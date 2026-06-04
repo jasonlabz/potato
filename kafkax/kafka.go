@@ -3,10 +3,12 @@ package kafkax
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -58,23 +60,49 @@ const (
 	Closed               int32 = 1
 )
 
+const (
+	securityProtocolPlaintext     = "PLAINTEXT"
+	securityProtocolSSL           = "SSL"
+	securityProtocolSASLPlaintext = "SASL_PLAINTEXT"
+	securityProtocolSASLSSL       = "SASL_SSL"
+
+	saslMechanismPlain       = "PLAIN"
+	saslMechanismScramSHA256 = "SCRAM-SHA-256"
+	saslMechanismScramSHA512 = "SCRAM-SHA-512"
+	saslMechanismGSSAPI      = "GSSAPI"
+	saslMechanismKerberos    = "KERBEROS"
+)
+
 // MQConfig Kafka 连接配置
 type MQConfig struct {
-	BootstrapServers []string `json:"bootstrap_servers"`
-	GroupID          string   `json:"group_id"`
-	Topics           []string `json:"topic"`
-	SecurityProtocol string   `json:"security_protocol"`
-	SaslMechanism    string   `json:"sasl_mechanism"`
-	SaslUsername     string   `json:"sasl_username"`
-	SaslPassword     string   `json:"sasl_password"`
-	MaxAttempts      int      `json:"max_attempts"`
-	RetryWaitTime    int64    `json:"retry_wait_time"` // 秒
+	BootstrapServers      []string `json:"bootstrap_servers"`
+	GroupID               string   `json:"group_id"`
+	Topics                []string `json:"topic"`
+	SecurityProtocol      string   `json:"security_protocol"`
+	SaslMechanism         string   `json:"sasl_mechanism"`
+	SaslUsername          string   `json:"sasl_username"`
+	SaslPassword          string   `json:"sasl_password"`
+	TLSCAFile             string   `json:"tls_ca_file"`
+	TLSCertFile           string   `json:"tls_cert_file"`
+	TLSKeyFile            string   `json:"tls_key_file"`
+	TLSServerName         string   `json:"tls_server_name"`
+	TLSInsecureSkipVerify bool     `json:"tls_insecure_skip_verify"`
+	MaxAttempts           int      `json:"max_attempts"`
+	RetryWaitTime         int64    `json:"retry_wait_time"` // 秒
 }
 
 // Validate 验证配置参数
 func (c *MQConfig) Validate() error {
+	if c == nil {
+		return errors.New("kafka config is nil")
+	}
 	if len(c.BootstrapServers) == 0 {
 		return errors.New("bootstrap_servers is empty")
+	}
+	switch c.securityProtocol() {
+	case securityProtocolPlaintext, securityProtocolSSL, securityProtocolSASLPlaintext, securityProtocolSASLSSL:
+	default:
+		return fmt.Errorf("unsupported security_protocol %q", c.SecurityProtocol)
 	}
 	if c.MaxAttempts == 0 {
 		c.MaxAttempts = DefaultRetryTimes
@@ -85,20 +113,59 @@ func (c *MQConfig) Validate() error {
 	return nil
 }
 
+func (c *MQConfig) securityProtocol() string {
+	protocol := strings.ToUpper(strings.TrimSpace(c.SecurityProtocol))
+	protocol = strings.ReplaceAll(protocol, "-", "_")
+	if protocol == "" {
+		return securityProtocolPlaintext
+	}
+	return protocol
+}
+
+func (c *MQConfig) saslMechanismName() string {
+	mechanism := strings.ToUpper(strings.TrimSpace(c.SaslMechanism))
+	mechanism = strings.ReplaceAll(mechanism, "_", "-")
+	return mechanism
+}
+
+func (c *MQConfig) usesSASL() bool {
+	protocol := c.securityProtocol()
+	return protocol == securityProtocolSASLPlaintext || protocol == securityProtocolSASLSSL || c.saslMechanismName() != ""
+}
+
+func (c *MQConfig) usesTLS() bool {
+	protocol := c.securityProtocol()
+	return protocol == securityProtocolSSL ||
+		protocol == securityProtocolSASLSSL ||
+		c.TLSCAFile != "" ||
+		c.TLSCertFile != "" ||
+		c.TLSKeyFile != "" ||
+		c.TLSServerName != ""
+}
+
 // getSASLMechanism 获取 SASL 认证机制
 func (c *MQConfig) getSASLMechanism() (sasl.Mechanism, error) {
-	switch c.SaslMechanism {
-	case "PLAIN":
+	if !c.usesSASL() {
+		return nil, nil
+	}
+	if c.saslMechanismName() == "" {
+		return nil, errors.New("sasl_mechanism is required when SASL is enabled")
+	}
+
+	switch c.saslMechanismName() {
+	case saslMechanismPlain:
 		return &plain.Mechanism{
 			Username: c.SaslUsername,
 			Password: c.SaslPassword,
 		}, nil
-	case "SCRAM-SHA-256":
+	case saslMechanismScramSHA256:
 		return scram.Mechanism(scram.SHA256, c.SaslUsername, c.SaslPassword)
-	case "SCRAM-SHA-512":
+	case saslMechanismScramSHA512:
 		return scram.Mechanism(scram.SHA512, c.SaslUsername, c.SaslPassword)
+	case saslMechanismGSSAPI, saslMechanismKerberos:
+		return nil, errors.New("SASL GSSAPI/Kerberos is not implemented by kafkax config; pass a kafka-go sasl.Mechanism with WithSASLMechanism")
 	default:
-		return nil, nil
+		return nil, fmt.Errorf("unsupported sasl_mechanism %q", c.SaslMechanism)
 	}
 }
 
@@ -123,6 +190,9 @@ type KafkaOperator struct {
 
 // NewKafkaOperator 创建 Kafka 操作器实例
 func NewKafkaOperator(config *MQConfig, opts ...ConnOption) (op *KafkaOperator, err error) {
+	if config == nil {
+		return nil, errors.New("kafka config is nil")
+	}
 	if err = config.Validate(); err != nil {
 		return
 	}
@@ -160,7 +230,7 @@ func NewKafkaOperator(config *MQConfig, opts ...ConnOption) (op *KafkaOperator, 
 func (r *KafkaOperator) buildTransport() (*kafka.Transport, error) {
 	t := &kafka.Transport{}
 
-	mechanism, err := r.config.getSASLMechanism()
+	mechanism, err := r.saslMechanism()
 	if err != nil {
 		return nil, fmt.Errorf("create SASL mechanism failed: %w", err)
 	}
@@ -168,28 +238,91 @@ func (r *KafkaOperator) buildTransport() (*kafka.Transport, error) {
 		t.SASL = mechanism
 	}
 
-	if r.config.SecurityProtocol == "SSL" || r.config.SecurityProtocol == "SASL_SSL" {
-		t.TLS = &tls.Config{InsecureSkipVerify: true}
+	tlsConfig, err := r.tlsConfig()
+	if err != nil {
+		return nil, fmt.Errorf("create TLS config failed: %w", err)
+	}
+	if tlsConfig != nil {
+		t.TLS = tlsConfig
 	}
 
 	return t, nil
 }
 
+func (r *KafkaOperator) saslMechanism() (sasl.Mechanism, error) {
+	if r.connCfg != nil && r.connCfg.customSASLMechanism != nil {
+		return r.connCfg.customSASLMechanism, nil
+	}
+	return r.config.getSASLMechanism()
+}
+
+func (r *KafkaOperator) tlsConfig() (*tls.Config, error) {
+	if r.connCfg != nil && r.connCfg.customTLSConfig != nil {
+		return r.connCfg.customTLSConfig, nil
+	}
+	if !r.config.usesTLS() {
+		return nil, nil
+	}
+
+	tlsConfig := &tls.Config{
+		MinVersion:         tls.VersionTLS12,
+		ServerName:         r.config.TLSServerName,
+		InsecureSkipVerify: r.config.TLSInsecureSkipVerify,
+	}
+
+	if r.config.TLSCAFile != "" {
+		caPEM, err := os.ReadFile(r.config.TLSCAFile)
+		if err != nil {
+			return nil, fmt.Errorf("read tls_ca_file failed: %w", err)
+		}
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(caPEM) {
+			return nil, errors.New("tls_ca_file does not contain any PEM certificates")
+		}
+		tlsConfig.RootCAs = pool
+	}
+
+	if r.config.TLSCertFile != "" || r.config.TLSKeyFile != "" {
+		if r.config.TLSCertFile == "" || r.config.TLSKeyFile == "" {
+			return nil, errors.New("tls_cert_file and tls_key_file must be configured together")
+		}
+		cert, err := tls.LoadX509KeyPair(r.config.TLSCertFile, r.config.TLSKeyFile)
+		if err != nil {
+			return nil, fmt.Errorf("load tls client certificate failed: %w", err)
+		}
+		tlsConfig.Certificates = []tls.Certificate{cert}
+	}
+
+	return tlsConfig, nil
+}
+
+func (r *KafkaOperator) buildDialer() (*kafka.Dialer, error) {
+	mechanism, err := r.saslMechanism()
+	if err != nil {
+		return nil, fmt.Errorf("create SASL mechanism failed: %w", err)
+	}
+	tlsConfig, err := r.tlsConfig()
+	if err != nil {
+		return nil, fmt.Errorf("create TLS config failed: %w", err)
+	}
+	return &kafka.Dialer{
+		Timeout:       DefaultTimeOut,
+		SASLMechanism: mechanism,
+		TLS:           tlsConfig,
+	}, nil
+}
+
+func (r *KafkaOperator) dial(ctx context.Context) (*kafka.Conn, error) {
+	dialer, err := r.buildDialer()
+	if err != nil {
+		return nil, err
+	}
+	return dialer.DialContext(ctx, "tcp", r.config.BootstrapServers[0])
+}
+
 // ping 验证 Kafka 连接
 func (r *KafkaOperator) ping(ctx context.Context) error {
-	dialer := &kafka.Dialer{
-		Timeout: DefaultTimeOut,
-	}
-
-	mechanism, _ := r.config.getSASLMechanism()
-	if mechanism != nil {
-		dialer.SASLMechanism = mechanism
-	}
-	if r.config.SecurityProtocol == "SSL" || r.config.SecurityProtocol == "SASL_SSL" {
-		dialer.TLS = &tls.Config{InsecureSkipVerify: true}
-	}
-
-	conn, err := dialer.DialContext(ctx, "tcp", r.config.BootstrapServers[0])
+	conn, err := r.dial(ctx)
 	if err != nil {
 		return fmt.Errorf("dial kafka broker failed: %w", err)
 	}
@@ -228,17 +361,17 @@ func (r *KafkaOperator) getWriter(topic string) *kafka.Writer {
 }
 
 // getReader 获取或创建 Reader
-func (r *KafkaOperator) getReader(config *ConsumeConfig) *kafka.Reader {
+func (r *KafkaOperator) getReader(config *ConsumeConfig) (*kafka.Reader, error) {
 	key := config.Topic + ":" + config.GroupID
 	if rd, ok := r.readers.Load(key); ok {
-		return rd.(*kafka.Reader)
+		return rd.(*kafka.Reader), nil
 	}
 
 	r.readersMu.Lock()
 	defer r.readersMu.Unlock()
 
 	if rd, ok := r.readers.Load(key); ok {
-		return rd.(*kafka.Reader)
+		return rd.(*kafka.Reader), nil
 	}
 
 	readerCfg := kafka.ReaderConfig{
@@ -282,19 +415,15 @@ func (r *KafkaOperator) getReader(config *ConsumeConfig) *kafka.Reader {
 		readerCfg.Partition = config.Partition
 	}
 
-	dialer := &kafka.Dialer{Timeout: DefaultTimeOut}
-	mechanism, _ := r.config.getSASLMechanism()
-	if mechanism != nil {
-		dialer.SASLMechanism = mechanism
-	}
-	if r.config.SecurityProtocol == "SSL" || r.config.SecurityProtocol == "SASL_SSL" {
-		dialer.TLS = &tls.Config{InsecureSkipVerify: true}
+	dialer, err := r.buildDialer()
+	if err != nil {
+		return nil, err
 	}
 	readerCfg.Dialer = dialer
 
 	rd := kafka.NewReader(readerCfg)
 	r.readers.Store(key, rd)
-	return rd
+	return rd, nil
 }
 
 // Push 推送单条消息
@@ -360,11 +489,17 @@ func (r *KafkaOperator) Consume(ctx context.Context, config *ConsumeConfig) (<-c
 		return nil, errors.New("kafka operator is closed")
 	}
 
+	if config == nil {
+		return nil, errors.New("consume config is nil")
+	}
 	if config.Topic == "" {
 		return nil, errors.New("topic is required")
 	}
 
-	reader := r.getReader(config)
+	reader, err := r.getReader(config)
+	if err != nil {
+		return nil, err
+	}
 	key := config.Topic + ":" + config.GroupID
 	contents := make(chan kafka.Message, 10)
 
@@ -498,7 +633,7 @@ func (r *KafkaOperator) CancelConsume(topic, groupID string) error {
 
 // CreateTopic 创建 Topic
 func (r *KafkaOperator) CreateTopic(ctx context.Context, topic string, numPartitions, replicationFactor int) error {
-	conn, err := kafka.DialContext(ctx, "tcp", r.config.BootstrapServers[0])
+	conn, err := r.dial(ctx)
 	if err != nil {
 		return fmt.Errorf("dial kafka failed: %w", err)
 	}
@@ -513,7 +648,7 @@ func (r *KafkaOperator) CreateTopic(ctx context.Context, topic string, numPartit
 
 // DeleteTopic 删除 Topic
 func (r *KafkaOperator) DeleteTopic(ctx context.Context, topics ...string) error {
-	conn, err := kafka.DialContext(ctx, "tcp", r.config.BootstrapServers[0])
+	conn, err := r.dial(ctx)
 	if err != nil {
 		return fmt.Errorf("dial kafka failed: %w", err)
 	}
@@ -524,7 +659,7 @@ func (r *KafkaOperator) DeleteTopic(ctx context.Context, topics ...string) error
 
 // ListTopics 列出所有 Topic
 func (r *KafkaOperator) ListTopics(ctx context.Context) ([]string, error) {
-	conn, err := kafka.DialContext(ctx, "tcp", r.config.BootstrapServers[0])
+	conn, err := r.dial(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("dial kafka failed: %w", err)
 	}
