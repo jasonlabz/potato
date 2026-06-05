@@ -3,11 +3,15 @@ package kafkax
 import (
 	"context"
 	"crypto/tls"
+	"io"
 	"net"
 	"strings"
 	"testing"
 
+	"github.com/segmentio/kafka-go"
 	"github.com/segmentio/kafka-go/protocol"
+	fetchAPI "github.com/segmentio/kafka-go/protocol/fetch"
+	listOffsetsAPI "github.com/segmentio/kafka-go/protocol/listoffsets"
 	metadataAPI "github.com/segmentio/kafka-go/protocol/metadata"
 	"github.com/segmentio/kafka-go/sasl"
 )
@@ -44,6 +48,43 @@ func (t *metadataTransport) RoundTrip(_ context.Context, addr net.Addr, req prot
 			{Name: "topic-b", Partitions: []metadataAPI.ResponsePartition{{PartitionIndex: 1, LeaderID: 1}}},
 		},
 	}, nil
+}
+
+type previewTransport struct {
+	requests []protocol.ApiKey
+	empty    bool
+}
+
+func (t *previewTransport) RoundTrip(_ context.Context, _ net.Addr, req protocol.Message) (protocol.Message, error) {
+	t.requests = append(t.requests, req.ApiKey())
+	switch r := req.(type) {
+	case *metadataAPI.Request:
+		return &metadataAPI.Response{
+			Brokers: []metadataAPI.ResponseBroker{{NodeID: 1, Host: "broker", Port: 9092}},
+			Topics:  []metadataAPI.ResponseTopic{{Name: r.TopicNames[0], Partitions: []metadataAPI.ResponsePartition{{PartitionIndex: 0, LeaderID: 1}}}},
+		}, nil
+	case *listOffsetsAPI.Request:
+		parts := make([]listOffsetsAPI.ResponsePartition, 0, len(r.Topics[0].Partitions))
+		for _, partition := range r.Topics[0].Partitions {
+			offset := int64(0)
+			if partition.Timestamp == kafka.LastOffset && !t.empty {
+				offset = 2
+			}
+			parts = append(parts, listOffsetsAPI.ResponsePartition{Partition: partition.Partition, Timestamp: partition.Timestamp, Offset: offset})
+		}
+		return &listOffsetsAPI.Response{Topics: []listOffsetsAPI.ResponseTopic{{Topic: r.Topics[0].Topic, Partitions: parts}}}, nil
+	case *fetchAPI.Request:
+		return &fetchAPI.Response{Topics: []fetchAPI.ResponseTopic{{Topic: r.Topics[0].Topic, Partitions: []fetchAPI.ResponsePartition{{
+			Partition:     r.Topics[0].Partitions[0].Partition,
+			HighWatermark: 2,
+			RecordSet: protocol.RecordSet{Records: protocol.NewRecordReader(
+				protocol.Record{Offset: 0, Key: protocol.NewBytes([]byte("k1")), Value: protocol.NewBytes([]byte("v1"))},
+				protocol.Record{Offset: 1, Key: protocol.NewBytes([]byte("k2")), Value: protocol.NewBytes([]byte("v2"))},
+			)},
+		}}}}}, nil
+	default:
+		return nil, io.ErrUnexpectedEOF
+	}
 }
 
 func TestKafkaSASLMechanismNormalizesConfig(t *testing.T) {
@@ -174,5 +215,53 @@ func TestKafkaListTopicsUsesMetadataClient(t *testing.T) {
 	addr := transport.addr.String()
 	if !strings.Contains(addr, "broker-a:9092") || !strings.Contains(addr, "broker-b:9092") {
 		t.Fatalf("RoundTrip addr = %q, want full bootstrap list", addr)
+	}
+}
+
+func TestKafkaPreviewMessagesUsesReadOnlyFetchWithoutConsumerGroup(t *testing.T) {
+	transport := &previewTransport{}
+	operator := &KafkaOperator{
+		config:    &MQConfig{BootstrapServers: []string{"broker-a:9092"}, GroupID: "business-group"},
+		connCfg:   DefaultConfig(),
+		transport: transport,
+	}
+
+	messages, err := operator.PreviewMessages(context.Background(), "orders", 2)
+	if err != nil {
+		t.Fatalf("PreviewMessages() error = %v", err)
+	}
+	if len(messages) != 2 {
+		t.Fatalf("PreviewMessages() returned %d messages, want 2", len(messages))
+	}
+	if string(messages[0].Key) != "k1" || string(messages[0].Value) != "v1" || messages[0].Partition != 0 || messages[0].Offset != 0 {
+		t.Fatalf("first preview message = %#v", messages[0])
+	}
+	for _, apiKey := range transport.requests {
+		switch apiKey {
+		case protocol.JoinGroup, protocol.SyncGroup, protocol.OffsetCommit:
+			t.Fatalf("PreviewMessages() used consumer group/commit API %v", apiKey)
+		}
+	}
+}
+
+func TestKafkaPreviewMessagesSkipsFetchWhenTopicHasNoMessages(t *testing.T) {
+	transport := &previewTransport{empty: true}
+	operator := &KafkaOperator{
+		config:    &MQConfig{BootstrapServers: []string{"broker-a:9092"}, GroupID: "business-group"},
+		connCfg:   DefaultConfig(),
+		transport: transport,
+	}
+
+	messages, err := operator.PreviewMessages(context.Background(), "orders", 2)
+	if err != nil {
+		t.Fatalf("PreviewMessages() error = %v", err)
+	}
+	if len(messages) != 0 {
+		t.Fatalf("PreviewMessages() returned %d messages, want 0", len(messages))
+	}
+	for _, apiKey := range transport.requests {
+		if apiKey == protocol.Fetch {
+			t.Fatalf("PreviewMessages() fetched empty topic")
+		}
 	}
 }

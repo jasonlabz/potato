@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"sort"
@@ -693,6 +694,85 @@ func (r *KafkaOperator) ListTopics(ctx context.Context) ([]string, error) {
 	}
 	sort.Strings(topics)
 	return topics, nil
+}
+
+func (r *KafkaOperator) PreviewMessages(ctx context.Context, topic string, limit int) ([]kafka.Message, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	client := r.adminClient()
+	metadata, err := client.Metadata(ctx, &kafka.MetadataRequest{Topics: []string{topic}})
+	if err != nil {
+		return nil, fmt.Errorf("read topic metadata %q failed: %w", topic, err)
+	}
+	if len(metadata.Topics) == 0 {
+		return nil, nil
+	}
+	partitions := metadata.Topics[0].Partitions
+	if len(partitions) == 0 {
+		return nil, nil
+	}
+
+	offsetReqs := make([]kafka.OffsetRequest, 0, len(partitions)*2)
+	for _, partition := range partitions {
+		offsetReqs = append(offsetReqs, kafka.FirstOffsetOf(partition.ID), kafka.LastOffsetOf(partition.ID))
+	}
+	offsets, err := client.ListOffsets(ctx, &kafka.ListOffsetsRequest{Topics: map[string][]kafka.OffsetRequest{topic: offsetReqs}})
+	if err != nil {
+		return nil, fmt.Errorf("list topic offsets %q failed: %w", topic, err)
+	}
+
+	boundsByPartition := map[int]struct{ first, last int64 }{}
+	for _, partition := range offsets.Topics[topic] {
+		if partition.Error != nil {
+			return nil, fmt.Errorf("read partition %d offsets failed: %w", partition.Partition, partition.Error)
+		}
+		boundsByPartition[partition.Partition] = struct{ first, last int64 }{first: partition.FirstOffset, last: partition.LastOffset}
+	}
+
+	messages := make([]kafka.Message, 0, limit)
+	for _, partition := range partitions {
+		bounds := boundsByPartition[partition.ID]
+		if bounds.last <= bounds.first {
+			continue
+		}
+		start := bounds.first
+		if count := bounds.last - bounds.first; count > int64(limit-len(messages)) {
+			start = bounds.last - int64(limit-len(messages))
+		}
+		fetched, err := client.Fetch(ctx, &kafka.FetchRequest{Topic: topic, Partition: partition.ID, Offset: start, MinBytes: 1, MaxBytes: 1024 * 1024, MaxWait: 100 * time.Millisecond})
+		if err != nil {
+			return nil, fmt.Errorf("fetch preview messages %q partition %d failed: %w", topic, partition.ID, err)
+		}
+		if fetched.Error != nil {
+			return nil, fmt.Errorf("fetch preview messages %q partition %d failed: %w", topic, partition.ID, fetched.Error)
+		}
+		for len(messages) < limit {
+			record, err := fetched.Records.ReadRecord()
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			if err != nil {
+				return nil, fmt.Errorf("read preview record %q partition %d failed: %w", topic, partition.ID, err)
+			}
+			if record.Offset < start {
+				continue
+			}
+			key, err := kafka.ReadAll(record.Key)
+			if err != nil {
+				return nil, fmt.Errorf("read preview key %q partition %d offset %d failed: %w", topic, partition.ID, record.Offset, err)
+			}
+			value, err := kafka.ReadAll(record.Value)
+			if err != nil {
+				return nil, fmt.Errorf("read preview value %q partition %d offset %d failed: %w", topic, partition.ID, record.Offset, err)
+			}
+			messages = append(messages, kafka.Message{Topic: topic, Partition: partition.ID, Offset: record.Offset, Key: key, Value: value, Headers: record.Headers})
+		}
+		if len(messages) >= limit {
+			break
+		}
+	}
+	return messages, nil
 }
 
 // Close 关闭 Kafka 操作器
