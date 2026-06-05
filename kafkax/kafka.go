@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -61,6 +62,7 @@ const (
 )
 
 const (
+	securityProtocolNone          = "NONE"
 	securityProtocolPlaintext     = "PLAINTEXT"
 	securityProtocolSSL           = "SSL"
 	securityProtocolSASLPlaintext = "SASL_PLAINTEXT"
@@ -100,7 +102,7 @@ func (c *MQConfig) Validate() error {
 		return errors.New("bootstrap_servers is empty")
 	}
 	switch c.securityProtocol() {
-	case securityProtocolPlaintext, securityProtocolSSL, securityProtocolSASLPlaintext, securityProtocolSASLSSL:
+	case securityProtocolNone, securityProtocolPlaintext, securityProtocolSSL, securityProtocolSASLPlaintext, securityProtocolSASLSSL:
 	default:
 		return fmt.Errorf("unsupported security_protocol %q", c.SecurityProtocol)
 	}
@@ -113,9 +115,13 @@ func (c *MQConfig) Validate() error {
 	return nil
 }
 
-func (c *MQConfig) securityProtocol() string {
+func (c *MQConfig) normalizedSecurityProtocol() string {
 	protocol := strings.ToUpper(strings.TrimSpace(c.SecurityProtocol))
-	protocol = strings.ReplaceAll(protocol, "-", "_")
+	return strings.ReplaceAll(protocol, "-", "_")
+}
+
+func (c *MQConfig) securityProtocol() string {
+	protocol := c.normalizedSecurityProtocol()
 	if protocol == "" {
 		return securityProtocolPlaintext
 	}
@@ -129,11 +135,19 @@ func (c *MQConfig) saslMechanismName() string {
 }
 
 func (c *MQConfig) usesSASL() bool {
+	rawProtocol := c.normalizedSecurityProtocol()
+	if rawProtocol == securityProtocolNone || rawProtocol == securityProtocolPlaintext {
+		return false
+	}
 	protocol := c.securityProtocol()
 	return protocol == securityProtocolSASLPlaintext || protocol == securityProtocolSASLSSL || c.saslMechanismName() != ""
 }
 
 func (c *MQConfig) usesTLS() bool {
+	rawProtocol := c.normalizedSecurityProtocol()
+	if rawProtocol == securityProtocolNone || rawProtocol == securityProtocolPlaintext {
+		return false
+	}
 	protocol := c.securityProtocol()
 	return protocol == securityProtocolSSL ||
 		protocol == securityProtocolSASLSSL ||
@@ -181,7 +195,7 @@ type KafkaOperator struct {
 	readersMu  sync.Mutex
 	cancelChan sync.Map // topic+groupID -> chan bool
 
-	transport *kafka.Transport
+	transport kafka.RoundTripper
 	closeCh   chan bool
 	closed    int32
 	mu        sync.Mutex
@@ -659,26 +673,25 @@ func (r *KafkaOperator) DeleteTopic(ctx context.Context, topics ...string) error
 
 // ListTopics 列出所有 Topic
 func (r *KafkaOperator) ListTopics(ctx context.Context) ([]string, error) {
-	conn, err := r.dial(ctx)
+	client := r.adminClient()
+	metadata, err := client.Metadata(ctx, &kafka.MetadataRequest{})
 	if err != nil {
-		return nil, fmt.Errorf("dial kafka failed: %w", err)
-	}
-	defer conn.Close()
-
-	partitions, err := conn.ReadPartitions()
-	if err != nil {
-		return nil, fmt.Errorf("read partitions failed: %w", err)
+		return nil, fmt.Errorf("read metadata failed: %w", err)
 	}
 
-	topicSet := make(map[string]struct{})
-	for _, p := range partitions {
-		topicSet[p.Topic] = struct{}{}
+	topicSet := make(map[string]struct{}, len(metadata.Topics))
+	for _, topic := range metadata.Topics {
+		if topic.Error != nil {
+			return nil, fmt.Errorf("read topic metadata %q failed: %w", topic.Name, topic.Error)
+		}
+		topicSet[topic.Name] = struct{}{}
 	}
 
 	topics := make([]string, 0, len(topicSet))
-	for t := range topicSet {
-		topics = append(topics, t)
+	for topic := range topicSet {
+		topics = append(topics, topic)
 	}
+	sort.Strings(topics)
 	return topics, nil
 }
 
