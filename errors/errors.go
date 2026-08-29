@@ -8,11 +8,19 @@ import (
 )
 
 const (
-	HTTPStartCode = 100
-	HTTPEndCode   = 599
+	HTTPStartCode      = 100
+	HTTPEndCode        = 599
+	NormalErrorCode    = 100000000
+	UndefinedErrorCode = 900000000
 )
 
-var errorsMap sync.Map // errors map, store map[int]IError, key: err code, value: error interface
+var (
+	errorsMap sync.Map // errors map, store map[int]IError, key: err code, value: error interface
+
+	// ErrUndefined is returned when a code has not been registered.
+	ErrUndefined = New(UndefinedErrorCode, "undefined error")
+)
+
 // Causer interface for get first cause error
 type Causer interface {
 	// Cause returns the first cause error by call err.Cause().
@@ -69,7 +77,7 @@ func New(code int, message string) IError {
 func GetError(code int) IError {
 	v, ok := errorsMap.Load(code)
 	if !ok {
-		return New(UndefinedErrorCode, "undefined error")
+		return ErrUndefined
 	}
 	return v.(IError)
 }
