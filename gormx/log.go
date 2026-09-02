@@ -73,7 +73,7 @@ func LoggerAdapter(l log.Logger, opts ...OptionFunc) gormLogger.Interface {
 	}
 	return &Logger{
 		l:               l,
-		Config:          &cloneConfig,
+		Config:          cloneConfig,
 		infoLogMsg:      infoStr,
 		warnLogMsg:      warnStr,
 		errLogMsg:       errStr,
@@ -84,7 +84,7 @@ func LoggerAdapter(l log.Logger, opts ...OptionFunc) gormLogger.Interface {
 }
 
 type Logger struct {
-	*gormLogger.Config
+	gormLogger.Config
 	l                                            log.Logger
 	infoLogMsg, warnLogMsg, errLogMsg            string
 	traceLogMsg, traceErrLogMsg, traceWarnLogMsg string
