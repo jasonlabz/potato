@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 
 	"github.com/bytedance/sonic"
@@ -33,34 +32,6 @@ func printBodyData(body any) string {
 		}
 		return string(marshal)
 	}
-}
-
-func printURL(baseURL, url string) string {
-	if len(baseURL) == 0 {
-		return url
-	}
-	if strings.HasPrefix(url, "https://") || strings.HasPrefix(url, "http://") {
-		return url
-	}
-	return baseURL + url
-}
-
-func printFormData(formData map[string]string) string {
-	if len(formData) == 0 {
-		return ""
-	}
-	var builder strings.Builder
-	i := 0
-	for k, v := range formData {
-		if i > 0 {
-			builder.WriteByte('&')
-		}
-		builder.WriteString(k)
-		builder.WriteByte('=')
-		builder.WriteString(v)
-		i++
-	}
-	return builder.String()
 }
 
 type Config struct {
