@@ -34,6 +34,17 @@ func printBodyData(body any) string {
 	}
 }
 
+// maxLogBodySize 限制单条日志里响应体的字节数，避免错误页或大响应打爆日志。
+const maxLogBodySize = 64 * 1024
+
+// logBody 输出响应体，超过 maxLogBodySize 时截断并标注原始大小。
+func logBody(body []byte) string {
+	if len(body) <= maxLogBodySize {
+		return string(body)
+	}
+	return string(body[:maxLogBodySize]) + fmt.Sprintf("...(truncated, total %d bytes)", len(body))
+}
+
 type Config struct {
 	Name          string
 	Debug         bool

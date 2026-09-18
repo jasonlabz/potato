@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -79,21 +80,32 @@ func NewHttpClient(config *Config) *Client {
 		if contentType := req.Header.Get("Content-Type"); contentType != "" {
 			fields = append(fields, log.String("content_type", contentType))
 		}
-		client.logger().Debug(req.Context(), "[rpc] HTTP Request ", fields...)
+		client.logger().Info(req.Context(), "[rpc] HTTP Request ", fields...)
 
 		return nil
 	})
 	c.OnAfterResponse(func(_ *resty.Client, resp *resty.Response) error {
-		client.logger().Debug(resp.Request.Context(), "[rpc] HTTP Response",
+		client.logger().Info(resp.Request.Context(), "[rpc] HTTP Response",
 			log.String("method", resp.Request.Method),
 			log.String("url", resp.Request.URL),
 			log.Int("status", resp.StatusCode()),
 			log.Int64("cost_ms", resp.Time().Milliseconds()),
-			log.String("body", string(resp.Body())))
+			log.String("body", logBody(resp.Body())))
 
 		return nil
 	})
 	c.OnSuccess(func(_ *resty.Client, resp *resty.Response) {
+		// resty 的 OnSuccess 语义是「执行完成且无 error」，4xx/5xx 也会走到这里，
+		// 所以在这一层把非 2xx 记为失败并带上响应体。
+		if resp.StatusCode() >= http.StatusBadRequest {
+			client.logger().Error(resp.Request.Context(), "[rpc] HTTP Request  failed",
+				log.String("method", resp.Request.Method),
+				log.String("url", resp.Request.URL),
+				log.Int("status", resp.StatusCode()),
+				log.Int64("cost_ms", resp.Time().Milliseconds()),
+				log.String("body", logBody(resp.Body())))
+			return
+		}
 		client.logger().Info(resp.Request.Context(), "[rpc] HTTP Request  succeeded",
 			log.String("method", resp.Request.Method),
 			log.String("url", resp.Request.URL),
@@ -101,10 +113,20 @@ func NewHttpClient(config *Config) *Client {
 			log.Int64("cost_ms", resp.Time().Milliseconds()))
 	})
 	c.OnError(func(req *resty.Request, err error) {
-		client.logger().WithError(err).Error(req.Context(), "[rpc] HTTP Request  failed",
+		fields := []any{
 			log.String("method", req.Method),
 			log.String("url", req.URL),
-			log.Int("attempt", req.Attempt))
+			log.Int("attempt", req.Attempt),
+		}
+		// 传输层失败没有响应可打；只有响应已拿到但后续处理出错时，resty 才会把
+		// 响应包进 *ResponseError（client.go:1284），这里把上游原始响应体带出来。
+		var responseErr *resty.ResponseError
+		if errors.As(err, &responseErr) && responseErr.Response != nil && responseErr.Response.RawResponse != nil {
+			fields = append(fields,
+				log.Int("status", responseErr.Response.StatusCode()),
+				log.String("body", logBody(responseErr.Response.Body())))
+		}
+		client.logger().WithError(err).Error(req.Context(), "[rpc] HTTP Request  failed", fields...)
 	})
 
 	if config.Protocol == "https" {
