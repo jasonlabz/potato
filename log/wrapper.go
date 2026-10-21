@@ -37,6 +37,11 @@ func (l *LoggerWrapper) clone() *LoggerWrapper {
 	return &LoggerWrapper{logger: &cloneLogger, logField: l.logField}
 }
 
+func (l *LoggerWrapper) ZapLogger() *zap.Logger {
+	cloneLogger := *l.logger
+	return &cloneLogger
+}
+
 func (l *LoggerWrapper) WithError(err error) *LoggerWrapper {
 	if err == nil {
 		return l
