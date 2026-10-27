@@ -1,5 +1,5 @@
 // Package migrate 提供数据库结构迁移能力：基线 + 增量版本管理、多实例分布式锁、
-// 按方言适配的追踪表/锁表建表语句，以及可选的自动建库（EnsureDatabase）。
+// 按方言适配的追踪表/锁表建表语句，以及可选的自动建库与 schema 创建（EnsureDatabase）。
 //
 // 迁移文件约定：
 //   - 目录下仅扫描 .sql 文件，按版本号排序执行。
@@ -95,10 +95,11 @@ type migFile struct {
 // 需要 DBA 预先手工创建业务库。
 var ErrAutoCreateUnsupported = errors.New("当前数据库类型不支持自动建库")
 
-// EnsureDatabase 检查目标数据库是否存在，不存在则创建。
+// EnsureDatabase 检查目标数据库是否存在，不存在则创建；支持独立 schema 的方言
+// （目前为 PostgreSQL）还会按 conn.Schema 创建 schema。
 // 通过 gormx.InitConfig 临时连接管理库，用完 Close，不污染全局连接池。
 //
-// 返回 created=true 表示本次新建了数据库；库已存在返回 (false, nil)；
+// 返回 created=true 表示本次新建了数据库；库已存在但补建了 schema 仍返回 false；
 // 方言不支持自动建库（如达梦、Oracle）返回 ErrAutoCreateUnsupported；
 // SQLite 没有建库概念，直接返回 (false, nil)。
 func EnsureDatabase(ctx context.Context, conn gormx.Connection, database string, logger log.Logger) (created bool, err error) {
@@ -133,13 +134,55 @@ func EnsureDatabase(ctx context.Context, conn gormx.Connection, database string,
 		}
 	}()
 
-	if dbExists(adminDB, creator, database) {
-		return false, nil
+	if !dbExists(adminDB, creator, database) {
+		if err = adminDB.Exec(creator.CreateDatabaseSQL(database)).Error; err != nil {
+			return false, fmt.Errorf("创建数据库失败: %w", err)
+		}
+		created = true
 	}
-	if err = adminDB.Exec(creator.CreateDatabaseSQL(database)).Error; err != nil {
-		return false, fmt.Errorf("创建数据库失败: %w", err)
+
+	schema, ok := lookupSchemaCreator(conn.DBType)
+	if !ok {
+		return created, nil
 	}
-	return true, nil
+	schemaSQL := schema.CreateSchemaSQL(conn.Schema)
+	if schemaSQL == "" {
+		return created, nil
+	}
+	if err = ensureDatabaseSchema(ctx, conn, database, schemaSQL, logger); err != nil {
+		return created, err
+	}
+	return created, nil
+}
+
+// ensureDatabaseSchema 连接目标数据库并执行方言提供的 schema 创建语句。
+func ensureDatabaseSchema(ctx context.Context, conn gormx.Connection, database, schemaSQL string, logger log.Logger) error {
+	// 管理库连接不能用于创建目标库中的 schema，这里重新连接目标数据库。
+	schemaConn := conn
+	schemaConn.Database = database
+	schemaConn.DSN = ""
+	schemaCfg := &gormx.Config{
+		DBName:     "__ensure_schema__",
+		Connection: schemaConn,
+		LogMode:    gormx.LogModeError,
+	}
+	if logger != nil {
+		schemaCfg.Logger = gormx.LoggerAdapter(logger)
+	}
+	schemaDB, err := gormx.InitConfig(schemaCfg)
+	if err != nil {
+		return fmt.Errorf("连接目标数据库失败: %w", err)
+	}
+	defer func() {
+		if closeErr := gormx.Close(schemaCfg.DBName); closeErr != nil && logger != nil {
+			logger.Errorf(ctx, "[migrate] 关闭 schema 管理员数据库连接失败: %v", closeErr)
+		}
+	}()
+
+	if err = schemaDB.WithContext(ctx).Exec(schemaSQL).Error; err != nil {
+		return fmt.Errorf("创建 schema 失败: %w", err)
+	}
+	return nil
 }
 
 // Run 执行 DDL 迁移和种子数据（先 DDL 后 seed）。

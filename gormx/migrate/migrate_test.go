@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/jasonlabz/potato/gormx"
 	"github.com/jasonlabz/potato/internal/log"
 	potatolog "github.com/jasonlabz/potato/log"
 )
@@ -99,6 +100,39 @@ func TestResolveVersionFallsBackToFilenameForMigration(t *testing.T) {
 
 	if got := resolveVersion(path, filepath.Base(path)); got != "20260903_001" {
 		t.Fatalf("expected filename version fallback, got %q", got)
+	}
+}
+
+func TestPostgresCreateSchemaSQL(t *testing.T) {
+	tests := []struct {
+		name   string
+		schema string
+		want   string
+	}{
+		{name: "regular", schema: "iam", want: `CREATE SCHEMA IF NOT EXISTS "iam"`},
+		{name: "trimmed", schema: "  iam  ", want: `CREATE SCHEMA IF NOT EXISTS "iam"`},
+		{name: "escaped", schema: `tenant"one`, want: `CREATE SCHEMA IF NOT EXISTS "tenant""one"`},
+		{name: "empty", schema: "  ", want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := (postgresDialect{}).CreateSchemaSQL(tt.schema); got != tt.want {
+				t.Fatalf("CreateSchemaSQL(%q) = %q, want %q", tt.schema, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSchemaCreatorOnlyRegisteredForSupportedDialects(t *testing.T) {
+	if _, ok := lookupSchemaCreator(gormx.DatabaseTypeMySQL); ok {
+		t.Fatal("MySQL should not implement schema creation")
+	}
+	if _, ok := lookupSchemaCreator(gormx.DatabaseTypeSQLite); ok {
+		t.Fatal("SQLite should not implement schema creation")
+	}
+	if _, ok := lookupSchemaCreator(gormx.DatabaseTypePostgres); !ok {
+		t.Fatal("PostgreSQL should implement schema creation")
 	}
 }
 

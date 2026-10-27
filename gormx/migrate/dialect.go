@@ -36,6 +36,13 @@ type dbCreator interface {
 	CreateDatabaseSQL(dbName string) string
 }
 
+// schemaCreator 是可选的 schema 创建能力。只有支持独立 schema 的方言实现该接口；
+// 其他方言（包括 MySQL、SQL Server）不需要创建 schema。
+type schemaCreator interface {
+	// CreateSchemaSQL 返回创建 schema 的幂等语句；schemaName 为空时返回空字符串。
+	CreateSchemaSQL(schemaName string) string
+}
+
 var dialectRegistry = map[gormx.DatabaseType]dialect{
 	gormx.DatabaseTypePostgres:  postgresDialect{},
 	gormx.DatabaseTypeMySQL:     mysqlDialect{},
@@ -58,6 +65,16 @@ func lookupDBCreator(dbType gormx.DatabaseType) (dbCreator, bool) {
 		return nil, false
 	}
 	creator, ok := d.(dbCreator)
+	return creator, ok
+}
+
+// lookupSchemaCreator 按数据库类型查找 schema 创建能力；不支持独立 schema 的方言返回 ok=false。
+func lookupSchemaCreator(dbType gormx.DatabaseType) (schemaCreator, bool) {
+	d, ok := lookupDialect(dbType)
+	if !ok {
+		return nil, false
+	}
+	creator, ok := d.(schemaCreator)
 	return creator, ok
 }
 
@@ -151,6 +168,15 @@ func (postgresDialect) DBExistsQuery() string {
 
 func (postgresDialect) CreateDatabaseSQL(dbName string) string {
 	return fmt.Sprintf(`CREATE DATABASE "%s"`, dbName)
+}
+
+func (postgresDialect) CreateSchemaSQL(schemaName string) string {
+	schemaName = strings.TrimSpace(schemaName)
+	if schemaName == "" {
+		return ""
+	}
+	// PostgreSQL 标识符使用双引号包裹，内部双引号需要转义。
+	return `CREATE SCHEMA IF NOT EXISTS "` + strings.ReplaceAll(schemaName, `"`, `""`) + `"`
 }
 
 func (postgresDialect) Locker(db *gorm.DB, lockKey string) locker {
