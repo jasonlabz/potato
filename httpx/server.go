@@ -13,6 +13,7 @@ import (
 var (
 	clientMap     sync.Map // service name -> *Config
 	clientInstMap sync.Map // service name -> *Client (lazy initialized)
+	duplicateMu   sync.Mutex
 	duplicateMap  = map[string]struct{}{}
 )
 
@@ -61,21 +62,29 @@ type Config struct {
 	KeyFile            string
 	RootCertFile       string
 	InsecureSkipVerify bool
-	commonSet          bool
-	logger             *log.LoggerWrapper
+	// DisableBodyLog 为 true 时请求日志不记录请求体、表单与响应体。
+	DisableBodyLog bool
+	// DebugSuccessLog 为 true 时请求、响应与成功日志记为 Debug，失败日志级别不变。
+	DebugSuccessLog bool
+	commonSet       bool
+	logger          *log.LoggerWrapper
 }
 
+// Validate 校验配置。Name 供 ral 按服务名取客户端，非空时必须全局唯一；
+// Name 为空表示匿名客户端（例如每个调用方各自创建的客户端），不登记重名。
 func (c *Config) Validate() {
-	if c.Name == "" {
-		panic("Config must have Name, Endpoint: " + c.Host + ":" + strconv.Itoa(c.Port))
+	if c.Name != "" {
+		duplicateMu.Lock()
+		_, duplicated := duplicateMap[c.Name]
+		duplicateMap[c.Name] = struct{}{}
+		duplicateMu.Unlock()
+		if duplicated {
+			panic("service name duplicate, service: " + c.Name)
+		}
 	}
-	if _, ok := duplicateMap[c.Name]; ok {
-		panic("service name duplicate, service: " + c.Name)
-	}
-	duplicateMap[c.Name] = struct{}{}
 
 	if c.Protocol != "https" && c.Protocol != "http" {
-		panic("Protocol must be \"http\" or \"https\", service: " + c.Name)
+		panic("Protocol must be \"http\" or \"https\", service: " + c.Name + ", endpoint: " + c.Host + ":" + strconv.Itoa(c.Port))
 	}
 
 	if c.logger == nil {

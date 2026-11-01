@@ -71,46 +71,45 @@ func NewHttpClient(config *Config) *Client {
 			log.String("url", req.URL),
 			log.Int("attempt", req.Attempt),
 		}
-		if payload := printBodyData(req.Body); payload != "" {
-			fields = append(fields, log.String("body", payload))
-		}
-		if len(req.FormData) > 0 {
-			fields = append(fields, log.String("form", req.FormData.Encode()))
+		if !config.DisableBodyLog {
+			if payload := printBodyData(req.Body); payload != "" {
+				fields = append(fields, log.String("body", payload))
+			}
+			if len(req.FormData) > 0 {
+				fields = append(fields, log.String("form", req.FormData.Encode()))
+			}
 		}
 		if contentType := req.Header.Get("Content-Type"); contentType != "" {
 			fields = append(fields, log.String("content_type", contentType))
 		}
-		client.logger().Info(req.Context(), "[rpc] HTTP Request ", fields...)
+		client.logSuccess(req.Context(), "[rpc] HTTP Request ", fields...)
 
 		return nil
 	})
 	c.OnAfterResponse(func(_ *resty.Client, resp *resty.Response) error {
-		client.logger().Info(resp.Request.Context(), "[rpc] HTTP Response",
+		client.logSuccess(resp.Request.Context(), "[rpc] HTTP Response", client.withBody([]any{
 			log.String("method", resp.Request.Method),
 			log.String("url", resp.Request.URL),
 			log.Int("status", resp.StatusCode()),
 			log.Int64("cost_ms", resp.Time().Milliseconds()),
-			log.String("body", logBody(resp.Body())))
+		}, resp.Body())...)
 
 		return nil
 	})
 	c.OnSuccess(func(_ *resty.Client, resp *resty.Response) {
 		// resty 的 OnSuccess 语义是「执行完成且无 error」，4xx/5xx 也会走到这里，
 		// 所以在这一层把非 2xx 记为失败并带上响应体。
-		if resp.StatusCode() >= http.StatusBadRequest {
-			client.logger().Error(resp.Request.Context(), "[rpc] HTTP Request  failed",
-				log.String("method", resp.Request.Method),
-				log.String("url", resp.Request.URL),
-				log.Int("status", resp.StatusCode()),
-				log.Int64("cost_ms", resp.Time().Milliseconds()),
-				log.String("body", logBody(resp.Body())))
-			return
-		}
-		client.logger().Info(resp.Request.Context(), "[rpc] HTTP Request  succeeded",
+		fields := []any{
 			log.String("method", resp.Request.Method),
 			log.String("url", resp.Request.URL),
 			log.Int("status", resp.StatusCode()),
-			log.Int64("cost_ms", resp.Time().Milliseconds()))
+			log.Int64("cost_ms", resp.Time().Milliseconds()),
+		}
+		if resp.StatusCode() >= http.StatusBadRequest {
+			client.logger().Error(resp.Request.Context(), "[rpc] HTTP Request  failed", client.withBody(fields, resp.Body())...)
+			return
+		}
+		client.logSuccess(resp.Request.Context(), "[rpc] HTTP Request  succeeded", fields...)
 	})
 	c.OnError(func(req *resty.Request, err error) {
 		fields := []any{
@@ -122,9 +121,8 @@ func NewHttpClient(config *Config) *Client {
 		// 响应包进 *ResponseError（client.go:1284），这里把上游原始响应体带出来。
 		var responseErr *resty.ResponseError
 		if errors.As(err, &responseErr) && responseErr.Response != nil && responseErr.Response.RawResponse != nil {
-			fields = append(fields,
-				log.Int("status", responseErr.Response.StatusCode()),
-				log.String("body", logBody(responseErr.Response.Body())))
+			fields = append(fields, log.Int("status", responseErr.Response.StatusCode()))
+			fields = client.withBody(fields, responseErr.Response.Body())
 		}
 		client.logger().WithError(err).Error(req.Context(), "[rpc] HTTP Request  failed", fields...)
 	})
@@ -181,11 +179,34 @@ func (c *Client) SetLogger(logger *log.LoggerWrapper) {
 	c.l = logger
 }
 
+// Close 释放空闲连接，供调用方各自创建的客户端在用完时调用；共享客户端不要关闭。
+func (c *Client) Close() error {
+	c.client.GetClient().CloseIdleConnections()
+	return nil
+}
+
 func (c *Client) logger() (l *log.LoggerWrapper) {
 	if c.l == nil {
 		c.l = log.GetLogger()
 	}
 	return c.l
+}
+
+// logSuccess 按 Config.DebugSuccessLog 选择请求、响应与成功日志的级别。
+func (c *Client) logSuccess(ctx context.Context, msg string, fields ...any) {
+	if c.config.DebugSuccessLog {
+		c.logger().Debug(ctx, msg, fields...)
+		return
+	}
+	c.logger().Info(ctx, msg, fields...)
+}
+
+// withBody 在未关闭 body 日志时把响应体追加到日志字段。
+func (c *Client) withBody(fields []any, body []byte) []any {
+	if c.config.DisableBodyLog {
+		return fields
+	}
+	return append(fields, log.String("body", logBody(body)))
 }
 
 // Get get request and json response
@@ -237,6 +258,12 @@ func (c *Client) Options(ctx context.Context, url string, body any, result any, 
 
 func (c *Client) Head(ctx context.Context, url string, body any, result any, opts ...OptionFunc) (res *resty.Response, err error) {
 	return c.requestJson(ctx, url, "HEAD", body, result, opts...)
+}
+
+// Do 以任意方法发送 JSON 请求，Post/Put 等是它的固定方法版本。
+// 与 Get 不同，Do 返回响应，调用方可以检查状态码（resp.IsError()）与响应头。
+func (c *Client) Do(ctx context.Context, method, url string, body any, result any, opts ...OptionFunc) (res *resty.Response, err error) {
+	return c.requestJson(ctx, url, method, body, result, opts...)
 }
 
 func (c *Client) PostForm(ctx context.Context, url string, formData map[string]string, result any, opts ...OptionFunc) (res *resty.Response, err error) {
@@ -313,18 +340,8 @@ func (c *Client) requestMultipart(ctx context.Context, url, method string, files
 		r = r.SetMultipartFields(multipartFields...)
 	}
 
-	r = r.SetResult(result)
-
-	switch strings.ToUpper(method) {
-	case http.MethodPost:
-		res, err = r.Post(url)
-	case http.MethodPut:
-		res, err = r.Put(url)
-	default:
-		err = fmt.Errorf("multipart unsupported method:[%s]", method)
-	}
-
-	return
+	// multipart 只允许 POST/PUT/PATCH，由 resty 在 Execute 中校验。
+	return r.SetResult(result).Execute(strings.ToUpper(method), url)
 }
 
 // requestForm send formData and response json
@@ -346,27 +363,7 @@ func (c *Client) requestForm(ctx context.Context, url, method string, formData m
 	if len(o.Cookies) > 0 {
 		r = r.SetCookies(o.Cookies)
 	}
-	req := r.SetFormData(formData).
-		SetResult(result)
-
-	switch strings.ToUpper(method) {
-	case http.MethodPost:
-		res, err = req.Post(url)
-	case http.MethodPut:
-		res, err = req.Put(url)
-	case http.MethodPatch:
-		res, err = req.Patch(url)
-	case http.MethodDelete:
-		res, err = req.Delete(url)
-	case http.MethodOptions:
-		res, err = req.Options(url)
-	case http.MethodHead:
-		res, err = req.Head(url)
-	default:
-		err = fmt.Errorf("form param unsupported method:[%s]", method)
-	}
-
-	return res, err
+	return r.SetFormData(formData).SetResult(result).Execute(strings.ToUpper(method), url)
 }
 
 // requestJson send json and response json
@@ -389,25 +386,5 @@ func (c *Client) requestJson(ctx context.Context, url, method string, body any, 
 	if len(o.Cookies) > 0 {
 		r = r.SetCookies(o.Cookies)
 	}
-	req := r.SetBody(body).
-		SetResult(result)
-
-	switch strings.ToUpper(method) {
-	case http.MethodPost:
-		res, err = req.Post(url)
-	case http.MethodPut:
-		res, err = req.Put(url)
-	case http.MethodPatch:
-		res, err = req.Patch(url)
-	case http.MethodDelete:
-		res, err = req.Delete(url)
-	case http.MethodOptions:
-		res, err = req.Options(url)
-	case http.MethodHead:
-		res, err = req.Head(url)
-	default:
-		err = fmt.Errorf("body param unsupported method:[%s]", method)
-	}
-
-	return
+	return r.SetBody(body).SetResult(result).Execute(strings.ToUpper(method), url)
 }
