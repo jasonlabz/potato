@@ -46,6 +46,10 @@ func newClientConn(cfg *Config) (*ClientConn, error) {
 	if cfg.MaxSendSize <= 0 {
 		cfg.MaxSendSize = DefaultMaxSendSize
 	}
+	// 拦截器直接调用 logger，未设置时用默认 logger，避免 nil panic
+	if cfg.logger == nil {
+		cfg.logger = log.GetLogger()
+	}
 
 	dialOpts := []grpc.DialOption{
 		grpc.WithDefaultCallOptions(

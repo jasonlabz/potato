@@ -40,5 +40,5 @@ func TestName(t *testing.T) {
 		t.Error(err)
 	}
 	repository := NewRepository[bson.M](mongoOperator, "lucas", "users")
-	// repository.InsertOne(ctx, bson.M{"name": "lucas"})
+	_ = repository // repository.InsertOne(ctx, bson.M{"name": "lucas"})
 }

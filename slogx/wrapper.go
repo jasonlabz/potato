@@ -55,24 +55,29 @@ func (l *LoggerWrapper) clone() *LoggerWrapper {
 }
 
 // WithCallerSkip 调用层级
+// With* 先 clone 再修改，避免共享的 logger 字段被累积污染
 func (l *LoggerWrapper) WithCallerSkip(callerSkip int) *LoggerWrapper {
-	l.callerSkip = callerSkip
-	return l
+	c := l.clone()
+	c.callerSkip = callerSkip
+	return c
 }
 
 func (l *LoggerWrapper) WithError(err error) *LoggerWrapper {
-	l.logger = l.logger.With(Any("error", err))
-	return l
+	c := l.clone()
+	c.logger = l.logger.With(Any("error", err))
+	return c
 }
 
 func (l *LoggerWrapper) WithGroup(groupName string) *LoggerWrapper {
-	l.logger = l.logger.WithGroup(groupName)
-	return l
+	c := l.clone()
+	c.logger = l.logger.WithGroup(groupName)
+	return c
 }
 
 func (l *LoggerWrapper) WithAny(attrs ...any) *LoggerWrapper {
-	l.logger = l.logger.With(attrs...)
-	return l
+	c := l.clone()
+	c.logger = l.logger.With(attrs...)
+	return c
 }
 
 // Debug logs at [LevelDebug].

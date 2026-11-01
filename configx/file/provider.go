@@ -65,7 +65,7 @@ func NewConfigProvider(filePath string, opts ...Option) (provider base.IProvider
 		c.rwMutex.Lock()
 		defer c.rwMutex.Unlock()
 		if readErr := c.viper.ReadInConfig(); readErr != nil {
-			log.Printf("watch config err: %v", err)
+			log.Printf("watch config err: %v", readErr)
 			return
 		}
 	})

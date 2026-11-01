@@ -232,7 +232,7 @@ func Format(format string, date time.Time) string {
 			}
 
 		case 'a': // a
-			if date.Hour() > 12 {
+			if date.Hour() >= 12 { // 12:00-12:59 为 PM
 				out = append(out, "PM"...)
 			} else {
 				out = append(out, "AM"...)
@@ -322,6 +322,8 @@ func Format(format string, date time.Time) string {
 			}
 
 			v := z / 3600
+			// 偏移的分钟部分，如 +05:30、+09:45
+			m := (z % 3600) / 60
 
 			switch j {
 			case 1: // Z
@@ -330,7 +332,10 @@ func Format(format string, date time.Time) string {
 					out = append(out, '0')
 				}
 				out = strconv.AppendInt(out, int64(v), 10)
-				out = append(out, "00"...)
+				if m < 10 {
+					out = append(out, '0')
+				}
+				out = strconv.AppendInt(out, int64(m), 10)
 
 			case 2: // ZZ
 				out = append(out, sign...)
@@ -338,14 +343,18 @@ func Format(format string, date time.Time) string {
 					out = append(out, '0')
 				}
 				out = strconv.AppendInt(out, int64(v), 10)
-				out = append(out, ":00"...)
+				out = append(out, ':')
+				if m < 10 {
+					out = append(out, '0')
+				}
+				out = strconv.AppendInt(out, int64(m), 10)
 
 			case 3: // ZZZ
 				if tz, ok := timeZone[zs]; ok {
 					out = append(out, tz...)
 				} else {
 					// not in alias table, append short tz name
-					out = append(out, tz...)
+					out = append(out, zs...)
 				}
 			}
 
@@ -403,8 +412,8 @@ func Format(format string, date time.Time) string {
 			}
 		case '\'': // ' (text delimiter)  or '' (real quote)
 
-			// real quote
-			if formatRune[i+1] == r {
+			// real quote（末尾单引号时不越界）
+			if i+1 < lenFormat && formatRune[i+1] == r {
 				out = append(out, '\'')
 				i = i + 1
 				continue

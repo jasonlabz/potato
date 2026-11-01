@@ -301,6 +301,10 @@ func Do(ctx context.Context, req *Request) (*Response, error) {
 	// 处理 Body（io.Reader → []byte）
 	if req.Body != nil {
 		bodyBytes, err := io.ReadAll(req.Body)
+		// 与 http.Client 一致：Body 实现了 io.Closer 时由 Do 负责关闭。
+		if closer, ok := req.Body.(io.Closer); ok {
+			_ = closer.Close()
+		}
 		if err != nil {
 			return nil, fmt.Errorf("ral: failed to read request body: %w", err)
 		}
@@ -312,9 +316,15 @@ func Do(ctx context.Context, req *Request) (*Response, error) {
 	if len(req.Header) > 0 {
 		headers := make(map[string]string, len(req.Header))
 		for k, vs := range req.Header {
-			if len(vs) > 0 {
-				headers[k] = vs[0]
+			if len(vs) == 0 {
+				continue
 			}
+			// 下游只接受单值 header，多值按 RFC 9110 用逗号合并（Cookie 按 RFC 6265 用分号）。
+			sep := ", "
+			if http.CanonicalHeaderKey(k) == "Cookie" {
+				sep = "; "
+			}
+			headers[k] = strings.Join(vs, sep)
 		}
 		opts = append(opts, WithHeaders(headers))
 	}
@@ -330,9 +340,10 @@ func Do(ctx context.Context, req *Request) (*Response, error) {
 	// 处理 RawQuery
 	if req.RawQuery != "" {
 		rawValues, err := url.ParseQuery(req.RawQuery)
-		if err == nil {
-			opts = append(opts, WithQuery(rawValues))
+		if err != nil {
+			return nil, fmt.Errorf("ral: invalid raw query: %w", err)
 		}
+		opts = append(opts, WithQuery(rawValues))
 	}
 
 	// 构建结果对象

@@ -39,13 +39,11 @@ type ConnConfig struct {
 
 type ConnOption func(*ConnConfig)
 
-
 func WithLogger(logger log.Logger) ConnOption {
 	return func(c *ConnConfig) {
 		c.l = logger
 	}
 }
-
 
 func WithMaxTotal(total int) ConnOption {
 	return func(c *ConnConfig) {

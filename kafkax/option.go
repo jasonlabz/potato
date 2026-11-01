@@ -118,8 +118,12 @@ func WithTLSConfig(cfg *tls.Config) ConnOption {
 	}
 }
 
-func handlePanic(ctx context.Context, r *KafkaOperator) {
+// handlePanic 记录 panic；err 非 nil 时把 panic 转成错误返回给调用方。
+func handlePanic(ctx context.Context, r *KafkaOperator, err *error) {
 	if re := recover(); re != nil {
 		r.l.Error(ctx, fmt.Sprintf("Handler panicked: %v\nStack: %s", re, debug.Stack()))
+		if err != nil {
+			*err = fmt.Errorf("kafka panic: %v", re)
+		}
 	}
 }

@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -137,6 +137,8 @@ type ObjectInfo struct {
 	ContentType  string
 	StorageClass string
 	IsDir        bool
+	// Err 非 nil 表示列举失败，此时其余字段无效（仅 ListObjects 返回的通道会设置）
+	Err error
 }
 
 // BucketInfo holds bucket metadata.
@@ -185,14 +187,27 @@ type minioClient struct {
 }
 
 func newMinioClient(cfg *Config) (*minioClient, error) {
-	transport := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: cfg.InsecureSkipVerify},
+	// minio 的 endpoint 不能带 scheme，由 Secure 控制是否走 TLS；无 scheme 时沿用原行为（非 TLS）
+	endpoint, secure := cfg.Endpoint, false
+	if u, err := url.Parse(cfg.Endpoint); err == nil && u.Scheme != "" && u.Host != "" {
+		endpoint, secure = u.Host, u.Scheme == "https"
 	}
-	c, err := minio.New(cfg.Endpoint, &minio.Options{
-		Creds:     credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
-		Region:    cfg.Region,
-		Secure:    strings.HasPrefix(cfg.Endpoint, "https"),
-		Transport: transport,
+	// 基于 minio 默认 Transport，保留代理、拨号超时与连接池设置
+	transport, err := minio.DefaultTransport(secure)
+	if err != nil {
+		return nil, fmt.Errorf("create minio transport: %w", err)
+	}
+	if transport.TLSClientConfig == nil {
+		transport.TLSClientConfig = &tls.Config{}
+	}
+	transport.TLSClientConfig.InsecureSkipVerify = cfg.InsecureSkipVerify
+	transport.ResponseHeaderTimeout = time.Duration(cfg.Timeout) * time.Second
+	c, err := minio.New(endpoint, &minio.Options{
+		Creds:      credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
+		Region:     cfg.Region,
+		Secure:     secure,
+		Transport:  transport,
+		MaxRetries: cfg.MaxRetries,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create minio client: %w", err)
@@ -259,7 +274,11 @@ func (c *minioClient) RemoveObjects(ctx context.Context, bucket string, keys ...
 	go func() {
 		defer close(ch)
 		for _, k := range keys {
-			ch <- minio.ObjectInfo{Key: k}
+			select {
+			case ch <- minio.ObjectInfo{Key: k}:
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
 	return c.client.RemoveObjects(ctx, bucket, ch, minio.RemoveObjectsOptions{})
@@ -297,18 +316,28 @@ func (c *minioClient) ListObjects(ctx context.Context, bucket string, opts ListO
 	out := make(chan ObjectInfo, 100)
 	go func() {
 		defer close(out)
-		for obj := range c.client.ListObjects(ctx, bucket, minioOpts) {
-			if obj.Err != nil {
-				continue
+		src := c.client.ListObjects(ctx, bucket, minioOpts)
+		for obj := range src {
+			info := ObjectInfo{Err: obj.Err}
+			if obj.Err == nil {
+				info = ObjectInfo{
+					Key:          obj.Key,
+					Size:         obj.Size,
+					LastModified: obj.LastModified,
+					ETag:         obj.ETag,
+					ContentType:  obj.ContentType,
+					StorageClass: obj.StorageClass,
+					IsDir:        strings.HasSuffix(obj.Key, DirSuffix),
+				}
 			}
-			out <- ObjectInfo{
-				Key:          obj.Key,
-				Size:         obj.Size,
-				LastModified: obj.LastModified,
-				ETag:         obj.ETag,
-				ContentType:  obj.ContentType,
-				StorageClass: obj.StorageClass,
-				IsDir:        strings.HasSuffix(obj.Key, DirSuffix),
+			// 调用方提前退出时需取消 ctx，否则此 goroutine 会阻塞在发送上；
+			// 取消后仍要排空 minio 的通道，它会在退出前再发送一次 ctx 错误
+			select {
+			case out <- info:
+			case <-ctx.Done():
+				for range src {
+				}
+				return
 			}
 		}
 	}()
@@ -347,10 +376,11 @@ func (c *minioClient) Close() error { return nil }
 //
 //	FPutObject / FGetObject / FGetDirectory / FPutDirectory
 type Operator struct {
-	clients map[string]Client
-	mu      sync.RWMutex
-	closed  int32
-	l       log.Logger
+	clients     map[string]Client
+	defaultName string // 首个注册的客户端名，GetClient("") 使用
+	mu          sync.RWMutex
+	closed      int32
+	l           log.Logger
 }
 
 // NewOperator creates an Operator and registers the initial client.
@@ -379,11 +409,14 @@ func (op *Operator) RegisterClient(cfg *Config) error {
 	}
 	op.mu.Lock()
 	defer op.mu.Unlock()
+	if op.defaultName == "" {
+		op.defaultName = cfg.Name
+	}
 	op.clients[cfg.Name] = client
 	return nil
 }
 
-// GetClient returns a client by name. Empty name returns the first one.
+// GetClient returns a client by name. Empty name returns the first registered one.
 func (op *Operator) GetClient(name string) (Client, error) {
 	op.mu.RLock()
 	defer op.mu.RUnlock()
@@ -391,6 +424,10 @@ func (op *Operator) GetClient(name string) (Client, error) {
 		return nil, ErrOperatorClosed
 	}
 	if name == "" {
+		// 优先返回首个注册的客户端；它被移除后才退化为任取一个
+		if c, ok := op.clients[op.defaultName]; ok {
+			return c, nil
+		}
 		for _, c := range op.clients {
 			return c, nil
 		}
@@ -504,7 +541,19 @@ func (op *Operator) PutObject(ctx context.Context, name, bucket, key string, bod
 	if err != nil {
 		return err
 	}
+	// 重试前必须把 body 回退到起点；不可 Seek 的 body 读过一次就无法重放，只发送一次
+	seeker, ok := body.(io.Seeker)
+	if !ok {
+		return c.PutObject(ctx, bucket, key, body, size, contentType)
+	}
+	start, err := seeker.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return c.PutObject(ctx, bucket, key, body, size, contentType)
+	}
 	return retry(ctx, op.logger(), func() error {
+		if _, err := seeker.Seek(start, io.SeekStart); err != nil {
+			return err
+		}
 		return c.PutObject(ctx, bucket, key, body, size, contentType)
 	})
 }
@@ -542,12 +591,7 @@ func (op *Operator) RemoveObjects(ctx context.Context, name, bucket string, keys
 	if err != nil {
 		return err
 	}
-	for err := range c.RemoveObjects(ctx, bucket, keys...) {
-		if err.Err != nil {
-			return err.Err
-		}
-	}
-	return nil
+	return drainRemoveErrors(c.RemoveObjects(ctx, bucket, keys...))
 }
 
 // CopyObject copies an object server-side.
@@ -576,7 +620,13 @@ func (op *Operator) RenameObject(ctx context.Context, name, bucket, srcKey, dstK
 		return err
 	}
 	if strings.HasSuffix(srcKey, DirSuffix) {
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
 		for info := range c.ListObjects(ctx, bucket, ListOptions{Prefix: srcKey, Recursive: true}) {
+			// 列举不完整时不能删除源目录
+			if info.Err != nil {
+				return fmt.Errorf("list %s: %w", srcKey, info.Err)
+			}
 			relKey := strings.TrimPrefix(info.Key, srcKey)
 			if relKey == "" {
 				continue
@@ -615,17 +665,32 @@ func (op *Operator) DeleteDirectory(ctx context.Context, name, bucket, prefix st
 	prefix = strings.TrimRight(prefix, DirSuffix) + DirSuffix
 	var keys []string
 	for info := range c.ListObjects(ctx, bucket, ListOptions{Prefix: prefix, Recursive: true}) {
+		if info.Err != nil {
+			// 继续排空通道，避免列举 goroutine 阻塞
+			err = info.Err
+			continue
+		}
 		keys = append(keys, info.Key)
+	}
+	if err != nil {
+		return fmt.Errorf("list %s: %w", prefix, err)
 	}
 	if len(keys) == 0 {
 		return nil
 	}
-	for err := range c.RemoveObjects(ctx, bucket, keys...) {
-		if err.Err != nil {
-			return err.Err
+	return drainRemoveErrors(c.RemoveObjects(ctx, bucket, keys...))
+}
+
+// drainRemoveErrors 读完 RemoveObjects 的结果通道并返回首个错误；
+// minio 无条件向该通道发送，中途返回会让其 goroutine 永久阻塞。
+func drainRemoveErrors(ch <-chan minio.RemoveObjectError) error {
+	var first error
+	for e := range ch {
+		if e.Err != nil && first == nil {
+			first = fmt.Errorf("remove %s: %w", e.ObjectName, e.Err)
 		}
 	}
-	return nil
+	return first
 }
 
 // ExistDirectory checks whether any objects exist under the prefix.
@@ -638,7 +703,13 @@ func (op *Operator) ExistDirectory(ctx context.Context, name, bucket, prefix str
 	if _, err := c.StatObject(ctx, bucket, prefix); err == nil {
 		return true, nil
 	}
-	for range c.ListObjects(ctx, bucket, ListOptions{Prefix: prefix, MaxKeys: 1, Recursive: true}) {
+	// 拿到第一条就返回，取消 ctx 让列举 goroutine 退出
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	for info := range c.ListObjects(ctx, bucket, ListOptions{Prefix: prefix, MaxKeys: 1, Recursive: true}) {
+		if info.Err != nil {
+			return false, info.Err
+		}
 		return true, nil
 	}
 	return false, nil
@@ -663,7 +734,14 @@ func (op *Operator) ListAllObjects(ctx context.Context, name, bucket, prefix str
 	}
 	var result []ObjectInfo
 	for info := range c.ListObjects(ctx, bucket, ListOptions{Prefix: prefix, Recursive: true}) {
+		if info.Err != nil {
+			err = info.Err
+			continue
+		}
 		result = append(result, info)
+	}
+	if err != nil {
+		return result, fmt.Errorf("list %s: %w", prefix, err)
 	}
 	return result, nil
 }
@@ -733,9 +811,12 @@ func (op *Operator) FGetObject(ctx context.Context, name, bucket, key, filePath 
 	if err != nil {
 		return fmt.Errorf("create %s: %w", filePath, err)
 	}
-	defer f.Close()
 
 	_, err = io.Copy(f, body)
+	// Close 会刷盘，错误不能丢
+	if closeErr := f.Close(); err == nil {
+		err = closeErr
+	}
 	_ = info // suppress unused
 	return err
 }
@@ -747,12 +828,21 @@ func (op *Operator) FGetDirectory(ctx context.Context, name, bucket, prefix, loc
 		return err
 	}
 	prefix = strings.TrimRight(prefix, DirSuffix) + DirSuffix
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	for info := range c.ListObjects(ctx, bucket, ListOptions{Prefix: prefix, Recursive: true}) {
+		if info.Err != nil {
+			return fmt.Errorf("list %s: %w", prefix, info.Err)
+		}
 		if info.IsDir {
 			continue
 		}
 		relPath := strings.TrimPrefix(info.Key, prefix)
 		localPath := filepath.Join(localDir, relPath)
+		// 防止对象 key 中的 ".." 把文件写到 localDir 之外
+		if rel, relErr := filepath.Rel(filepath.Clean(localDir), localPath); relErr != nil || !filepath.IsLocal(rel) {
+			return fmt.Errorf("object key %s escapes local dir %s", info.Key, localDir)
+		}
 		if err := os.MkdirAll(filepath.Dir(localPath), 0755); err != nil {
 			return err
 		}
@@ -767,7 +857,9 @@ func (op *Operator) FGetDirectory(ctx context.Context, name, bucket, prefix, loc
 		}
 		_, copyErr := io.Copy(f, body)
 		body.Close()
-		f.Close()
+		if closeErr := f.Close(); copyErr == nil {
+			copyErr = closeErr
+		}
 		if copyErr != nil {
 			return fmt.Errorf("write %s: %w", localPath, copyErr)
 		}
@@ -794,34 +886,50 @@ func (op *Operator) FGetDirectoryAsZip(ctx context.Context, name, bucket, prefix
 	if err != nil {
 		return "", fmt.Errorf("create temp file: %w", err)
 	}
-	defer tmpFile.Close()
-
 	zw := zip.NewWriter(tmpFile)
-	defer zw.Close()
+	// 失败时删除临时文件并返回空路径，避免调用方拿到半成品或泄漏临时文件
+	defer func() {
+		if err != nil {
+			_ = zw.Close()
+			_ = tmpFile.Close()
+			_ = os.Remove(tmpFile.Name())
+			zipPath = ""
+		}
+	}()
 
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	for info := range c.ListObjects(ctx, bucket, ListOptions{Prefix: prefix, Recursive: true}) {
+		if info.Err != nil {
+			return "", fmt.Errorf("list %s: %w", prefix, info.Err)
+		}
 		if info.IsDir {
 			continue
 		}
 		body, _, getErr := c.GetObject(ctx, bucket, info.Key)
 		if getErr != nil {
-			return tmpFile.Name(), fmt.Errorf("get %s: %w", info.Key, getErr)
+			return "", fmt.Errorf("get %s: %w", info.Key, getErr)
 		}
 		relPath := strings.TrimPrefix(info.Key, prefix)
 		w, createErr := zw.Create(relPath)
 		if createErr != nil {
 			body.Close()
-			return tmpFile.Name(), fmt.Errorf("zip create %s: %w", relPath, createErr)
+			return "", fmt.Errorf("zip create %s: %w", relPath, createErr)
 		}
 		if _, copyErr := io.Copy(w, body); copyErr != nil {
 			body.Close()
-			return tmpFile.Name(), fmt.Errorf("zip write %s: %w", relPath, copyErr)
+			return "", fmt.Errorf("zip write %s: %w", relPath, copyErr)
 		}
 		body.Close()
 	}
 
-	zw.Close()
-	tmpFile.Close()
+	// zip 的中央目录在 Close 时写入，两个 Close 的错误都要检查
+	if err = zw.Close(); err != nil {
+		return "", fmt.Errorf("zip close: %w", err)
+	}
+	if err = tmpFile.Close(); err != nil {
+		return "", fmt.Errorf("close temp file: %w", err)
+	}
 	return tmpFile.Name(), nil
 }
 

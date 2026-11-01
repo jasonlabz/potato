@@ -63,6 +63,8 @@ func LoggerAdapter(l log.Logger, opts ...OptionFunc) gormLogger.Interface {
 	for _, opt := range opts {
 		opt(&cloneConfig)
 	}
+	// 使用局部副本：直接改包级变量会让之后创建的非彩色 Logger 也带颜色，并发创建时还有数据竞争
+	infoStr, warnStr, errStr, traceStr, traceWarnStr, traceErrStr := infoStr, warnStr, errStr, traceStr, traceWarnStr, traceErrStr
 	if cloneConfig.Colorful {
 		infoStr = "[DB] " + gormLogger.Green + "[info] " + gormLogger.Reset
 		warnStr = "[DB] " + gormLogger.Magenta + "[warn] " + gormLogger.Reset

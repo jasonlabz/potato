@@ -33,9 +33,8 @@ import (
 )
 
 var (
-	operator     *MongoOperator
-	operatorOnce sync.Once
-	operatorMu   sync.RWMutex
+	operator   *MongoOperator
+	operatorMu sync.RWMutex
 
 	// 默认配置
 	defaultConfig = &Config{
@@ -58,6 +57,8 @@ type MongoOperator struct {
 
 // GetOperator 获取全局操作器
 func GetOperator() *MongoOperator {
+	operatorMu.RLock()
+	defer operatorMu.RUnlock()
 	if operator == nil {
 		panic("mongo operator not initialized, call InitMongoOperator first")
 	}
@@ -85,23 +86,26 @@ func (m *MongoOperator) Close(ctx context.Context) error {
 }
 
 // InitMongoOperator 初始化全局操作器
+// 已初始化成功时直接返回；失败后可以再次调用重试。
 func InitMongoOperator(ctx context.Context, config *Config) (err error) {
-	operatorOnce.Do(func() {
-		operatorMu.Lock()
-		defer operatorMu.Unlock()
+	operatorMu.Lock()
+	defer operatorMu.Unlock()
+	if operator != nil {
+		return nil
+	}
 
-		operator, err = NewMongoOperator(ctx, config)
-		if err != nil {
-			return
-		}
+	op, err := NewMongoOperator(ctx, config)
+	if err != nil {
+		return err
+	}
 
-		// 测试连接
-		if err = operator.Ping(ctx); err != nil {
-			operator = nil
-			return
-		}
-	})
-	return err
+	// 测试连接，失败时断开以释放连接池和监控协程
+	if err = op.Ping(ctx); err != nil {
+		_ = op.Close(ctx)
+		return err
+	}
+	operator = op
+	return nil
 }
 
 // NewMongoOperator 创建新的操作器
@@ -211,15 +215,14 @@ func (r *MongoRepository[T]) InsertOne(ctx context.Context, doc *T, opts ...*opt
 		return id, nil
 	}
 
-	// 尝试从 interface{} 转换
-	switch v := result.InsertedID.(type) {
-	case string:
-		return primitive.ObjectIDFromHex(v)
-	case []byte:
-		return primitive.ObjectIDFromHex(string(v))
-	default:
-		return primitive.NilObjectID, errors.New("invalid inserted ID type")
+	// 文档已写入成功；自定义 _id（非 ObjectID）无法用返回类型表达，返回 NilObjectID 且不报错，
+	// 避免调用方把成功当失败重试。需要原值时请自行在 doc 中设置 _id。
+	if v, ok := result.InsertedID.(string); ok {
+		if id, err := primitive.ObjectIDFromHex(v); err == nil {
+			return id, nil
+		}
 	}
+	return primitive.NilObjectID, nil
 }
 
 // InsertMany 批量插入文档
@@ -628,7 +631,7 @@ func (r *MongoRepository[T]) Paginate(ctx context.Context, filter any, page, pag
 		}
 	}
 
-	items, err := r.Find(ctx, filter, findOpts)
+	items, err := r.Find(ctx, filter, append([]*options.FindOptions{findOpts}, opts...)...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -653,18 +656,12 @@ func MustObjectID(idStr string) primitive.ObjectID {
 }
 
 // IsDuplicateKeyError 检查是否是重复键错误
+// 仓库方法用 pingcap/errors 包装错误，它没有 Unwrap，所以先取 Cause 再判断。
 func IsDuplicateKeyError(err error) bool {
-	if writeErr, ok := err.(mongo.WriteException); ok {
-		for _, we := range writeErr.WriteErrors {
-			if we.Code == 11000 {
-				return true
-			}
-		}
-	}
-	return false
+	return mongo.IsDuplicateKeyError(errors.Cause(err))
 }
 
 // IsNotFoundError 检查是否是文档不存在错误
 func IsNotFoundError(err error) bool {
-	return err == mongo.ErrNoDocuments
+	return errors.Cause(err) == mongo.ErrNoDocuments
 }

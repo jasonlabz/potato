@@ -5,6 +5,7 @@ import (
 	"crypto/cipher"
 	"crypto/des"
 	"encoding/base64"
+	"errors"
 )
 
 // defaultDESKey des默认秘钥，建议使用配置文件方式
@@ -28,27 +29,25 @@ func NewDESCrypto(key []byte) *CryptoDES {
 	if err != nil {
 		panic(err)
 	}
-	encrypted := cipher.NewCBCEncrypter(block, key) // CBC分组模式加密
-	decrypted := cipher.NewCBCDecrypter(block, key) // CBC分组模式解密
+	// IV 沿用 key（DES 的 key 与分组都是 8 字节），与原先的密文兼容。
+	// BlockMode 有状态（IV 会随调用链接），所以每次加解密新建，不在实例上复用。
 	return &CryptoDES{
-		block:         block,
-		encryptedMode: encrypted,
-		decryptedMode: decrypted,
+		block: block,
+		iv:    bytes.Clone(key[:block.BlockSize()]),
 	}
 }
 
 type CryptoDES struct {
-	block         cipher.Block
-	encryptedMode cipher.BlockMode
-	decryptedMode cipher.BlockMode
+	block cipher.Block
+	iv    []byte
 }
 
 // Encrypt  DES加密,秘钥必须是64位，所以key必须是长度为8的byte数组
 func (c *CryptoDES) Encrypt(src []byte) (encryptText string, err error) {
-	blockSize := c.block.BlockSize()      // 分组的大小，blockSize = 8
-	src = zeroPadding(src, blockSize)     // 填充
-	out := make([]byte, len(src))         // 密文和明文的长度一致
-	c.encryptedMode.CryptBlocks(out, src) // 对src进行加密，加密结果放到out里
+	blockSize := c.block.BlockSize()                            // 分组的大小，blockSize = 8
+	src = zeroPadding(src, blockSize)                           // 填充
+	out := make([]byte, len(src))                               // 密文和明文的长度一致
+	cipher.NewCBCEncrypter(c.block, c.iv).CryptBlocks(out, src) // 对src进行加密，加密结果放到out里
 	return base64.RawURLEncoding.EncodeToString(out), nil
 }
 
@@ -58,9 +57,12 @@ func (c *CryptoDES) Decrypt(encryptText string) (src []byte, err error) {
 	if err != nil {
 		return nil, err
 	}
-	out := make([]byte, len(baseSrc))         // 密文和明文长度一致
-	c.decryptedMode.CryptBlocks(out, baseSrc) // 对src进行解密，解密结果放到out里
-	out = zeroUnPadding(out)                  // 反填充
+	if len(baseSrc) == 0 || len(baseSrc)%c.block.BlockSize() != 0 {
+		return nil, errors.New("des: ciphertext is not a multiple of the block size")
+	}
+	out := make([]byte, len(baseSrc))                               // 密文和明文长度一致
+	cipher.NewCBCDecrypter(c.block, c.iv).CryptBlocks(out, baseSrc) // 对src进行解密，解密结果放到out里
+	out = zeroUnPadding(out)                                        // 反填充
 	return out, nil
 }
 
@@ -71,11 +73,9 @@ func zeroPadding(cipherText []byte, blockSize int) []byte {
 	return append(cipherText, padText...)
 }
 
-// zeroUnPadding 反填充
+// zeroUnPadding 反填充：只去掉末尾的 0，明文开头的 0x00 不受影响。
 func zeroUnPadding(origData []byte) []byte {
-	return bytes.TrimFunc(origData, func(r rune) bool {
-		return r == rune(0)
-	})
+	return bytes.TrimRight(origData, "\x00")
 }
 
 // pkcs7Padding 补码

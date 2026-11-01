@@ -15,7 +15,7 @@ func Test_Slog(t *testing.T) {
 
 func Test_Wrapper(t *testing.T) {
 	ctx := context.Background()
-	slog.Info(ctx, "sadasdasdasda")
+	slog.InfoContext(ctx, "sadasdasdasda")
 	logger := GetLogger()
 	logger.Info(ctx, "test", "hjhk", "sadasd")
 	logger.Info(ctx, "test error", errors.New("test error"))

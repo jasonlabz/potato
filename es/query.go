@@ -2,7 +2,9 @@ package es
 
 import (
 	"context"
+	"encoding/json"
 
+	"github.com/bytedance/sonic"
 	"github.com/elastic/go-elasticsearch/v9/typedapi/types"
 
 	"github.com/jasonlabz/potato/internal/log"
@@ -193,8 +195,25 @@ GET /{索引名}/_search
   }
 }
 */
+// start、end 为 nil 时表示该端不限。
 func (q *XQuery) QueryRange(field string, start, end any) *XQuery {
-	// q.QueryRangeBoost()
+	rangeQuery := types.NewUntypedRangeQuery()
+	for _, bound := range []struct {
+		value any
+		dst   *json.RawMessage
+	}{{start, &rangeQuery.Gte}, {end, &rangeQuery.Lte}} {
+		if bound.value == nil {
+			continue
+		}
+		raw, err := sonic.Marshal(bound.value)
+		if err != nil {
+			q.l.Error(q.c, "set query range failure", err)
+			q.lastErr = err
+			return q
+		}
+		*bound.dst = raw
+	}
+	q.query.Range = map[string]types.RangeQuery{field: rangeQuery}
 	return q
 }
 

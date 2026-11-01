@@ -186,6 +186,11 @@ func handleFileDownload(c *gin.Context, version string, config *FileDownloadConf
 		config.Disposition = "inline"
 	}
 
+	// 文件名为空时使用原文件名，需在写响应头之前补全
+	if config.Filename == "" && config.Filepath != "" {
+		config.Filename = filepath.Base(config.Filepath)
+	}
+
 	// 设置响应头
 	filename := getDownloadFilename(config.Filename)
 	c.Header("Content-Type", config.ContentType)
@@ -200,9 +205,9 @@ func handleFileDownload(c *gin.Context, version string, config *FileDownloadConf
 		handleFileDownloadFromReader(c, version, config)
 	} else if config.Content != nil {
 		handleFileDownloadFromContent(c, version, config)
+	} else {
+		ResponseErr(c, version, errors.New("no file content provided"))
 	}
-
-	ResponseErr(c, version, errors.New("no file content provided"))
 }
 
 // handleFileDownloadFromPath 从文件路径下载
@@ -230,11 +235,6 @@ func handleFileDownloadFromPath(c *gin.Context, version string, config *FileDown
 
 	// 设置文件大小
 	c.Header("Content-Length", strconv.FormatInt(fileInfo.Size(), 10))
-
-	// 如果文件名为空，使用原文件名
-	if config.Filename == "" {
-		config.Filename = filepath.Base(config.Filepath)
-	}
 
 	// 流式传输文件
 	_, err = io.CopyBuffer(c.Writer, file, make([]byte, config.BufferSize))
@@ -307,7 +307,7 @@ func getContentType(fileName string) string {
 	}
 
 	// 标准库没有的类型，使用自定义映射
-	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(fileName), "."))
+	ext := strings.ToLower(filepath.Ext(fileName))
 	switch ext {
 	case ".pdf":
 		return "application/pdf"

@@ -84,19 +84,28 @@ func (b *CronTaskBuilder) BuildSpec() string {
 func (b *CronTaskBuilder) Validate() error {
 	spec := b.BuildSpec()
 
-	// 如果是 @every 表达式，直接返回
-	if strings.HasPrefix(spec, "@every") {
+	// 描述符（@every、@daily 等）交给 parser 校验
+	if strings.HasPrefix(spec, "@") {
+		_, err := secondParser.Parse(spec)
+		if err != nil {
+			return fmt.Errorf("invalid crontab spec: %v", err)
+		}
 		return nil
 	}
 
-	// 否则，验证标准的 Cron 表达式
-	splits := strings.Split(spec, " ")
+	// 否则，验证标准的 Cron 表达式；计数时去掉 TZ 前缀，与 parser 的处理一致
+	fields := strings.Fields(spec)
+	if len(fields) > 0 && (strings.HasPrefix(fields[0], "TZ=") || strings.HasPrefix(fields[0], "CRON_TZ=")) {
+		fields = fields[1:]
+	}
 	var err error
-	switch len(splits) {
+	switch len(fields) {
 	case 5:
 		_, err = standardParser.Parse(spec)
 	case 6:
 		_, err = secondParser.Parse(spec)
+	default:
+		err = fmt.Errorf("expected 5 or 6 fields, found %d: %s", len(fields), spec)
 	}
 	if err != nil {
 		return fmt.Errorf("invalid crontab spec: %v", err)

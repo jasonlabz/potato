@@ -119,6 +119,8 @@ func NewLogger(opts ...Option) *LoggerWrapper {
 	if options.configPath != "" && !utils.IsExist(options.configPath) {
 		panic(fmt.Errorf("log config not found: %s", options.configPath))
 	}
+	// 用户指定的配置优先，不被默认路径覆盖
+	configLoad = options.configPath != ""
 
 	for _, confPath := range defaultSlogConfigPaths {
 		if configLoad {
@@ -193,10 +195,11 @@ func newSlogLogger(options *Options) *LoggerWrapper {
 
 // 自定义属性替换函数
 var replaceAttr = func(groups []string, a slog.Attr) slog.Attr {
-	if a.Key == slog.LevelKey {
-		level := a.Value.Any().(slog.Level)
-		levelLabel := level.String()
-		a.Value = slog.StringValue(levelLabel)
+	// 只处理顶层内置 level；分组内同名的用户字段不一定是 slog.Level
+	if a.Key == slog.LevelKey && len(groups) == 0 {
+		if level, ok := a.Value.Any().(slog.Level); ok {
+			a.Value = slog.StringValue(level.String())
+		}
 	}
 
 	// 修改时间输出格式

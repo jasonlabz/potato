@@ -6,13 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"os"
-	"os/signal"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -160,12 +158,18 @@ func (c *MQConfig) Validate() error {
 	return nil
 }
 
-// addr 构建连接地址
+// addr 构建连接地址，用户名密码做 URL 转义，空 vhost 即默认的 "/"
 func (c *MQConfig) addr() string {
-	if c.VirtualHost == "" {
-		return fmt.Sprintf("amqp://%s:%s@%s:%d/", c.Username, c.Password, c.Host, c.Port)
+	vhost := c.VirtualHost
+	if vhost == "" {
+		vhost = "/"
 	}
-	return fmt.Sprintf("amqp://%s:%s@%s:%d/%s", c.Username, c.Password, c.Host, c.Port, url.PathEscape(c.VirtualHost))
+	return fmt.Sprintf("amqp://%s@%s:%d/%s", url.UserPassword(c.Username, c.Password).String(), c.Host, c.Port, url.PathEscape(vhost))
+}
+
+// logAddr 返回不含账号密码的地址，用于日志
+func (c *MQConfig) logAddr() string {
+	return fmt.Sprintf("%s:%d/%s", c.Host, c.Port, c.VirtualHost)
 }
 
 // RabbitMQOperator RabbitMQ 操作器，提供消息推送和消费功能
@@ -175,7 +179,7 @@ type RabbitMQOperator struct {
 	client     *Client
 	opCache    sync.Map          // 操作缓存，避免重复声明
 	closeCh    chan bool         // 关闭通道
-	isReady    bool              // 连接就绪状态
+	isReady    atomic.Bool       // 连接就绪状态
 	closed     int32             // 关闭状态原子标记
 	mu         sync.Mutex        // 操作器级别互斥锁
 	declareMu  sync.Mutex        // 声明操作互斥锁
@@ -285,7 +289,7 @@ func (r *RabbitMQOperator) init(ctx context.Context, config *pool.ObjectPoolConf
 // createChannel 创建通道的通用方法
 func (r *RabbitMQOperator) createChannel(openConfirm bool) (*ChannelWrap, error) {
 	// 检查连接状态，必要时重连
-	if !r.isReady && atomic.LoadInt32(&r.closed) != Closed {
+	if !r.isReady.Load() && atomic.LoadInt32(&r.closed) != Closed {
 		if connected, connectErr := r.tryReConnect(false); !connected {
 			return nil, connectErr
 		}
@@ -304,7 +308,7 @@ func (r *RabbitMQOperator) createChannel(openConfirm bool) (*ChannelWrap, error)
 
 	channelWrap := &ChannelWrap{
 		channel:    channel,
-		closeChan:  make(chan *amqp.Error),
+		closeChan:  make(chan *amqp.Error, 1), // 带缓冲：推送通道无人读取时不阻塞 amqp 关闭流程
 		isConsumer: false,
 	}
 
@@ -382,17 +386,14 @@ func (r *RabbitMQOperator) connect(ctx context.Context) (err error) {
 	// 设置连接关闭通知
 	r.client.closeConnNotify = make(chan *amqp.Error, 1)
 	r.client.conn.NotifyClose(r.client.closeConnNotify)
-	r.isReady = true
+	r.isReady.Store(true)
 
-	r.l.Info(ctx, "rabbitmq connected successfully", "addr", r.config.addr())
+	r.l.Info(ctx, "rabbitmq connected successfully", "addr", r.config.logAddr())
 	return
 }
 
-// tryReConnect 尝试重连 - 修复空指针和连接管理问题
+// tryReConnect 尝试重连，由 Close 关闭 closeCh 退出
 func (r *RabbitMQOperator) tryReConnect(daemon bool) (connected bool, err error) {
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGKILL, syscall.SIGTERM)
-	defer signal.Stop(sig)
 	ticker := time.NewTicker(time.Duration(r.config.LimitConf.RetryWaitTime) * time.Second)
 	defer ticker.Stop()
 
@@ -401,11 +402,11 @@ func (r *RabbitMQOperator) tryReConnect(daemon bool) (connected bool, err error)
 
 	for {
 		// 检查连接状态，必要时进行重连
-		if !r.isReady && atomic.LoadInt32(&r.closed) != Closed {
+		if !r.isReady.Load() && atomic.LoadInt32(&r.closed) != Closed {
 			r.client.connMu.Lock()
 
-			// 双重检查，避免重复连接
-			if r.isReady && atomic.LoadInt32(&r.closed) != Closed {
+			// 双重检查，避免重复连接或在 Close 之后重新建连
+			if r.isReady.Load() || atomic.LoadInt32(&r.closed) == Closed {
 				r.client.connMu.Unlock()
 				continue
 			}
@@ -415,9 +416,9 @@ func (r *RabbitMQOperator) tryReConnect(daemon bool) (connected bool, err error)
 			if err == nil {
 				r.client.closeConnNotify = make(chan *amqp.Error, 1)
 				r.client.conn.NotifyClose(r.client.closeConnNotify)
-				r.isReady = true
+				r.isReady.Store(true)
 				r.client.connMu.Unlock()
-				r.l.Info(ctx, fmt.Sprintf("rabbitmq connect success[addr:%s]", r.config.addr()))
+				r.l.Info(ctx, fmt.Sprintf("rabbitmq connect success[addr:%s]", r.config.logAddr()))
 				continue
 			}
 
@@ -432,9 +433,6 @@ func (r *RabbitMQOperator) tryReConnect(daemon bool) (connected bool, err error)
 			}
 
 			select {
-			case s := <-sig:
-				r.l.Info(ctx, fmt.Sprintf("received signal：[%v], exiting... ", s))
-				return false, fmt.Errorf("connect fail, received signal：[%v]", s)
 			case <-r.closeCh:
 				r.l.Info(ctx, "rabbitmq is closed, exiting...")
 				return false, errors.New("connect fail, rabbitmq is closed")
@@ -448,24 +446,23 @@ func (r *RabbitMQOperator) tryReConnect(daemon bool) (connected bool, err error)
 			break
 		}
 
-		// 守护模式下的信号处理
+		// 守护模式下等待关闭或断连
 		select {
-		case s := <-sig:
-			r.l.Info(ctx, fmt.Sprintf("received signal：[%v], exiting daemon program... ", s))
-			return false, fmt.Errorf("received signal：[%v], exiting daemon program", s)
 		case <-r.closeCh:
 			r.l.Info(ctx, "rabbitmq is closed, exiting daemon program...")
 			return false, errors.New("rabbitmq is closed, exiting daemon program")
 		case <-r.client.closeConnNotify:
-			r.isReady = false
+			r.isReady.Store(false)
 			r.l.Error(ctx, "rabbitmq disconnects unexpectedly, retrying...")
 		}
 	}
 	return connected, nil
 }
 
-// confirmOne 确认单条消息
-func (r *RabbitMQOperator) confirmOne(ctx context.Context, confirms <-chan amqp.Confirmation) (ok bool) {
+// confirmOne 确认单条消息。超时等异常时关闭通道，避免迟到的确认被下一次推送误读，
+// 关闭后的通道由 PushChannel 从池中作废。
+func (r *RabbitMQOperator) confirmOne(ctx context.Context, channelWrap *ChannelWrap) (ok bool) {
+	confirms := channelWrap.confirmChan
 	// 添加超时机制，避免永久阻塞
 	confirmTimeout := time.NewTimer(5 * time.Second)
 	defer confirmTimeout.Stop()
@@ -476,6 +473,7 @@ func (r *RabbitMQOperator) confirmOne(ctx context.Context, confirms <-chan amqp.
 		return false
 	case <-confirmTimeout.C:
 		r.l.Warn(ctx, "confirm timeout, message may not be confirmed")
+		_ = channelWrap.Close()
 		return false
 	case confirmed, ok := <-confirms:
 		if !ok {
@@ -485,6 +483,7 @@ func (r *RabbitMQOperator) confirmOne(ctx context.Context, confirms <-chan amqp.
 		if confirmed.DeliveryTag == 0 {
 			// delivery tag 为 0 通常表示通道问题
 			r.l.Warn(ctx, "received confirmation with delivery tag 0, channel may be in bad state")
+			_ = channelWrap.Close()
 			return false
 		}
 		if confirmed.Ack {
@@ -521,7 +520,7 @@ func (r *RabbitMQOperator) recheck(c *ChannelWrap) (err error) {
 
 		// 重新设置通道通知
 		if c.isConsumer {
-			c.closeChan = make(chan *amqp.Error)
+			c.closeChan = make(chan *amqp.Error, 1)
 			c.channel.NotifyClose(c.closeChan)
 			c.openConfirm = false
 		} else {
@@ -540,7 +539,7 @@ func (r *RabbitMQOperator) recheck(c *ChannelWrap) (err error) {
 		}
 
 		if c.isConsumer && c.closeChan == nil {
-			c.closeChan = make(chan *amqp.Error)
+			c.closeChan = make(chan *amqp.Error, 1)
 			c.channel.NotifyClose(c.closeChan)
 			c.openConfirm = false
 		}
@@ -583,17 +582,15 @@ func (r *RabbitMQOperator) PushChannel(ctx context.Context, channelWrap *Channel
 		return errors.New("channelWrap is nil")
 	}
 
-	if channelWrap.channel != nil && channelWrap.channel.IsClosed() {
-		// 通道已关闭，不归还到池中
-		return nil
-	}
-
+	objPool := r.client.chanPool
 	if channelWrap.openConfirm {
-		err = r.client.confirmChanPool.ReturnObject(ctx, channelWrap)
-	} else {
-		err = r.client.chanPool.ReturnObject(ctx, channelWrap)
+		objPool = r.client.confirmChanPool
 	}
-	return
+	if channelWrap.channel == nil || channelWrap.channel.IsClosed() {
+		// 通道已关闭，从池中作废以释放占用的名额
+		return objPool.InvalidateObject(ctx, channelWrap)
+	}
+	return objPool.ReturnObject(ctx, channelWrap)
 }
 
 // PushDelayMessage 推送延迟消息
@@ -677,7 +674,7 @@ func (r *RabbitMQOperator) pushDelayMessageCore(ctx context.Context, bodyInterfa
 
 	// 确认模式下的消息确认
 	if body.OpenConfirm && channelWrap.openConfirm {
-		if confirmed := r.confirmOne(ctx, channelWrap.confirmChan); !confirmed {
+		if confirmed := r.confirmOne(ctx, channelWrap); !confirmed {
 			return errors.New("push not confirmed")
 		}
 	}
@@ -701,8 +698,12 @@ func (r *RabbitMQOperator) Push(ctx context.Context, body *PushBody, opts ...Opt
 
 // pushWithRetry 带重试的推送方法 - 修复日志格式问题
 func (r *RabbitMQOperator) pushWithRetry(ctx context.Context, body PushBodyInterface, pushFunc func(context.Context, PushBodyInterface, ...OptionFunc) error, opts ...OptionFunc) (err error) {
-	defer handlePanic(ctx, r)
-
+	defer func() {
+		if re := recover(); re != nil {
+			r.l.Error(ctx, fmt.Sprintf("Handler panicked: %v\nStack: %s", re, debug.Stack()))
+			err = fmt.Errorf("push panicked: %v", re)
+		}
+	}()
 	// 生成消息ID
 	if body.GetMessageId() == "" {
 		body.SetMessageId(strings.ReplaceAll(uuid.NewString(), "-", ""))
@@ -808,7 +809,7 @@ func (r *RabbitMQOperator) pushQueueCore(ctx context.Context, bodyInterface Push
 	// 确认模式处理
 	if body.OpenConfirm && channelWrap.openConfirm {
 		// 使用改进的确认逻辑
-		if confirmed := r.confirmOne(ctx, channelWrap.confirmChan); !confirmed {
+		if confirmed := r.confirmOne(ctx, channelWrap); !confirmed {
 			return errors.New("push not confirmed")
 		}
 	}
@@ -872,7 +873,7 @@ func (r *RabbitMQOperator) pushExchangeCore(ctx context.Context, bodyInterface P
 
 	// 确认模式处理
 	if body.OpenConfirm && channelWrap.openConfirm {
-		if confirmed := r.confirmOne(ctx, channelWrap.confirmChan); !confirmed {
+		if confirmed := r.confirmOne(ctx, channelWrap); !confirmed {
 			return errors.New("push confirmed fail")
 		}
 	}
@@ -949,7 +950,7 @@ func (r *RabbitMQOperator) pushCore(ctx context.Context, bodyInterface PushBodyI
 
 	// 确认模式处理
 	if body.OpenConfirm && channelWrap.openConfirm {
-		if confirmed := r.confirmOne(ctx, channelWrap.confirmChan); !confirmed {
+		if confirmed := r.confirmOne(ctx, channelWrap); !confirmed {
 			return errors.New("push confirmed fail")
 		}
 	}
@@ -967,6 +968,7 @@ func (r *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-c
 	resChan, consumerTag, err := r.consumeCore(ctx, param, &channelWrap)
 	if err != nil {
 		if channelWrap != nil {
+			_ = channelWrap.Close()
 			_ = r.PushChannel(ctx, channelWrap)
 		}
 		return nil, err
@@ -976,11 +978,17 @@ func (r *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-c
 
 	go func() {
 		ctxBack := context.Background()
-		handlePanic(ctxBack, r)
+		defer handlePanic(ctxBack, r)
+		var valueCh any
 		defer func() {
-			// 确保通道归还
+			// 消费通道带有 consumer 与 qos，不复用：关闭后由 PushChannel 从池中作废
 			if channelWrap != nil {
+				_ = channelWrap.Close()
 				_ = r.PushChannel(context.Background(), channelWrap)
+			}
+			// 任何退出路径都移除本协程的取消通道，避免残留的已关闭通道让后续 Consume 立即退出
+			if valueCh != nil {
+				r.client.cancelChan.CompareAndDelete(param.QueueName, valueCh)
 			}
 			close(contents)
 		}()
@@ -997,9 +1005,6 @@ func (r *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-c
 			r.client.cacheMu.Unlock()
 		}
 
-		sig := make(chan os.Signal, 1)
-		signal.Notify(sig, syscall.SIGINT, syscall.SIGKILL)
-		defer signal.Stop(sig)
 		ticker := time.NewTicker(time.Duration(r.config.LimitConf.RetryWaitTime) * time.Second)
 		defer ticker.Stop()
 		var innerErr error
@@ -1012,15 +1017,11 @@ func (r *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-c
 			for innerErr != nil {
 				r.l.Error(ctxBack, fmt.Sprintf("[consume:%s] consume msg error, retrying ...", param.QueueName), "err", innerErr.Error())
 				select {
-				case s := <-sig:
-					r.l.Info(ctx, fmt.Sprintf("[consume:%s] recived： %v, exiting... ", param.QueueName, s))
-					return
 				case <-r.closeCh:
 					r.l.Info(ctx, fmt.Sprintf("[consume:%s] rabbitmq is closed, exiting...", param.QueueName))
 					return
 				case <-valueCh.(chan bool):
 					r.l.Info(ctx, fmt.Sprintf("[consume:%s] consume cancel, exiting...", param.QueueName))
-					_ = channelWrap.Close()
 					return
 				case <-ticker.C:
 				}
@@ -1033,9 +1034,6 @@ func (r *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-c
 		// 循环消费数据
 		for {
 			select {
-			case s := <-sig:
-				r.l.Info(ctx, fmt.Sprintf("[consume:%s] recived： %v, exiting... ", param.QueueName, s))
-				return
 			case <-r.closeCh:
 				r.l.Info(ctx, fmt.Sprintf("[consume:%s] rabbitmq is closed, exiting...", param.QueueName))
 				return
@@ -1056,9 +1054,6 @@ func (r *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-c
 					continue
 				}
 				select {
-				case s := <-sig:
-					r.l.Info(ctx, fmt.Sprintf("[consume:%s] recived： %v, exiting... ", param.QueueName, s))
-					return
 				case <-r.closeCh:
 					r.l.Info(ctx, fmt.Sprintf("[consume:%s] rabbitmq is closed, exiting...", param.QueueName))
 					return
@@ -1079,12 +1074,15 @@ func (r *RabbitMQOperator) Consume(ctx context.Context, param *ConsumeBody) (<-c
 // consumeCore 消费消息的核心实现
 func (r *RabbitMQOperator) consumeCore(ctx context.Context, param *ConsumeBody, channelWrap **ChannelWrap,
 	opts ...OptionFunc) (contents <-chan amqp.Delivery, consumerTag string, err error) {
-	if !r.isReady {
+	if !r.isReady.Load() {
 		err = errors.New("connection is not ready")
 		return
 	}
 	if *channelWrap != nil {
+		// 旧通道关闭后作废，释放池中名额
 		_ = (*channelWrap).Close()
+		_ = r.PushChannel(ctx, *channelWrap)
+		*channelWrap = nil
 	}
 	*channelWrap, err = r.BorrowChannel(ctx, false)
 	if err != nil {
@@ -1287,7 +1285,12 @@ func (r *RabbitMQOperator) CancelQueue(queueName string) (err error) {
 		return
 	}
 
-	close(chanVal.(chan bool))
+	// 加锁并检查是否已关闭，避免并发或重复调用时 close 已关闭的通道而 panic
+	r.client.cacheMu.Lock()
+	if ch := chanVal.(chan bool); !isClosedChan(ch) {
+		close(ch)
+	}
+	r.client.cacheMu.Unlock()
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 	for i := 0; i < 5; i++ {
@@ -1299,6 +1302,16 @@ func (r *RabbitMQOperator) CancelQueue(queueName string) (err error) {
 	}
 	r.l.Warn(context.Background(), "cancel consumer timeout", "queue", queueName)
 	return
+}
+
+// isClosedChan 判断通道是否已关闭（仅用于从不写入数据的信号通道）
+func isClosedChan(ch chan bool) bool {
+	select {
+	case <-ch:
+		return true
+	default:
+		return false
+	}
 }
 
 // BindQueue 绑定队列到交换机（幂等，缓存后跳过）
@@ -1402,16 +1415,27 @@ func (r *RabbitMQOperator) Close(ctx context.Context) (err error) {
 	if atomic.LoadInt32(&r.closed) == Closed {
 		return nil
 	}
+	// 先标记关闭并发送关闭信号，让重连守护、消费与推送协程先退出，再关连接，
+	// 避免关连接触发的断连通知被当作异常断开而重连
+	atomic.StoreInt32(&r.closed, Closed)
+	r.isReady.Store(false)
+	select {
+	case <-r.closeCh:
+		// 已经关闭
+	default:
+		close(r.closeCh)
+	}
+
 	// 关闭连接
+	r.client.connMu.Lock()
 	if r.client.conn != nil && !r.client.conn.IsClosed() {
 		err = r.client.conn.Close()
 		if err != nil {
 			r.l.Error(ctx, "close rabbitmq connection failed", "err", err.Error())
 		}
 	}
+	r.client.connMu.Unlock()
 
-	// 标记为已关闭
-	atomic.StoreInt32(&r.closed, Closed)
 	// 关闭通道池
 	if r.client.chanPool != nil {
 		r.client.chanPool.Close(ctx)
@@ -1420,15 +1444,6 @@ func (r *RabbitMQOperator) Close(ctx context.Context) (err error) {
 		r.client.confirmChanPool.Close(ctx)
 	}
 
-	// 发送关闭信号
-	select {
-	case <-r.closeCh:
-		// 已经关闭
-	default:
-		close(r.closeCh)
-	}
-
-	r.isReady = false
 	r.l.Info(ctx, "rabbitmq operator closed successfully")
 	return
 }

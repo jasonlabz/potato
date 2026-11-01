@@ -56,7 +56,7 @@ func OfParallel[T any](items ...T) Stream[T] {
 }
 
 // Call 通过函数创建Stream对象
-func Call[T any](fn func(source <-chan T)) Stream[T] {
+func Call[T any](fn func(source chan<- T)) Stream[T] {
 	source := make(chan T)
 	go func() {
 		defer close(source)
@@ -67,7 +67,7 @@ func Call[T any](fn func(source <-chan T)) Stream[T] {
 }
 
 // CallParallel 通过函数创建Parallel Stream对象
-func CallParallel[T any](fn func(source <-chan T)) Stream[T] {
+func CallParallel[T any](fn func(source chan<- T)) Stream[T] {
 	source := make(chan T)
 	go func() {
 		defer close(source)
@@ -216,32 +216,28 @@ func (s Stream[T]) Reverse() Stream[T] {
 	return Of(items...)
 }
 
+// Max 单次遍历取最大值。不用 FindFirst，它会异步清空 source，与后续遍历抢元素。
 func (s Stream[T]) Max(comparator func(T, T) int) Optional[T] {
-	max, ok := s.FindFirst().Get()
-	if !ok {
-		return Optional[T]{v: nil}
-	}
-	s.ForEach(func(t T) {
-		if comparator(t, max) > 0 {
-			max = t
-		}
-	})
-	return Optional[T]{v: &max}
+	return s.reduceBy(func(t, cur T) bool { return comparator(t, cur) > 0 })
 }
 
 func (s Stream[T]) Min(comparator func(T, T) int) Optional[T] {
+	return s.reduceBy(func(t, cur T) bool { return comparator(t, cur) < 0 })
+}
 
-	//min := s.FindFirst()
-	min, ok := s.FindFirst().Get()
-	if !ok {
+// reduceBy 遍历 source，better(t, cur) 为 true 时用 t 替换当前值。
+func (s Stream[T]) reduceBy(better func(t, cur T) bool) Optional[T] {
+	var cur T
+	found := false
+	for t := range s.source {
+		if !found || better(t, cur) {
+			cur, found = t, true
+		}
+	}
+	if !found {
 		return Optional[T]{v: nil}
 	}
-	s.ForEach(func(t T) {
-		if comparator(t, min) < 0 {
-			min = t
-		}
-	})
-	return Optional[T]{v: &min}
+	return Optional[T]{v: &cur}
 }
 
 func (s Stream[T]) ForEach(fn func(item T)) {

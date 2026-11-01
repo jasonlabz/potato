@@ -28,6 +28,12 @@ type lockDialect interface {
 
 // advisoryLocker 通过独占一条 *sql.Conn 来保证 lock/unlock 落在同一会话，
 // 这是 golang-migrate 内部 postgres/mysql driver 处理会话级锁的核心做法。
+// lockResultChecker 由加锁 SQL 通过返回值表示成败的方言实现（GET_LOCK 超时返回 0、
+// sp_getapplock 失败返回负数），未实现的方言只检查执行错误。
+type lockResultChecker interface {
+	LockAcquired(r int64) bool
+}
+
 type advisoryLocker struct {
 	db      *gorm.DB
 	lockKey string
@@ -55,7 +61,25 @@ func (l *advisoryLocker) Lock(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("独占连接失败: %w", err)
 	}
-	if _, err := conn.ExecContext(ctx, l.dialect.LockSQL(), lockKeyInt64(l.lockKey)); err != nil {
+	if checker, ok := l.dialect.(lockResultChecker); ok {
+		// 单次等待上限 55s；返回超时后只要 ctx 未结束就继续等，整体等待时间由 ctx 控制。
+		for {
+			var r sql.NullInt64
+			if err := conn.QueryRowContext(ctx, l.dialect.LockSQL(), lockKeyInt64(l.lockKey)).Scan(&r); err != nil {
+				_ = conn.Close()
+				return fmt.Errorf("加锁失败: %w", err)
+			}
+			if r.Valid && checker.LockAcquired(r.Int64) {
+				break
+			}
+			// 只有超时（GET_LOCK 返回 0、sp_getapplock 返回 -1）才重试，NULL 或其他负数直接报错
+			timedOut := r.Valid && (r.Int64 == 0 || r.Int64 == -1)
+			if !timedOut || ctx.Err() != nil {
+				_ = conn.Close()
+				return fmt.Errorf("加锁失败: 数据库返回 %v（超时或出错）", r.Int64)
+			}
+		}
+	} else if _, err := conn.ExecContext(ctx, l.dialect.LockSQL(), lockKeyInt64(l.lockKey)); err != nil {
 		_ = conn.Close()
 		return fmt.Errorf("加锁失败: %w", err)
 	}
@@ -90,16 +114,20 @@ func (postgresLockDialect) UnlockSQL() string { return `SELECT pg_advisory_unloc
 // 会话断开时锁会自动释放。
 type mysqlLockDialect struct{}
 
-func (mysqlLockDialect) LockSQL() string   { return `SELECT GET_LOCK(?, 55)` }
-func (mysqlLockDialect) UnlockSQL() string { return `SELECT RELEASE_LOCK(?)` }
+func (mysqlLockDialect) LockSQL() string           { return `SELECT GET_LOCK(?, 55)` }
+func (mysqlLockDialect) UnlockSQL() string         { return `SELECT RELEASE_LOCK(?)` }
+func (mysqlLockDialect) LockAcquired(r int64) bool { return r == 1 }
 
 // sqlserverLockDialect 使用 sp_getapplock，@LockMode='Exclusive'、@LockOwner='Session'，
 // 会话断开时自动释放。
 type sqlserverLockDialect struct{}
 
 func (sqlserverLockDialect) LockSQL() string {
-	return `EXEC sp_getapplock @Resource = @p1, @LockMode = 'Exclusive', @LockOwner = 'Session', @LockTimeout = 55000`
+	return `DECLARE @r int; EXEC @r = sp_getapplock @Resource = @p1, @LockMode = 'Exclusive', @LockOwner = 'Session', @LockTimeout = 55000; SELECT @r`
 }
+
+// LockAcquired sp_getapplock 返回 0/1 表示成功，负数表示超时、死锁或出错。
+func (sqlserverLockDialect) LockAcquired(r int64) bool { return r >= 0 }
 
 func (sqlserverLockDialect) UnlockSQL() string {
 	return `EXEC sp_releaseapplock @Resource = @p1, @LockOwner = 'Session'`
@@ -122,6 +150,7 @@ type tableLocker struct {
 	lockKey  string
 	tableSQL string
 	lockedBy string
+	stop     chan struct{} // 关闭时停止续约
 }
 
 func newTableLocker(db *gorm.DB, lockKey, tableSQL string) *tableLocker {
@@ -158,6 +187,8 @@ func (l *tableLocker) Lock(ctx context.Context) error {
 			l.lockKey, l.lockedBy, now,
 		).Error
 		if insertErr == nil {
+			l.stop = make(chan struct{})
+			go l.renew(l.stop)
 			return nil
 		}
 
@@ -182,8 +213,32 @@ func (l *tableLocker) Lock(ctx context.Context) error {
 	}
 }
 
+// renew 定期刷新 locked_at，避免迁移耗时超过 staleLockThreshold 时锁被其他实例当作陈旧锁抢占。
+func (l *tableLocker) renew(stop <-chan struct{}) {
+	ticker := time.NewTicker(staleLockThreshold / 3)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-stop:
+			return
+		case <-ticker.C:
+			// 带超时，避免数据库卡住时续约 goroutine 在 Unlock 之后长期挂起
+			ctx, cancel := context.WithTimeout(context.Background(), staleLockThreshold/3)
+			l.db.WithContext(ctx).Exec(
+				`UPDATE schema_migrations_lock SET locked_at = ? WHERE lock_key = ? AND locked_by = ?`,
+				time.Now(), l.lockKey, l.lockedBy,
+			)
+			cancel()
+		}
+	}
+}
+
 // Unlock 只删除自己持有的那条锁记录，避免误删已被其他实例抢占的新锁。
 func (l *tableLocker) Unlock(ctx context.Context) error {
+	if l.stop != nil {
+		close(l.stop)
+		l.stop = nil
+	}
 	return l.db.WithContext(ctx).Exec(
 		`DELETE FROM schema_migrations_lock WHERE lock_key = ? AND locked_by = ?`,
 		l.lockKey, l.lockedBy,

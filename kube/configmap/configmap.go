@@ -93,6 +93,7 @@ func CreateConfigmap(ctx context.Context, request CreateConfigmapRequest) (confi
 		Data:       request.Data,
 		BinaryData: request.BinaryData,
 	}
+	configmapSrc.ObjectMeta.Labels = make(map[string]string, len(request.ConfigmapLabels))
 	for labelKey, labelVal := range request.ConfigmapLabels {
 		configmapSrc.ObjectMeta.Labels[labelKey] = labelVal
 	}

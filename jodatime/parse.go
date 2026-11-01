@@ -198,8 +198,8 @@ func GetLayout(format string) string {
 			i = i + j - 1
 		case '\'': // ' (text delimiter)  or '' (real quote)
 
-			// real quote
-			if formatRune[i+1] == r {
+			// real quote（末尾单引号时不越界）
+			if i+1 < lenFormat && formatRune[i+1] == r {
 				layout = append(layout, '\'')
 				i = i + 1
 				continue

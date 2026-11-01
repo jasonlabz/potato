@@ -81,6 +81,10 @@ func (c *Connection) genDSN() (dsn string) {
 			return ""
 		}
 		dsn = fmt.Sprintf(dsnTemplate, c.Username, c.Password, c.Host, c.Port, dbName)
+		if c.DBType == DatabaseTypePostgres && c.Schema != "" {
+			// 值加单引号并转义，支持 "app, public" 这类带空格的写法
+			dsn += " search_path='" + strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(c.Schema) + "'"
+		}
 		if len(c.Args) > 0 {
 			sep, ok := DatabaseDsnSepMap[c.DBType]
 			if !ok {
@@ -120,6 +124,9 @@ func (c *Config) extractDSN() (dsn string, replicas [2][]string) {
 			if len(master.Args) == 0 {
 				master.Args = c.Args
 			}
+			if master.Schema == "" {
+				master.Schema = c.Schema
+			}
 			if master.genDSN() != "" {
 				replicas[0] = append(replicas[0], master.DSN)
 			}
@@ -133,6 +140,9 @@ func (c *Config) extractDSN() (dsn string, replicas [2][]string) {
 			}
 			if len(replica.Args) == 0 {
 				replica.Args = c.Args
+			}
+			if replica.Schema == "" {
+				replica.Schema = c.Schema
 			}
 			if replica.genDSN() != "" {
 				replicas[1] = append(replicas[1], replica.DSN)

@@ -4,7 +4,6 @@ import (
 	"crypto/md5"
 	"encoding/base64"
 	"io"
-	"strings"
 )
 
 func EncodeMD5(src []byte) string {
@@ -20,9 +19,9 @@ func FileMD5(file io.Reader) string {
 }
 
 func CheckMD5(content []byte, encrypted string) bool {
-	return strings.EqualFold(EncodeMD5(content), encrypted)
+	return EncodeMD5(content) == encrypted // base64 区分大小写
 }
 
 func CheckFileMD5(file io.Reader, encrypted string) bool {
-	return strings.EqualFold(FileMD5(file), encrypted)
+	return FileMD5(file) == encrypted
 }

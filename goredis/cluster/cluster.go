@@ -32,7 +32,8 @@ func NewRedisOperator(config *redis.ClusterOptions) (op *RedisOperator, err erro
 	defer cancelFunc()
 	err = op.client.Ping(ctx).Err()
 	if err != nil {
-		return
+		_ = op.client.Close() // 连接失败时释放连接池
+		return nil, err
 	}
 	// daemon process
 	go op.tryMigrationDaemon(context.Background())
@@ -53,7 +54,7 @@ func (op *RedisOperator) Close() (err error) {
 		return
 	}
 	err = op.client.Close()
-	op.closed = single.Closed
+	atomic.StoreInt32(&op.closed, single.Closed)
 	return
 }
 
@@ -62,14 +63,15 @@ func (op *RedisOperator) SetLogger(l log.Logger) {
 }
 
 func (op *RedisOperator) logger() (l log.Logger) {
+	// 只读不写，避免并发调用 logger() 时对 op.l 的数据竞争
 	if op.l == nil {
-		op.l = zapx.GetLogger()
+		return zapx.GetLogger()
 	}
 	return op.l
 }
 
 func (op *RedisOperator) Set(ctx context.Context, key string, value any) (success bool, err error) {
-	return op.SetWithExpiration(ctx, key, value, -1)
+	return op.SetWithExpiration(ctx, key, value, 0) // 0 表示不过期；-1 在 go-redis v9 中是 KeepTTL
 }
 
 func (op *RedisOperator) SetWithExpiration(ctx context.Context, key string, value any, expiration time.Duration) (success bool, err error) {

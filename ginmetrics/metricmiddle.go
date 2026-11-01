@@ -3,6 +3,7 @@ package ginmetrics
 import (
 	"fmt"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -21,6 +22,8 @@ var (
 	metricSlowRequest     = "gin_slow_request_total"
 
 	bloomFilter *bloom.BloomFilter
+	// bloom.BloomFilter 不是并发安全的，中间件并发访问需加锁
+	bloomMu sync.Mutex
 )
 
 // Use set gin metrics middleware
@@ -122,8 +125,14 @@ func (m *Monitor) ginMetricHandle(ctx *gin.Context, start time.Time) {
 	_ = m.GetMetric(metricRequestTotal).Inc(nil)
 
 	// set uv
-	if clientIP := ctx.ClientIP(); !bloomFilter.Contains(clientIP) {
+	clientIP := ctx.ClientIP()
+	bloomMu.Lock()
+	newVisitor := !bloomFilter.Contains(clientIP)
+	if newVisitor {
 		bloomFilter.Add(clientIP)
+	}
+	bloomMu.Unlock()
+	if newVisitor {
 		_ = m.GetMetric(metricRequestUVTotal).Inc(nil)
 	}
 

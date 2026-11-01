@@ -20,6 +20,7 @@ import (
 	"log"
 	"math"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -306,7 +307,7 @@ func (c *Config) GetPProfConfig() PProfConfig {
 // GetHTTPReadTimeout 获取超时时间（转换为 time.Duration）
 func (c *Config) GetHTTPReadTimeout() time.Duration {
 	if c.Application.Server.HTTP.ReadTimeout != "" {
-		duration, err := time.ParseDuration(c.Application.Server.HTTP.ReadTimeout)
+		duration, err := parseTimeout(c.Application.Server.HTTP.ReadTimeout)
 		if err != nil {
 			log.Printf("parse http read timeout error: %v", err)
 			duration = time.Duration(math.MaxInt64)
@@ -318,7 +319,7 @@ func (c *Config) GetHTTPReadTimeout() time.Duration {
 
 func (c *Config) GetHTTPWriteTimeout() time.Duration {
 	if c.Application.Server.HTTP.WriteTimeout != "" {
-		duration, err := time.ParseDuration(c.Application.Server.HTTP.WriteTimeout)
+		duration, err := parseTimeout(c.Application.Server.HTTP.WriteTimeout)
 		if err != nil {
 			log.Printf("parse http write timeout error: %v", err)
 			duration = time.Duration(math.MaxInt64)
@@ -326,6 +327,17 @@ func (c *Config) GetHTTPWriteTimeout() time.Duration {
 		return duration
 	}
 	return time.Duration(math.MaxInt64) // 默认值
+}
+
+// parseTimeout 解析超时配置，纯数字按毫秒处理（如 "3000"），否则按 time.ParseDuration 解析。
+func parseTimeout(value string) (time.Duration, error) {
+	if ms, err := strconv.ParseInt(value, 10, 64); err == nil {
+		if ms > math.MaxInt64/int64(time.Millisecond) || ms < math.MinInt64/int64(time.Millisecond) {
+			return 0, fmt.Errorf("timeout %q overflows time.Duration", value)
+		}
+		return time.Duration(ms) * time.Millisecond, nil
+	}
+	return time.ParseDuration(value)
 }
 
 func (c *Config) GetGRPCPort() int {

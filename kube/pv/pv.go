@@ -3,6 +3,7 @@ package pv
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -73,6 +74,10 @@ func (c *CreatePVRequest) checkParameters() error {
 		c.AccessModes = []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany}
 	}
 
+	// 先校验存储大小，避免后面 resource.MustParse panic
+	if _, err := resource.ParseQuantity(c.Storage); err != nil {
+		return fmt.Errorf("invalid storage %q: %w", c.Storage, err)
+	}
 	return nil
 }
 

@@ -191,7 +191,8 @@ func ensureDatabaseSchema(ctx context.Context, conn gormx.Connection, database, 
 // 与既有服务的启动语义保持一致。
 func Run(ctx context.Context, db *gorm.DB, cfg Config) error {
 	cfg = cfg.withDefaults()
-	db = withErrorLogger(db)
+	// 绑定 ctx，使建表、查询版本、执行迁移等操作都能随 ctx 取消
+	db = withErrorLogger(db).WithContext(ctx)
 
 	d, registered := lookupDialect(cfg.DBType)
 	unlock, err := acquireMigrationLock(ctx, cfg, db, d, registered)
@@ -440,10 +441,15 @@ func execFile(db *gorm.DB, d dialect, logger log.Logger, mf *migFile) error {
 	}
 
 	return db.Transaction(func(tx *gorm.DB) error {
+		// PostgreSQL 中语句出错会让整个事务进入 aborted 状态，需回滚到保存点才能继续写版本记录。
+		// 用 Session 隔离保存点操作的错误：不支持保存点的方言（或 DDL 隐式提交导致保存点失效）不影响后续语句。
+		const savePoint = "potato_migrate_file"
+		_ = tx.Session(&gorm.Session{}).SavePoint(savePoint).Error
 		if err := tx.Exec(string(content)).Error; err != nil {
 			if mf.kind == MigrationTypeSeed || d == nil || !d.IsIdempotentSkippable(err) {
 				return fmt.Errorf("执行SQL: %w", err)
 			}
+			_ = tx.Session(&gorm.Session{}).RollbackTo(savePoint).Error
 			logger.Warnf(context.Background(),
 				"[migrate] %s 执行报重复对象错误，视为已应用: %v", mf.name, err)
 		}

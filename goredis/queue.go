@@ -4,11 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"os/signal"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -55,10 +52,7 @@ func (op *RedisOperator) Watch(ctx context.Context, fn func(*redis.Tx) error, ke
 func (op *RedisOperator) tryMigrationDaemon(ctx context.Context) {
 	defer handlePanic(ctx, op)
 
-	// 1. 信号处理优化：使用缓冲区并修正信号类型
-	sig := make(chan os.Signal, 1)                      // 添加缓冲区，避免信号丢失
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM) // SIGKILL无法被捕获
-	defer signal.Stop(sig)                              // 确保信号通知被清理
+	// 库内不注册信号处理（会屏蔽进程默认的 SIGTERM 退出），通过 ctx 或 Close 退出。
 
 	// 2. 使用Ticker替代Timer，因为这里是周期性任务
 	pollTicker := time.NewTicker(DefaultPollingTimeout)
@@ -109,10 +103,6 @@ func (op *RedisOperator) tryMigrationDaemon(ctx context.Context) {
 						"tag", "redis_delay_queue_method", "count", len(members))
 				}
 
-			case s := <-sig:
-				op.logger().Info(ctx, fmt.Sprintf("received signal: %v, exiting redis daemon...", s),
-					"tag", "redis_delay_queue_method")
-				return
 			case <-ctx.Done():
 				op.logger().Info(ctx, "context cancelled, exiting redis daemon",
 					"tag", "redis_delay_queue_method")
@@ -132,10 +122,6 @@ func (op *RedisOperator) tryMigrationDaemon(ctx context.Context) {
 
 			op.migrateExpiredBatches(ctx, workerSem)
 
-		case s := <-sig:
-			op.logger().Info(ctx, fmt.Sprintf("received signal: %v, exiting redis daemon...", s),
-				"tag", "redis_delay_queue_method")
-			return
 		case <-ctx.Done():
 			op.logger().Info(ctx, "context cancelled, exiting redis daemon",
 				"tag", "redis_delay_queue_method")
@@ -151,20 +137,19 @@ func (op *RedisOperator) migrateExpiredBatches(ctx context.Context, workerSem ch
 	op.delayQueues.Range(func(key, value any) bool {
 		delayKey := key.(string)
 
-		// 获取worker槽位（限制并发）
+		// 获取worker槽位（限制并发）；阻塞等待而不是跳过，避免队列数超过并发上限时部分队列一直不迁移
 		select {
 		case workerSem <- struct{}{}:
-			wg.Add(1)
-			go func(queueKey string) {
-				defer wg.Done()
-				defer func() { <-workerSem }() // 释放worker槽位
-
-				op.migrateSingleQueue(ctx, queueKey)
-			}(delayKey)
-		default:
-			// worker池已满，跳过本次处理（可以记录日志）
-			// 这里保持静默，避免日志洪泛
+		case <-ctx.Done():
+			return false
 		}
+		wg.Add(1)
+		go func(queueKey string) {
+			defer wg.Done()
+			defer func() { <-workerSem }() // 释放worker槽位
+
+			op.migrateSingleQueue(ctx, queueKey)
+		}(delayKey)
 
 		return true
 	})
@@ -178,7 +163,7 @@ func (op *RedisOperator) migrateSingleQueue(ctx context.Context, delayKey string
 	ctxWithTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	delayQueueTimeout := fmt.Sprintf(DelayQueueTimeoutTemplate, delayKey)
+	delayQueueTimeout := op.delayTimeoutKey(delayKey)
 
 	start := time.Now()
 	migrateErr := op.migrateExpiredBody(ctxWithTimeout, delayQueueTimeout, delayKey)
@@ -239,7 +224,7 @@ return #expiredValues
 
 // PushDelayMessage 往延迟队列推送消息
 func (op *RedisOperator) PushDelayMessage(ctx context.Context, queue string, msg string, delay time.Duration) (err error) {
-	delayQueueTimeout := fmt.Sprintf(DelayQueueTimeoutTemplate, queue)
+	delayQueueTimeout := op.delayTimeoutKey(queue)
 	if _, ok := op.delayQueues.Load(queue); !ok {
 		op.mu.Lock()
 		if _, ok := op.delayQueues.Load(queue); !ok {
@@ -290,4 +275,13 @@ func (op *RedisOperator) GetMessage(ctx context.Context, queue string) (msg stri
 func (op *RedisOperator) ExecLuaScript(ctx context.Context, script string, keys []string, args ...any) (res any, err error) {
 	res, err = op.client.Eval(ctx, script, keys, args).Result()
 	return
+}
+
+// delayTimeoutKey 返回延迟队列的 zset key。Cluster 下给队列名加 hash tag，使其与 ready 队列
+// key 落在同一 slot，Lua 脚本才能同时操作两个 key；单机/哨兵保留原 key，升级后积压消息不丢。
+func (op *RedisOperator) delayTimeoutKey(queue string) string {
+	if _, ok := op.client.(*redis.ClusterClient); ok {
+		return fmt.Sprintf(DelayQueueTimeoutTemplate, "{"+queue+"}")
+	}
+	return fmt.Sprintf(DelayQueueTimeoutTemplate, queue)
 }

@@ -21,9 +21,11 @@ var (
 
 // GetCollectionManager 获取集合管理器单例
 func GetCollectionManager() *CollectionManager {
+	// 在 Once 外取 operator：未初始化时 panic 不会把 Once 标记为已完成。
+	op := GetOperator()
 	collectionManagerOnce.Do(func() {
 		collectionManager = &CollectionManager{
-			operator: GetOperator(),
+			operator: op,
 		}
 	})
 	return collectionManager

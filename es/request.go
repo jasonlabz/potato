@@ -9,16 +9,10 @@ import (
 
 type XRequest struct {
 	request *search.Request
+	lastErr error
 }
 
 func RequestBuilder(ctx context.Context, opts ...Option) *XRequest {
-	optionConfig := &OptionConfig{}
-	for _, opt := range opts {
-		opt(optionConfig)
-	}
-	if optionConfig.l == nil {
-	}
-
 	return &XRequest{
 		request: &search.Request{},
 	}
@@ -189,10 +183,12 @@ GET /{索引名}/_search
   }
 }
 */
+// QueryRawJson 解析失败时记录错误，SearchDocuments 会返回该错误而不是静默执行 match_all。
 func (x *XRequest) QueryRawJson(body string) *XRequest {
 	tempQuery := types.NewQuery()
 	err := tempQuery.UnmarshalJSON([]byte(body))
 	if err != nil {
+		x.lastErr = err
 		return x
 	}
 	x.request.Query = tempQuery

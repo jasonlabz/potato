@@ -119,6 +119,7 @@ func CreateIngress(ctx context.Context, request CreateIngressRequest) (ingressIn
 			Rules:            request.Rules,
 		},
 	}
+	ingressSrc.ObjectMeta.Labels = make(map[string]string, len(request.IngressLabels))
 	for labelKey, labelVal := range request.IngressLabels {
 		ingressSrc.ObjectMeta.Labels[labelKey] = labelVal
 	}

@@ -43,10 +43,11 @@ func Map[T any, R any](s Stream[T], mapper func(T) R) Stream[R] {
 }
 
 func FlatMap[T any, R any](s Stream[T], mapper func(T) Stream[R]) Stream[R] {
+	// 顺序收集：ForEach 在并行流下会并发回调，不能直接 append 共享切片。
 	streams := make([]Stream[R], 0)
-	s.ForEach(func(t T) {
+	for t := range s.source {
 		streams = append(streams, mapper(t))
-	})
+	}
 
 	newEl := make([]R, 0)
 	for _, str := range streams {

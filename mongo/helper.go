@@ -61,11 +61,11 @@ func buildClientOptions(config *Config) *options.ClientOptions {
 		ApplyURI(config.URI).
 		SetMaxPoolSize(config.MaxPoolSize).
 		SetMinPoolSize(config.MinPoolSize).
-		SetMaxConnIdleTime(time.Duration(config.MaxConnIdleTime) * time.Millisecond).
-		SetConnectTimeout(time.Duration(config.ConnectTimeout) * time.Millisecond).
-		SetSocketTimeout(time.Duration(config.SocketTimeout) * time.Millisecond).
-		SetServerSelectionTimeout(time.Duration(config.ServerSelectionTimeout) * time.Millisecond).
-		SetHeartbeatInterval(time.Duration(config.HeartbeatInterval) * time.Millisecond).
+		SetMaxConnIdleTime(time.Duration(config.MaxConnIdleTime) * time.Second).
+		SetConnectTimeout(time.Duration(config.ConnectTimeout) * time.Second).
+		SetSocketTimeout(time.Duration(config.SocketTimeout) * time.Second).
+		SetServerSelectionTimeout(time.Duration(config.ServerSelectionTimeout) * time.Second).
+		SetHeartbeatInterval(time.Duration(config.HeartbeatInterval) * time.Second).
 		SetReadPreference(readpref.Primary()).
 		SetWriteConcern(writeconcern.Majority()).
 		SetRetryWrites(true).
@@ -126,10 +126,13 @@ func maskURI(uri string) string {
 		return ""
 	}
 
-	// 简单处理：显示协议和主机部分
+	// 先隐藏密码再截断，短 URI 也不能明文输出密码
 	const maxLength = 50
-	if len(uri) <= maxLength {
-		return uri
+	truncate := func(s string) string {
+		if len(s) <= maxLength {
+			return s
+		}
+		return s[:maxLength] + "..."
 	}
 
 	// 查找协议结束位置
@@ -139,7 +142,7 @@ func maskURI(uri string) string {
 	} else if idx := len("mongodb+srv://"); idx < len(uri) && uri[:idx] == "mongodb+srv://" {
 		protocolEnd = idx
 	} else {
-		return uri[:maxLength] + "..."
+		return truncate(uri)
 	}
 
 	// 查找@符号位置（如果有认证信息）
@@ -170,16 +173,12 @@ func maskURI(uri string) string {
 		if colonIndex > 0 {
 			// 有密码，隐藏它
 			username := userPassPart[:colonIndex]
-			maskedURI := uri[:protocolEnd] + username + ":****" + hostPart
-			if len(maskedURI) <= maxLength {
-				return maskedURI
-			}
-			return maskedURI[:maxLength] + "..."
+			return truncate(uri[:protocolEnd] + username + ":****" + hostPart)
 		}
 	}
 
 	// 没有认证信息或格式异常，简单截断
-	return uri[:maxLength] + "..."
+	return truncate(uri)
 }
 
 // ==================== 配置相关 ====================

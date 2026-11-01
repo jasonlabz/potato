@@ -1,8 +1,10 @@
 package kube
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
@@ -15,16 +17,26 @@ import (
 
 var client *kubernetes.Clientset
 
-func init() {
-	var err error
-	client, err = initClient()
-	if err != nil {
-		panic(err)
+var (
+	clientOnce sync.Once
+	clientErr  error
+)
+
+// GetKubeClient 首次调用时初始化 clientset；初始化失败时 panic，与原先 init 中的语义一致，
+// 只是推迟到首次使用。需要先判断可用性时调用 KubeClientError。
+func GetKubeClient() *kubernetes.Clientset {
+	if err := KubeClientError(); err != nil {
+		panic(fmt.Errorf("kube client init: %w", err))
 	}
+	return client
 }
 
-func GetKubeClient() *kubernetes.Clientset {
-	return client
+// KubeClientError 返回 clientset 初始化失败的原因，不会 panic。
+func KubeClientError() error {
+	clientOnce.Do(func() {
+		client, clientErr = initClient()
+	})
+	return clientErr
 }
 
 // k8sRestConfig 读取kubeconfig 配置文件

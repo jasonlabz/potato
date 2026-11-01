@@ -34,16 +34,13 @@ func (m *ProduceMessage) AddHeader(key string, value []byte) *ProduceMessage {
 	return m
 }
 
+// toKafkaMessage 不设置 Topic：Writer 已指定 Topic，kafka-go 不允许两处同时设置。
 func (m *ProduceMessage) toKafkaMessage() kafka.Message {
-	msg := kafka.Message{
+	return kafka.Message{
 		Key:     m.Key,
 		Value:   m.Value,
 		Headers: m.Headers,
 	}
-	if m.Topic != "" {
-		msg.Topic = m.Topic
-	}
-	return msg
 }
 
 // ConsumeConfig 消费配置

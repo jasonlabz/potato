@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"runtime/debug"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/bytedance/sonic"
@@ -74,7 +73,6 @@ type ElasticSearchOperator struct {
 
 	config *elasticsearch.Config
 	l      *log.LoggerWrapper
-	once   sync.Once
 }
 
 type Config struct {
@@ -106,21 +104,26 @@ type Config struct {
 
 // NewElasticSearchOperator 该函数负责根据配置创建es客户端对象供外部调用
 func NewElasticSearchOperator(ctx context.Context, config *Config) (op *ElasticSearchOperator, err error) {
-	for i, endpoint := range config.Endpoints {
-		if !config.IsHttps && strings.HasPrefix(endpoint, "https://") {
-			config.IsHttps = true
+	isHttps := config.IsHttps
+	for _, endpoint := range config.Endpoints {
+		if strings.HasPrefix(endpoint, "https://") {
+			isHttps = true
 		}
-		if !strings.HasPrefix(endpoint, "http") {
-			if config.IsHttps {
+	}
+	// 在副本上补协议，不改写调用方的 config.Endpoints。
+	endpoints := make([]string, len(config.Endpoints))
+	for i, endpoint := range config.Endpoints {
+		if !strings.Contains(endpoint, "://") {
+			if isHttps {
 				endpoint = "https://" + endpoint
 			} else {
 				endpoint = "http://" + endpoint
 			}
-			config.Endpoints[i] = endpoint
 		}
+		endpoints[i] = endpoint
 	}
 	esConfig := elasticsearch.Config{
-		Addresses: config.Endpoints,
+		Addresses: endpoints,
 		Username:  config.Username,
 		Password:  config.Password,
 
@@ -128,7 +131,6 @@ func NewElasticSearchOperator(ctx context.Context, config *Config) (op *ElasticS
 		APIKey:                   config.APIKey,
 		ServiceToken:             config.ServiceToken,
 		CertificateFingerprint:   config.CertificateFingerprint,
-		CACert:                   config.CACert,
 		RetryOnStatus:            config.RetryOnStatus,
 		DisableRetry:             config.DisableRetry,
 		MaxRetries:               config.MaxRetries,
@@ -142,12 +144,15 @@ func NewElasticSearchOperator(ctx context.Context, config *Config) (op *ElasticS
 		EnableCompatibilityMode:  config.EnableCompatibilityMode,
 		DisableMetaHeader:        config.DisableMetaHeader,
 	}
-	if config.IsHttps {
-		esConfig.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: config.InsecureSkipVerify,
-			},
-		}
+	// 配置文件里未填的 ca_cert 会是空切片，传给客户端会报 "unable to add CA certificate"。
+	if len(config.CACert) > 0 {
+		esConfig.CACert = config.CACert
+	}
+	if isHttps {
+		// 基于默认 Transport 克隆，保留代理、超时与连接池设置。
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: config.InsecureSkipVerify}
+		esConfig.Transport = transport
 	}
 
 	// typed client
@@ -170,7 +175,7 @@ func NewElasticSearchOperator(ctx context.Context, config *Config) (op *ElasticS
 	if op.l == nil {
 		op.l = log.GetLogger()
 	}
-	// quick ping health check (non-fatal)
+	// quick ping health check：失败时仍返回 op 和错误，由调用方决定是否继续使用。
 	err = op.Ping(ctx)
 	if err != nil {
 		op.l.WithError(err).Error(ctx, "es ping failed")
@@ -178,16 +183,7 @@ func NewElasticSearchOperator(ctx context.Context, config *Config) (op *ElasticS
 	return
 }
 
-func (op *ElasticSearchOperator) GetRawClient(ctx context.Context) *elasticsearch.Client {
-	// create raw client
-	op.once.Do(func() {
-		var err error
-		op.client, err = elasticsearch.NewClient(*op.config)
-		if err != nil {
-			op.l.WithError(fmt.Errorf("new es client: %w", err)).Error(ctx, "get client error")
-			panic(err)
-		}
-	})
+func (op *ElasticSearchOperator) GetRawClient(_ context.Context) *elasticsearch.Client {
 	return op.client
 }
 
@@ -197,17 +193,22 @@ func (op *ElasticSearchOperator) GetTypeClient(_ context.Context) *elasticsearch
 
 func (op *ElasticSearchOperator) Ping(ctx context.Context) (err error) {
 	ok, err := op.typedClient.Ping().IsSuccess(ctx)
-	if !ok || err != nil {
+	if err != nil {
 		return fmt.Errorf("cann't access es server: %w", err)
+	}
+	if !ok {
+		return errors.New("cann't access es server: ping not succeeded")
 	}
 	return nil
 }
 
-func (op *ElasticSearchOperator) handlePanic(ctx context.Context) {
-	if err := recover(); err != nil {
-		logger := op.l.WithField(log.Any("error", err))
+// handlePanic 把 panic 转成错误返回，避免调用方拿到 nil error 误以为成功。
+func (op *ElasticSearchOperator) handlePanic(ctx context.Context, err *error) {
+	if r := recover(); r != nil {
+		logger := op.l.WithField(log.Any("error", r))
 		logger.Error(ctx, "[Recovery from panic] -- stack")
 		logger.Error(ctx, string(debug.Stack()))
+		*err = fmt.Errorf("es panic: %v", r)
 	}
 }
 
@@ -216,18 +217,18 @@ func (op *ElasticSearchOperator) GetIndexList(ctx context.Context) (res []*Index
 	if err != nil {
 		return
 	}
-	res = make([]*IndexInfo, 0)
 	defer response.Body.Close()
-	buffer, err := io.ReadAll(response.Body)
-	err = sonic.Unmarshal(buffer, &res)
-	if err != nil {
-		return
+	if response.IsError() {
+		return nil, fmt.Errorf("cat indices error: %s", response.String())
 	}
+	res = make([]*IndexInfo, 0)
+	err = sonic.ConfigDefault.NewDecoder(response.Body).Decode(&res)
 	return
 }
 
 func (op *ElasticSearchOperator) CreateAlias(ctx context.Context, indexName, aliasName string, isWriteIndex bool) (err error) {
-	exists, err := op.AliasExist(ctx, aliasName)
+	// 只看别名是否已挂在该索引上；挂在其他索引上时仍需为本索引添加。
+	exists, err := op.typedClient.Indices.ExistsAlias(aliasName).Index(indexName).IsSuccess(ctx)
 	if err != nil {
 		op.l.WithError(err).Error(ctx, "create alias error: "+indexName)
 		return
@@ -244,9 +245,10 @@ func (op *ElasticSearchOperator) CreateAlias(ctx context.Context, indexName, ali
 }
 
 func (op *ElasticSearchOperator) DeleteAlias(ctx context.Context, indexName, aliasName string) (err error) {
-	exists, err := op.AliasExist(ctx, aliasName)
+	// 别名不在该索引上时 DeleteAlias 会返回 404，先按索引判断。
+	exists, err := op.typedClient.Indices.ExistsAlias(aliasName).Index(indexName).IsSuccess(ctx)
 	if err != nil {
-		op.l.WithError(err).Error(ctx, "create alias error: "+indexName)
+		op.l.WithError(err).Error(ctx, "delete alias error: "+indexName)
 		return
 	}
 	if !exists {
@@ -352,9 +354,9 @@ func (op *ElasticSearchOperator) DeleteIndex(ctx context.Context, indexName stri
 	if !exists {
 		return
 	}
-	_, crErr := op.typedClient.Indices.Delete(indexName).Do(ctx)
-	if crErr != nil {
-		op.l.WithError(crErr).Error(ctx, "index delete error: "+indexName)
+	_, err = op.typedClient.Indices.Delete(indexName).Do(ctx)
+	if err != nil {
+		op.l.WithError(err).Error(ctx, "index delete error: "+indexName)
 		return
 	}
 	return
@@ -428,6 +430,9 @@ func (op *ElasticSearchOperator) ReindexAsync(ctx context.Context, sourceIndex [
 		return
 	}
 
+	if response.Task == nil {
+		return "", errors.New("async reindex: response has no task id")
+	}
 	taskID = *response.Task
 	return
 }
@@ -479,7 +484,7 @@ func (op *ElasticSearchOperator) GetIndexMapping(ctx context.Context, indexName 
 func (op *ElasticSearchOperator) UpdateIndexMapping(ctx context.Context, indexName string, mappingJson string) (err error) {
 	req, err := putmapping.NewRequest().FromJSON(mappingJson)
 	if err != nil {
-		op.l.WithError(err).Error(ctx, "update index mapping error: "+indexName, err)
+		op.l.WithError(err).Error(ctx, "update index mapping error: "+indexName)
 		return
 	}
 	_, err = op.typedClient.Indices.
@@ -494,13 +499,17 @@ func (op *ElasticSearchOperator) UpdateIndexMapping(ctx context.Context, indexNa
 }
 
 // Rollover alias -> new index
-func (op *ElasticSearchOperator) Rollover(ctx context.Context, alias string, conditions map[string]any) error {
+func (op *ElasticSearchOperator) Rollover(ctx context.Context, alias string, conditions map[string]any) (err error) {
 	// typed client has Rollover API, but for brevity use low-level request
-	defer op.handlePanic(ctx)
+	defer op.handlePanic(ctx, &err)
 	body := map[string]any{"conditions": conditions}
-	buf, _ := sonic.Marshal(body)
+	buf, err := sonic.Marshal(body)
+	if err != nil {
+		return err
+	}
 	client := op.client
-	res, err := client.Indices.Rollover(alias, client.Indices.Rollover.WithBody(bytes.NewReader(buf)))
+	res, err := client.Indices.Rollover(alias, client.Indices.Rollover.WithContext(ctx),
+		client.Indices.Rollover.WithBody(bytes.NewReader(buf)))
 	if err != nil {
 		return err
 	}
@@ -545,8 +554,14 @@ func (op *ElasticSearchOperator) GetDocumentCount(ctx context.Context, indexName
 func (op *ElasticSearchOperator) SearchDocuments(ctx context.Context, indexName string, request *XRequest) (response *search.Response, err error) {
 	searchDoc := op.typedClient.
 		Search().
-		Index(indexName).
-		Request(request.Build())
+		Index(indexName)
+	// request 为 nil 时不带请求体，等价于 match_all。
+	if request != nil {
+		if request.lastErr != nil {
+			return nil, request.lastErr
+		}
+		searchDoc = searchDoc.Request(request.Build())
+	}
 	response, err = searchDoc.Do(ctx)
 	if err != nil {
 		op.l.WithError(err).Error(ctx, "search doc error, queryStr : "+indexName)
@@ -563,81 +578,97 @@ func (op *ElasticSearchOperator) Search(ctx context.Context, index string, req *
 	return op.typedClient.Search().Index(index).Request(req).Do(ctx)
 }
 
-// ScrollSearch uses the scroll API for deep pagination. It returns all hits as a raw JSON array of "_source" values.
+// ScrollSearch 用 scroll API 读取全部命中的 _source，结果全部放在内存里；数据量大时用 ScrollEach。
 func (op *ElasticSearchOperator) ScrollSearch(ctx context.Context, index string, reqBody map[string]any, scroll time.Duration, batchSize int) ([]map[string]any, error) {
-	if reqBody == nil {
-		reqBody = map[string]any{"query": map[string]any{"match_all": map[string]any{}}}
+	var docs []map[string]any
+	err := op.ScrollEach(ctx, index, reqBody, scroll, batchSize, func(hits []map[string]any) error {
+		for _, hit := range hits {
+			if src, ok := hit["_source"].(map[string]any); ok {
+				docs = append(docs, src)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return docs, nil
+}
+
+// ScrollEach 用 scroll API 分批读取，每批原始命中（含 _id、_source）交给 fn；
+// fn 返回错误时停止并返回该错误。reqBody 为空时匹配全部文档，返回前清理 scroll 上下文。
+func (op *ElasticSearchOperator) ScrollEach(ctx context.Context, index string, reqBody map[string]any, scroll time.Duration,
+	batchSize int, fn func(hits []map[string]any) error) error {
+	// 复制一份再设置 size，不改调用方的 map。
+	body := make(map[string]any, len(reqBody)+1)
+	for k, v := range reqBody {
+		body[k] = v
 	}
 	if batchSize > 0 {
-		reqBody["size"] = batchSize
+		body["size"] = batchSize
 	}
-	buf, _ := sonic.Marshal(reqBody)
-	res, err := op.client.Search(op.client.Search.WithIndex(index),
+	buf, err := sonic.Marshal(body)
+	if err != nil {
+		return err
+	}
+	res, err := op.client.Search(op.client.Search.WithContext(ctx),
+		op.client.Search.WithIndex(index),
 		op.client.Search.WithBody(bytes.NewReader(buf)),
 		op.client.Search.WithScroll(scroll))
+
+	var scrollID string
+	defer func() { op.clearScroll(ctx, scrollID) }()
+	for {
+		var page scrollPage
+		if page, err = decodeScrollPage(res, err); err != nil {
+			return err
+		}
+		scrollID = page.ScrollID
+		if len(page.Hits.Hits) == 0 {
+			return nil
+		}
+		if err = fn(page.Hits.Hits); err != nil || scrollID == "" {
+			return err
+		}
+		res, err = op.client.Scroll(op.client.Scroll.WithContext(ctx),
+			op.client.Scroll.WithScrollID(scrollID),
+			op.client.Scroll.WithScroll(scroll))
+	}
+}
+
+type scrollPage struct {
+	ScrollID string `json:"_scroll_id"`
+	Hits     struct {
+		Hits []map[string]any `json:"hits"`
+	} `json:"hits"`
+}
+
+// decodeScrollPage 关闭响应体并解析一页 scroll 结果，非 2xx 响应转为错误。
+func decodeScrollPage(res *esapi.Response, err error) (page scrollPage, _ error) {
 	if err != nil {
-		op.l.WithError(err).Error(ctx, "search document errror")
-		return nil, err
+		return page, err
 	}
 	defer res.Body.Close()
 	if res.IsError() {
-		return nil, fmt.Errorf("search error: %s", res.Status())
+		return page, fmt.Errorf("scroll search error: %s", res.String())
 	}
-	var accum []map[string]any
-	var r map[string]any
-	body, _ := io.ReadAll(res.Body)
-	if err := sonic.Unmarshal(body, &r); err != nil {
-		return nil, err
-	}
-	// collect hits
-	hits := extractHits(r)
-	accum = append(accum, hits...)
-
-	scrollID := getScrollID(r)
-	for scrollID != "" {
-		res, err = op.client.Scroll(op.client.Scroll.WithScrollID(scrollID), op.client.Scroll.WithScroll(scroll))
-		if err != nil {
-			return nil, err
-		}
-		defer res.Body.Close()
-		if res.IsError() {
-			break
-		}
-		body, _ = io.ReadAll(res.Body)
-		if err := sonic.Unmarshal(body, &r); err != nil {
-			return nil, err
-		}
-		hits = extractHits(r)
-		if len(hits) == 0 {
-			break
-		}
-		accum = append(accum, hits...)
-		scrollID = getScrollID(r)
-	}
-	return accum, nil
+	return page, sonic.ConfigDefault.NewDecoder(res.Body).Decode(&page)
 }
 
-func extractHits(raw map[string]any) []map[string]any {
-	out := make([]map[string]any, 0)
-	if hitsObj, ok := raw["hits"].(map[string]any); ok {
-		if hitsArr, ok := hitsObj["hits"].([]any); ok {
-			for _, h := range hitsArr {
-				if hit, ok := h.(map[string]any); ok {
-					if src, ok := hit["_source"].(map[string]any); ok {
-						out = append(out, src)
-					}
-				}
-			}
-		}
+// clearScroll 尽力释放服务端 scroll 上下文；ctx 已取消时仍执行，失败只记日志。
+func (op *ElasticSearchOperator) clearScroll(ctx context.Context, scrollID string) {
+	if scrollID == "" {
+		return
 	}
-	return out
-}
-
-func getScrollID(raw map[string]any) string {
-	if sid, ok := raw["_scroll_id"].(string); ok {
-		return sid
+	clearCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	res, err := op.client.ClearScroll(op.client.ClearScroll.WithContext(clearCtx),
+		op.client.ClearScroll.WithScrollID(scrollID))
+	if err != nil {
+		op.l.WithError(err).Warn(ctx, "clear scroll error")
+		return
 	}
-	return ""
+	_ = res.Body.Close()
 }
 
 // IndexDocument 索引/创建文档
@@ -729,8 +760,10 @@ func buildNDJSON(ops []BulkOperation) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-func (op *ElasticSearchOperator) Bulk(ctx context.Context, ops []BulkOperation) (map[string]any, error) {
-	defer op.handlePanic(ctx)
+// Bulk 执行批量操作并返回原始响应；HTTP 失败或任一条目失败（errors=true）时返回错误，
+// 此时 out 仍是完整响应，调用方可以逐条查看 items。
+func (op *ElasticSearchOperator) Bulk(ctx context.Context, ops []BulkOperation) (out map[string]any, err error) {
+	defer op.handlePanic(ctx, &err)
 	if len(ops) == 0 {
 		return nil, nil
 	}
@@ -744,14 +777,31 @@ func (op *ElasticSearchOperator) Bulk(ctx context.Context, ops []BulkOperation) 
 	}
 	defer res.Body.Close()
 	if res.IsError() {
-		return nil, fmt.Errorf("bulk error: %s", res.Status())
+		return nil, fmt.Errorf("bulk error: %s", res.String())
 	}
-	var out map[string]any
-	body, _ := io.ReadAll(res.Body)
-	if err := sonic.Unmarshal(body, &out); err != nil {
+	if err = sonic.ConfigDefault.NewDecoder(res.Body).Decode(&out); err != nil {
 		return nil, err
 	}
+	if failed, _ := out["errors"].(bool); failed {
+		return out, fmt.Errorf("bulk error: %s", firstBulkItemError(out))
+	}
 	return out, nil
+}
+
+// firstBulkItemError 取第一条失败条目的状态与原因，用于错误信息。
+func firstBulkItemError(out map[string]any) string {
+	items, _ := out["items"].([]any)
+	for _, item := range items {
+		actions, _ := item.(map[string]any)
+		for action, v := range actions {
+			result, _ := v.(map[string]any)
+			if reason, ok := result["error"]; ok {
+				detail, _ := sonic.MarshalString(reason)
+				return fmt.Sprintf("%s _id=%v status=%v: %s", action, result["_id"], result["status"], detail)
+			}
+		}
+	}
+	return "some items failed"
 }
 
 // BulkIndex Convenience bulk helpers

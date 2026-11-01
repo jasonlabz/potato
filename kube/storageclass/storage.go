@@ -55,11 +55,16 @@ type CreateStorageClassRequest struct {
 	AccessModes                   []corev1.PersistentVolumeAccessMode   `json:"access_modes"`
 	Storage                       string                                `json:"storage"`
 	PersistentVolumeReclaimPolicy *corev1.PersistentVolumeReclaimPolicy `json:"persistent_volume_reclaim_policy"`
+	// Provisioner 为 StorageClass 必填字段，例如 kubernetes.io/no-provisioner
+	Provisioner string `json:"provisioner"`
 }
 
 func (c *CreateStorageClassRequest) checkParameters() error {
 	if c.StorageClassName == "" {
 		return errors.New("storageClass name is required")
+	}
+	if c.Provisioner == "" {
+		return errors.New("storageClass provisioner is required")
 	}
 
 	if len(c.StorageClassLabels) == 0 {
@@ -89,6 +94,7 @@ func CreateStorageClass(ctx context.Context, request CreateStorageClassRequest) 
 			Name:   request.StorageClassName,
 			Labels: map[string]string{},
 		},
+		Provisioner:   request.Provisioner,
 		ReclaimPolicy: request.PersistentVolumeReclaimPolicy,
 	}
 	for labelKey, labelVal := range request.StorageClassLabels {

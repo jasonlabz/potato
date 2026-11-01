@@ -10,7 +10,6 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -30,9 +29,13 @@ func init() {
 	var err error
 	rsaCrypto, err = NewCryptoRSAWithFile(filepath.Join(curDir, ".rsa", "public.pem"), filepath.Join(curDir, ".rsa", "private.pem"))
 	if err != nil {
-		fmt.Println("rsa init fail, skipping...")
+		// 默认密钥不存在时保持未初始化，包级 Encrypt/Decrypt 会返回 ErrNotInitialized。
+		rsaCrypto = nil
 	}
 }
+
+// ErrNotInitialized 表示未加载默认密钥，也未调用 SetRSACrypto。
+var ErrNotInitialized = errors.New("rsa crypto not initialized, call SetRSACrypto first")
 
 func SetRSACrypto(cryptoRSA *CryptoRSA) {
 	rsaCrypto = cryptoRSA
@@ -186,13 +189,14 @@ func CreateKeys(keyLength int) (publicKeyPath, privateKeyPath string) {
 
 	privateKeyPath = filepath.Join(currentDir, ".rsa")
 	if !isExist(privateKeyPath) {
-		_ = os.MkdirAll(privateKeyPath, 0644)
+		_ = os.MkdirAll(privateKeyPath, 0700)
 	}
 
-	privateKeyWriter, err := os.OpenFile(filepath.Join(privateKeyPath, "private.pem"), os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0644)
+	privateKeyWriter, err := os.OpenFile(filepath.Join(privateKeyPath, "private.pem"), os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0600)
 	if err != nil {
 		panic(err)
 	}
+	defer privateKeyWriter.Close()
 	err = pem.Encode(privateKeyWriter, block)
 	if err != nil {
 		panic(err)
@@ -213,6 +217,7 @@ func CreateKeys(keyLength int) (publicKeyPath, privateKeyPath string) {
 	if err != nil {
 		panic(err)
 	}
+	defer publicKeyWriter.Close()
 	err = pem.Encode(publicKeyWriter, block)
 	if err != nil {
 		panic(err)
@@ -230,9 +235,15 @@ func isExist(path string) bool {
 }
 
 func Encrypt(src []byte) (encryptText string, err error) {
+	if rsaCrypto == nil {
+		return "", ErrNotInitialized
+	}
 	return rsaCrypto.Encrypt(src)
 }
 
 func Decrypt(encryptText string) (src []byte, err error) {
+	if rsaCrypto == nil {
+		return nil, ErrNotInitialized
+	}
 	return rsaCrypto.Decrypt(encryptText)
 }

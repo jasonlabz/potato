@@ -128,9 +128,11 @@ func (c *CreateDeploymentRequest) checkParameters() error {
 		c.RevisionHistoryLimit = 3
 	}
 
-	for index, initContainer := range c.InitContainerInfoList {
+	// 按下标取指针，默认值才能写回切片
+	for index := range c.InitContainerInfoList {
+		initContainer := &c.InitContainerInfoList[index]
 		if initContainer.Name == "" {
-			initContainer.Name = fmt.Sprintf("%s_container_%d", c.DeploymentName, index)
+			initContainer.Name = fmt.Sprintf("%s-init-container-%d", c.DeploymentName, index)
 		}
 
 		if initContainer.Image == "" {
@@ -164,9 +166,10 @@ func (c *CreateDeploymentRequest) checkParameters() error {
 		}
 	}
 
-	for index, container := range c.ContainerInfoList {
+	for index := range c.ContainerInfoList {
+		container := &c.ContainerInfoList[index]
 		if container.Name == "" {
-			container.Name = fmt.Sprintf("%s_container_%d", c.DeploymentName, index)
+			container.Name = fmt.Sprintf("%s-container-%d", c.DeploymentName, index)
 		}
 
 		if container.Image == "" {
@@ -424,21 +427,6 @@ func CreateDeployment(ctx context.Context, request *CreateDeploymentRequest) (de
 				},
 				Claims: make([]corev1.ResourceClaim, 0),
 			},
-			LivenessProbe: &corev1.Probe{
-				InitialDelaySeconds: 30,
-				TimeoutSeconds:      5,
-				PeriodSeconds:       30,
-				SuccessThreshold:    1,
-				FailureThreshold:    5,
-			},
-			ReadinessProbe: &corev1.Probe{
-				InitialDelaySeconds: 30,
-				TimeoutSeconds:      5,
-				PeriodSeconds:       10,
-				SuccessThreshold:    1,
-				FailureThreshold:    5,
-			},
-			StartupProbe:    &corev1.Probe{},
 			VolumeMounts:    volumeMounts,
 			SecurityContext: nil,
 			Stdin:           info.Stdin,
@@ -479,21 +467,6 @@ func CreateDeployment(ctx context.Context, request *CreateDeploymentRequest) (de
 				},
 				Claims: make([]corev1.ResourceClaim, 0),
 			},
-			LivenessProbe: &corev1.Probe{
-				InitialDelaySeconds: 30,
-				TimeoutSeconds:      5,
-				PeriodSeconds:       50,
-				SuccessThreshold:    1,
-				FailureThreshold:    15,
-			},
-			ReadinessProbe: &corev1.Probe{
-				InitialDelaySeconds: 30,
-				TimeoutSeconds:      5,
-				PeriodSeconds:       10,
-				SuccessThreshold:    1,
-				FailureThreshold:    15,
-			},
-			StartupProbe: &corev1.Probe{},
 			VolumeMounts: volumeMounts,
 			Stdin:        info.Stdin,
 			StdinOnce:    info.StdinOnce,

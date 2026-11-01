@@ -100,6 +100,7 @@ type RocketMQOperator struct {
 
 	producer  rocketmq.Producer
 	consumers sync.Map // topic+groupName -> rocketmq.PushConsumer
+	chClosers sync.Map // topic+groupName -> func()，关闭 ConsumeWithChannel 返回的通道
 	cancelMu  sync.Mutex
 
 	closeCh chan bool
@@ -230,8 +231,8 @@ func (r *RocketMQOperator) Push(ctx context.Context, msg *ProduceMessage) (*prim
 }
 
 // PushBatch 批量推送消息（同步）
-func (r *RocketMQOperator) PushBatch(ctx context.Context, messages []*ProduceMessage) (*primitive.SendResult, error) {
-	defer handlePanic(ctx, r)
+func (r *RocketMQOperator) PushBatch(ctx context.Context, messages []*ProduceMessage) (result *primitive.SendResult, err error) {
+	defer handlePanic(ctx, r, &err)
 
 	if atomic.LoadInt32(&r.closed) == Closed {
 		return nil, errors.New("rocketmq operator is closed")
@@ -243,6 +244,9 @@ func (r *RocketMQOperator) PushBatch(ctx context.Context, messages []*ProduceMes
 
 	msgs := make([]*primitive.Message, 0, len(messages))
 	for _, m := range messages {
+		if m == nil {
+			return nil, errors.New("message is nil")
+		}
 		if m.Topic == "" {
 			return nil, errors.New("topic is required")
 		}
@@ -250,8 +254,6 @@ func (r *RocketMQOperator) PushBatch(ctx context.Context, messages []*ProduceMes
 	}
 
 	// 带重试的推送
-	var result *primitive.SendResult
-	var err error
 	retryWait := time.Duration(r.config.RetryWaitTime) * time.Second
 
 	for i := 0; i < r.config.RetryTimes; i++ {
@@ -285,14 +287,14 @@ func (r *RocketMQOperator) PushBatch(ctx context.Context, messages []*ProduceMes
 
 // PushAsync 异步推送消息
 func (r *RocketMQOperator) PushAsync(ctx context.Context, msg *ProduceMessage,
-	callback func(ctx context.Context, result *primitive.SendResult, err error)) error {
-	defer handlePanic(ctx, r)
+	callback func(ctx context.Context, result *primitive.SendResult, err error)) (err error) {
+	defer handlePanic(ctx, r, &err)
 
 	if atomic.LoadInt32(&r.closed) == Closed {
 		return errors.New("rocketmq operator is closed")
 	}
 
-	if msg.Topic == "" {
+	if msg == nil || msg.Topic == "" {
 		return errors.New("topic is required")
 	}
 
@@ -300,14 +302,14 @@ func (r *RocketMQOperator) PushAsync(ctx context.Context, msg *ProduceMessage,
 }
 
 // PushOneWay 单向推送（不等待响应）
-func (r *RocketMQOperator) PushOneWay(ctx context.Context, msg *ProduceMessage) error {
-	defer handlePanic(ctx, r)
+func (r *RocketMQOperator) PushOneWay(ctx context.Context, msg *ProduceMessage) (err error) {
+	defer handlePanic(ctx, r, &err)
 
 	if atomic.LoadInt32(&r.closed) == Closed {
 		return errors.New("rocketmq operator is closed")
 	}
 
-	if msg.Topic == "" {
+	if msg == nil || msg.Topic == "" {
 		return errors.New("topic is required")
 	}
 
@@ -316,6 +318,9 @@ func (r *RocketMQOperator) PushOneWay(ctx context.Context, msg *ProduceMessage) 
 
 // PushDelay 推送延迟消息
 func (r *RocketMQOperator) PushDelay(ctx context.Context, msg *ProduceMessage, delayLevel int) (*primitive.SendResult, error) {
+	if msg == nil {
+		return nil, errors.New("message is nil")
+	}
 	msg.SetDelayLevel(delayLevel)
 	return r.Push(ctx, msg)
 }
@@ -337,6 +342,13 @@ func (r *RocketMQOperator) Consume(ctx context.Context, config *ConsumeConfig,
 	}
 	key := config.Topic + ":" + groupName
 
+	// 串行化同 key 的检查与注册，避免重复启动后旧消费者被覆盖而泄漏
+	r.cancelMu.Lock()
+	defer r.cancelMu.Unlock()
+	if _, ok := r.consumers.Load(key); ok {
+		return fmt.Errorf("consumer for %s already exists", key)
+	}
+
 	c, err := r.createPushConsumer(config)
 	if err != nil {
 		return fmt.Errorf("create consumer failed: %w", err)
@@ -351,11 +363,13 @@ func (r *RocketMQOperator) Consume(ctx context.Context, config *ConsumeConfig,
 
 	// 订阅
 	if err = c.Subscribe(config.Topic, selector, handler); err != nil {
+		_ = c.Shutdown()
 		return fmt.Errorf("subscribe failed: %w", err)
 	}
 
 	// 启动消费者
 	if err = c.Start(); err != nil {
+		_ = c.Shutdown()
 		return fmt.Errorf("start consumer failed: %w", err)
 	}
 
@@ -367,21 +381,59 @@ func (r *RocketMQOperator) Consume(ctx context.Context, config *ConsumeConfig,
 }
 
 // ConsumeWithChannel 消费消息，返回消息通道（包装 PushConsumer）
+// 注意：消息写入通道即向 broker 确认（至多一次），调用方处理失败不会重投；
+// 需要失败重试请使用 Consume 并在 handler 中返回 ConsumeRetryLater。
+// CancelConsume 或 Close 后通道会被关闭。
 func (r *RocketMQOperator) ConsumeWithChannel(ctx context.Context, config *ConsumeConfig) (<-chan []*primitive.MessageExt, error) {
 	msgCh := make(chan []*primitive.MessageExt, 10)
+	done := make(chan struct{})
+	var (
+		mu     sync.RWMutex
+		closed bool
+		once   sync.Once
+	)
+	// 先 close(done) 唤醒阻塞的 handler，再在写锁下关闭 msgCh，避免向已关闭通道发送
+	closeFn := func() {
+		once.Do(func() {
+			close(done)
+			mu.Lock()
+			closed = true
+			close(msgCh)
+			mu.Unlock()
+		})
+	}
 
 	err := r.Consume(ctx, config, func(ctx context.Context, msgs ...*primitive.MessageExt) (consumer.ConsumeResult, error) {
+		mu.RLock()
+		defer mu.RUnlock()
+		if closed {
+			return consumer.ConsumeRetryLater, nil
+		}
 		select {
 		case msgCh <- msgs:
 			return consumer.ConsumeSuccess, nil
+		case <-done:
+			return consumer.ConsumeRetryLater, nil
 		case <-r.closeCh:
-			close(msgCh)
 			return consumer.ConsumeRetryLater, nil
 		}
 	})
 	if err != nil {
 		close(msgCh)
 		return nil, err
+	}
+
+	groupName := config.GroupName
+	if groupName == "" {
+		groupName = r.config.GroupName
+	}
+	key := config.Topic + ":" + groupName
+	r.chClosers.Store(key, closeFn)
+	// Consume 返回后、注册 closer 前若已被 CancelConsume/Close 移除，补做关闭，避免通道永不关闭
+	if _, ok := r.consumers.Load(key); !ok {
+		if fn, ok := r.chClosers.LoadAndDelete(key); ok {
+			fn.(func())()
+		}
 	}
 
 	return msgCh, nil
@@ -400,7 +452,11 @@ func (r *RocketMQOperator) CancelConsume(topic, groupName string) error {
 	}
 
 	c := val.(rocketmq.PushConsumer)
-	if err := c.Shutdown(); err != nil {
+	err := c.Shutdown()
+	if fn, ok := r.chClosers.LoadAndDelete(key); ok {
+		fn.(func())()
+	}
+	if err != nil {
 		return fmt.Errorf("shutdown consumer failed: %w", err)
 	}
 
@@ -442,6 +498,11 @@ func (r *RocketMQOperator) Close(ctx context.Context) error {
 			}
 		}
 		r.consumers.Delete(key)
+		return true
+	})
+	r.chClosers.Range(func(key, value any) bool {
+		value.(func())()
+		r.chClosers.Delete(key)
 		return true
 	})
 

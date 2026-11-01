@@ -1,6 +1,8 @@
 package bloom
 
 import (
+	"sync"
+
 	"github.com/bits-and-blooms/bitset"
 )
 
@@ -11,6 +13,7 @@ var seeds = []uint{7, 11, 13, 31, 37, 61}
 type BloomFilter struct {
 	Set   *bitset.BitSet
 	Funcs [6]simpleHash
+	mu    sync.RWMutex // bitset 非并发安全，Add/Contains 并发调用需加锁
 }
 
 func NewBloomFilter() *BloomFilter {
@@ -23,6 +26,8 @@ func NewBloomFilter() *BloomFilter {
 }
 
 func (bf *BloomFilter) Add(value string) {
+	bf.mu.Lock()
+	defer bf.mu.Unlock()
 	for _, f := range bf.Funcs {
 		bf.Set.Set(f.hash(value))
 	}
@@ -32,6 +37,8 @@ func (bf *BloomFilter) Contains(value string) bool {
 	if value == "" {
 		return false
 	}
+	bf.mu.RLock()
+	defer bf.mu.RUnlock()
 	for _, f := range bf.Funcs {
 		if !bf.Set.Test(f.hash(value)) {
 			return false

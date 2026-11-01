@@ -78,8 +78,12 @@ func WithPullBatchSize(n int) ConnOption {
 	}
 }
 
-func handlePanic(ctx context.Context, r *RocketMQOperator) {
+// handlePanic 记录 panic；err 非 nil 时把 panic 转成错误返回给调用方。
+func handlePanic(ctx context.Context, r *RocketMQOperator, err *error) {
 	if re := recover(); re != nil {
 		r.l.Error(ctx, fmt.Sprintf("Handler panicked: %v\nStack: %s", re, debug.Stack()))
+		if err != nil {
+			*err = fmt.Errorf("rocketmq panic: %v", re)
+		}
 	}
 }

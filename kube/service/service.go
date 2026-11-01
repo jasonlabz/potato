@@ -176,6 +176,7 @@ func CreateService(ctx context.Context, request CreateServiceRequest) (serviceIn
 			InternalTrafficPolicy:         request.InternalTrafficPolicy,
 		},
 	}
+	serviceSrc.ObjectMeta.Labels = make(map[string]string, len(request.ServiceLabels))
 	for labelKey, labelVal := range request.ServiceLabels {
 		serviceSrc.ObjectMeta.Labels[labelKey] = labelVal
 	}

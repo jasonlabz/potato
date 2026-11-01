@@ -102,7 +102,8 @@ func InitConfig(config *Config) (db *gorm.DB, err error) {
 	sqlDB.SetMaxIdleConns(config.MaxIdleConn)
 	sqlDB.SetConnMaxLifetime(time.Duration(config.ConnMaxLifeTime) * time.Millisecond)
 
-	if len(replicas[0]) > 0 && len(replicas[1]) > 0 {
+	// 只配了 Masters 或只配了 Replicas 时也要注册读写分离
+	if len(replicas[0]) > 0 || len(replicas[1]) > 0 {
 		var sourceDialectors []gorm.Dialector
 		var replicaDialectors []gorm.Dialector
 		for _, replicaDSN := range replicas[0] {
@@ -112,7 +113,7 @@ func InitConfig(config *Config) (db *gorm.DB, err error) {
 			replicaDialectors = append(replicaDialectors, getDialector(config.DBType, replicaDSN))
 		}
 
-		dbOpened.Use(dbresolver.Register(dbresolver.Config{
+		err = dbOpened.Use(dbresolver.Register(dbresolver.Config{
 			Sources:  sourceDialectors,
 			Replicas: replicaDialectors,
 			Policy:   dbresolver.RandomPolicy{},
@@ -120,6 +121,10 @@ func InitConfig(config *Config) (db *gorm.DB, err error) {
 			SetConnMaxLifetime(time.Duration(config.ConnMaxLifeTime) * time.Millisecond).
 			SetMaxIdleConns(config.MaxIdleConn).
 			SetMaxOpenConns(config.MaxOpenConn))
+		if err != nil {
+			_ = sqlDB.Close()
+			return nil, err
+		}
 	}
 	// Store database
 	dbMap.Store(config.DBName, dbOpened)

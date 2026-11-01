@@ -8,12 +8,10 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/signal"
 	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -360,9 +358,11 @@ func (r *KafkaOperator) getWriter(topic string) *kafka.Writer {
 	}
 
 	w := &kafka.Writer{
-		Addr:         kafka.TCP(r.config.BootstrapServers...),
-		Topic:        topic,
-		Balancer:     &kafka.LeastBytes{},
+		Addr:     kafka.TCP(r.config.BootstrapServers...),
+		Topic:    topic,
+		Balancer: &kafka.LeastBytes{},
+		// 等待所有 ISR 确认，避免 leader 宕机时已返回成功的消息丢失。
+		RequiredAcks: kafka.RequireAll,
 		MaxAttempts:  r.connCfg.MaxAttempts,
 		BatchSize:    r.connCfg.BatchSize,
 		BatchTimeout: r.connCfg.BatchTimeout,
@@ -443,12 +443,15 @@ func (r *KafkaOperator) getReader(config *ConsumeConfig) (*kafka.Reader, error) 
 
 // Push 推送单条消息
 func (r *KafkaOperator) Push(ctx context.Context, msg *ProduceMessage) error {
+	if msg == nil {
+		return errors.New("message is nil")
+	}
 	return r.PushBatch(ctx, msg.Topic, []*ProduceMessage{msg})
 }
 
 // PushBatch 批量推送消息
-func (r *KafkaOperator) PushBatch(ctx context.Context, topic string, messages []*ProduceMessage) error {
-	defer handlePanic(ctx, r)
+func (r *KafkaOperator) PushBatch(ctx context.Context, topic string, messages []*ProduceMessage) (err error) {
+	defer handlePanic(ctx, r, &err)
 
 	if atomic.LoadInt32(&r.closed) == Closed {
 		return errors.New("kafka operator is closed")
@@ -464,11 +467,14 @@ func (r *KafkaOperator) PushBatch(ctx context.Context, topic string, messages []
 	w := r.getWriter(topic)
 	kafkaMessages := make([]kafka.Message, 0, len(messages))
 	for _, m := range messages {
+		// Writer 按 topic 创建，消息自带的 Topic 不一致时报错，避免静默写到别的 topic。
+		if m.Topic != "" && m.Topic != topic {
+			return fmt.Errorf("message topic %q does not match batch topic %q", m.Topic, topic)
+		}
 		kafkaMessages = append(kafkaMessages, m.toKafkaMessage())
 	}
 
 	// 带重试的推送
-	var err error
 	retryWait := time.Duration(r.config.RetryWaitTime) * time.Second
 	for i := 0; i < r.config.MaxAttempts; i++ {
 		if atomic.LoadInt32(&r.closed) == Closed {
@@ -498,73 +504,71 @@ func (r *KafkaOperator) PushBatch(ctx context.Context, topic string, messages []
 	return fmt.Errorf("push failed after %d retries: %w", r.config.MaxAttempts, err)
 }
 
-// Consume 消费消息，返回消息通道
+// Consume 消费消息，返回消息通道。有 GroupID 时消息写入通道后才提交 offset。
 func (r *KafkaOperator) Consume(ctx context.Context, config *ConsumeConfig) (<-chan kafka.Message, error) {
+	msgCh, _, err := r.consume(ctx, config, true)
+	return msgCh, err
+}
+
+// consume 启动消费协程，返回的 commit 绑定本次消费的 reader；autoCommit 为 false 时
+// 由调用方在处理成功后调用 commit。
+func (r *KafkaOperator) consume(_ context.Context, config *ConsumeConfig, autoCommit bool) (<-chan kafka.Message, func(kafka.Message), error) {
 	if atomic.LoadInt32(&r.closed) == Closed {
-		return nil, errors.New("kafka operator is closed")
+		return nil, nil, errors.New("kafka operator is closed")
 	}
 
 	if config == nil {
-		return nil, errors.New("consume config is nil")
+		return nil, nil, errors.New("consume config is nil")
 	}
 	if config.Topic == "" {
-		return nil, errors.New("topic is required")
+		return nil, nil, errors.New("topic is required")
 	}
 
+	key := config.Topic + ":" + config.GroupID
+	// 创建取消通道；同一 topic+groupID 已在消费时报错，避免覆盖后旧消费者无法取消。
+	cancelCh := make(chan bool)
+	if _, loaded := r.cancelChan.LoadOrStore(key, cancelCh); loaded {
+		return nil, nil, fmt.Errorf("topic %s group %s is already being consumed", config.Topic, config.GroupID)
+	}
 	reader, err := r.getReader(config)
 	if err != nil {
-		return nil, err
+		r.cancelChan.CompareAndDelete(key, cancelCh)
+		return nil, nil, err
 	}
-	key := config.Topic + ":" + config.GroupID
+	commit := r.committer(reader, cancelCh)
 	contents := make(chan kafka.Message, 10)
-
-	// 创建取消通道
-	cancelCh := make(chan bool)
-	r.cancelChan.Store(key, cancelCh)
 
 	go func() {
 		ctxBack := context.Background()
-		defer handlePanic(ctxBack, r)
-
-		sig := make(chan os.Signal, 1)
-		signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-		defer signal.Stop(sig)
+		defer handlePanic(ctxBack, r, nil)
+		defer close(contents)
+		defer r.cancelChan.CompareAndDelete(key, cancelCh)
 
 		retryWait := time.Duration(r.config.RetryWaitTime) * time.Second
 
 		for {
 			select {
-			case s := <-sig:
-				r.l.Info(ctxBack, fmt.Sprintf("[consume:%s] received signal: %v, exiting...", config.Topic, s))
-				close(contents)
-				return
 			case <-r.closeCh:
 				r.l.Info(ctxBack, fmt.Sprintf("[consume:%s] kafka is closed, exiting...", config.Topic))
-				close(contents)
 				return
 			case <-cancelCh:
 				r.l.Info(ctxBack, fmt.Sprintf("[consume:%s] consume canceled, exiting...", config.Topic))
-				r.cancelChan.Delete(key)
-				close(contents)
 				return
 			default:
 			}
 
-			msg, err := reader.ReadMessage(ctxBack)
+			// FetchMessage 不自动提交；CancelConsume/Close 关闭 reader 时会立即返回错误。
+			msg, err := reader.FetchMessage(ctxBack)
 			if err != nil {
 				if atomic.LoadInt32(&r.closed) == Closed {
-					close(contents)
 					return
 				}
 				r.l.Error(ctxBack, fmt.Sprintf("[consume:%s] read message error, retrying...", config.Topic),
 					"err", err.Error())
 				select {
 				case <-r.closeCh:
-					close(contents)
 					return
 				case <-cancelCh:
-					r.cancelChan.Delete(key)
-					close(contents)
 					return
 				case <-time.After(retryWait):
 					continue
@@ -572,78 +576,92 @@ func (r *KafkaOperator) Consume(ctx context.Context, config *ConsumeConfig) (<-c
 			}
 
 			if len(msg.Value) == 0 {
+				if autoCommit {
+					commit(msg)
+				}
 				continue
 			}
 
 			select {
 			case contents <- msg:
 				r.l.Debug(ctxBack, fmt.Sprintf("[consume:%s] received msg, offset: %d", config.Topic, msg.Offset))
-			case s := <-sig:
-				r.l.Info(ctxBack, fmt.Sprintf("[consume:%s] received signal: %v, exiting...", config.Topic, s))
-				close(contents)
-				return
+				if autoCommit {
+					commit(msg)
+				}
 			case <-r.closeCh:
-				close(contents)
 				return
 			case <-cancelCh:
-				r.cancelChan.Delete(key)
-				close(contents)
 				return
 			}
 		}
 	}()
 
-	return contents, nil
+	return contents, commit, nil
 }
 
-// ConsumeWithHandler 使用回调函数消费消息
+// committer 返回绑定 reader 的同步提交函数，没有 GroupID 时为空操作。提交用的 ctx 在
+// Close 或 CancelConsume 时取消，避免 reader 已关闭时 CommitMessages 一直阻塞。
+// 提交失败只记日志（消息会在重平衡后重新投递）。
+func (r *KafkaOperator) committer(reader *kafka.Reader, cancelCh <-chan bool) func(kafka.Message) {
+	if reader.Config().GroupID == "" {
+		return func(kafka.Message) {}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		defer cancel()
+		select {
+		case <-r.closeCh:
+		case <-cancelCh:
+		}
+	}()
+	return func(msg kafka.Message) {
+		if err := reader.CommitMessages(ctx, msg); err != nil {
+			r.l.Error(ctx, "[consume] commit offset failed", "err", err.Error(), "topic", msg.Topic, "offset", msg.Offset)
+		}
+	}
+}
+
+// ConsumeWithHandler 使用回调函数消费消息；有 GroupID 时 handler 成功后才提交 offset。
 func (r *KafkaOperator) ConsumeWithHandler(ctx context.Context, config *ConsumeConfig, handler func(context.Context, kafka.Message) error) error {
-	msgCh, err := r.Consume(ctx, config)
+	msgCh, commit, err := r.consume(ctx, config, false)
 	if err != nil {
 		return err
 	}
 
 	go func() {
 		ctxBack := context.Background()
-		defer handlePanic(ctxBack, r)
+		defer handlePanic(ctxBack, r, nil)
 
 		for msg := range msgCh {
 			if handleErr := handler(ctxBack, msg); handleErr != nil {
 				r.l.Error(ctxBack, "[consume] handle message failed",
 					"err", handleErr.Error(), "topic", msg.Topic, "offset", msg.Offset)
+				continue
 			}
+			commit(msg)
 		}
 	}()
 
 	return nil
 }
 
-// CancelConsume 取消指定 topic+groupID 的消费
+// CancelConsume 取消指定 topic+groupID 的消费，并关闭对应 reader 以打断阻塞中的读取。
+// 先移除 reader 再移除取消通道：取消通道仍在时并发的 Consume 会报重复消费，
+// 不会拿到即将被关闭的旧 reader。
 func (r *KafkaOperator) CancelConsume(topic, groupID string) error {
 	key := topic + ":" + groupID
-	val, ok := r.cancelChan.Load(key)
-	if !ok {
+	if _, ok := r.cancelChan.Load(key); !ok {
 		return nil
 	}
 
-	close(val.(chan bool))
-
-	// 等待消费者退出
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
-	for i := 0; i < 10; i++ {
-		if _, exists := r.cancelChan.Load(key); !exists {
-			// 关闭 reader
-			if rd, loaded := r.readers.LoadAndDelete(key); loaded {
-				_ = rd.(*kafka.Reader).Close()
-			}
-			return nil
-		}
-		<-ticker.C
+	var err error
+	if rd, loaded := r.readers.LoadAndDelete(key); loaded {
+		err = rd.(*kafka.Reader).Close()
 	}
-
-	r.l.Warn(context.Background(), "cancel consumer timeout", "topic", topic, "group_id", groupID)
-	return nil
+	if val, ok := r.cancelChan.LoadAndDelete(key); ok {
+		close(val.(chan bool))
+	}
+	return err
 }
 
 // CreateTopic 创建 Topic

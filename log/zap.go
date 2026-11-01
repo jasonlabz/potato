@@ -126,6 +126,8 @@ func NewLogger(opts ...Option) *LoggerWrapper {
 	if options.configPath != "" && !utils.IsExist(options.configPath) {
 		panic(fmt.Errorf("log config not found: %s", options.configPath))
 	}
+	// 用户指定的配置优先，不被默认路径覆盖
+	configLoad = options.configPath != ""
 
 	for _, confPath := range defaultZapConfigPaths {
 		if configLoad {

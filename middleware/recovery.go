@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/jasonlabz/potato/consts"
 	"github.com/jasonlabz/potato/log"
 )
 
@@ -31,7 +32,12 @@ func RecoveryLog(stack bool) gin.HandlerFunc {
 					}
 				}
 
-				httpRequest, _ := httputil.DumpRequest(c.Request, false)
+				// 去掉认证类请求头再打印，避免 token、cookie 进日志
+				dumpReq := c.Request.Clone(c.Request.Context())
+				for _, h := range []string{"Authorization", consts.HeaderAuthorization, "Cookie"} {
+					dumpReq.Header.Del(h)
+				}
+				httpRequest, _ := httputil.DumpRequest(dumpReq, false)
 				if brokenPipe {
 					log.GetLogger().WithField(log.Any("error", err),
 						log.String("request", string(httpRequest))).Error(c, c.Request.URL.Path)

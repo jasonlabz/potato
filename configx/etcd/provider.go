@@ -22,14 +22,12 @@ func (c *ConfigProvider) IsExist(key string) (res bool) {
 }
 
 func NewConfigProvider(endpoint, watchKey string, fileType string) base.IProvider {
-	switch fileType {
-	case "json", "toml", "yaml", "yml", "properties", "props", "prop", "env", "dotenv":
-	default:
-	}
 	c := &ConfigProvider{
 		endpoint: endpoint,
 	}
 	c.viper = viper.New()
+	// 远程配置没有文件扩展名，必须显式指定格式，否则 ReadRemoteConfig 无法解析
+	c.viper.SetConfigType(fileType)
 	err := c.viper.AddRemoteProvider("etcd", endpoint, watchKey)
 	if err != nil {
 		panic(err)

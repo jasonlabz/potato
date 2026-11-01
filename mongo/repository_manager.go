@@ -25,9 +25,11 @@ var (
 
 // GetRepositoryManager 获取仓库管理器单例
 func GetRepositoryManager() *RepositoryManager {
+	// 在 Once 外取 operator：未初始化时 panic 不会把 Once 标记为已完成。
+	op := GetOperator()
 	repositoryManagerOnce.Do(func() {
 		repositoryManager = &RepositoryManager{
-			operator: GetOperator(),
+			operator: op,
 		}
 	})
 	return repositoryManager

@@ -49,7 +49,7 @@ var DatabaseDsnSepMap = map[DatabaseType]string{
 // DatabaseDsnPrefixMap 关系型数据库类型DSN 参数拼接
 var DatabaseDsnPrefixMap = map[DatabaseType]string{
 	DatabaseTypeSQLite:    "?",
-	DatabaseTypeDM:        "?",
+	DatabaseTypeDM:        "&", // DM 模板已带 ?schema=，追加参数用 &
 	DatabaseTypeOracle:    "?",
 	DatabaseTypeMySQL:     "?",
 	DatabaseTypePostgres:  " ",

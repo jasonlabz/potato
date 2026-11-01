@@ -19,7 +19,7 @@ func UnMarshal(data string, object any) error {
 }
 
 func GetStringValue(s string, path ...any) (string, error) {
-	astNode, err := getVal(s, path)
+	astNode, err := getVal(s, path...)
 	if err != nil {
 		return "", err
 	}
@@ -27,37 +27,37 @@ func GetStringValue(s string, path ...any) (string, error) {
 }
 
 func GetInt64Value(s string, path ...any) (int64, error) {
-	astNode, err := getVal(s, path)
+	astNode, err := getVal(s, path...)
 	if err != nil {
 		return 0, err
 	}
 	int64Value, err := astNode.Int64()
 	if err != nil {
-		err = errors.Wrapf(err, valueType(astNode.Type()))
+		err = errors.Wrap(err, valueType(astNode.Type()))
 	}
 	return int64Value, err
 }
 
 func GetFloat64Value(s string, path ...any) (float64, error) {
-	astNode, err := getVal(s, path)
+	astNode, err := getVal(s, path...)
 	if err != nil {
 		return 0, err
 	}
 	floatValue, err := astNode.Float64()
 	if err != nil {
-		err = errors.Wrapf(err, valueType(astNode.Type()))
+		err = errors.Wrap(err, valueType(astNode.Type()))
 	}
 	return floatValue, err
 }
 
 func GetBoolValue(s string, path ...any) (bool, error) {
-	astNode, err := getVal(s, path)
+	astNode, err := getVal(s, path...)
 	if err != nil {
 		return false, err
 	}
 	boolValue, err := astNode.Bool()
 	if err != nil {
-		err = errors.Wrapf(err, valueType(astNode.Type()))
+		err = errors.Wrap(err, valueType(astNode.Type()))
 	}
 	return boolValue, err
 }
@@ -91,5 +91,5 @@ func getVal(s string, path ...any) (ast.Node, error) {
 	if !sonic.ValidString(s) {
 		return ast.Node{}, errors.Wrapf(ErrJSONNotValid, "json: %v", s)
 	}
-	return sonic.GetFromString(s, path)
+	return sonic.GetFromString(s, path...)
 }
