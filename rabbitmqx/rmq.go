@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jolestar/go-commons-pool/v2"
+	pool "github.com/jolestar/go-commons-pool/v2"
 	amqp "github.com/rabbitmq/amqp091-go"
 
 	"github.com/jasonlabz/potato/configx"

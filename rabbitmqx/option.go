@@ -6,7 +6,7 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/jolestar/go-commons-pool/v2"
+	pool "github.com/jolestar/go-commons-pool/v2"
 
 	"github.com/jasonlabz/potato/internal/log"
 	zapx "github.com/jasonlabz/potato/log"
