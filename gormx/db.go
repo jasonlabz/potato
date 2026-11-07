@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
+	oracle "github.com/godoes/gorm-oracle"
 	dm "github.com/jasonlabz/gorm-dm-driver"
-	"github.com/jasonlabz/oracle"
 	"github.com/jasonlabz/sqlite"
 	"go.uber.org/zap"
 	"gorm.io/driver/mysql"

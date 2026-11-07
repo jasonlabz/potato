@@ -26,42 +26,5 @@ const (
 	DatabaseTypeDM        DatabaseType = "dm"
 )
 
-// DatabaseDsnMap 关系型数据库类型  username、password、address、port、dbname
-var DatabaseDsnMap = map[DatabaseType]string{
-	DatabaseTypeSQLite:    "%s",
-	DatabaseTypeDM:        "dm://%s:%s@%s:%d?schema=%s",
-	DatabaseTypeOracle:    "%s/%s@%s:%d/%s",
-	DatabaseTypeMySQL:     "%s:%s@tcp(%s:%d)/%s",                                  // args: [{"name":"charset","value":"utf8"},{"name":"parseTime","value":"True"},{"name":"loc","value":"Local"}...]
-	DatabaseTypePostgres:  "user=%s password=%s host=%s port=%d dbname=%s",        // args: [{"name":"sslmode","value":"disable"},{"name":"TimeZone","value":"Asia/Shanghai"}...]
-	DatabaseTypeSqlserver: "user id=%s;password=%s;server=%s;port=%d;database=%s", // args: [{"name":"encrypt","value":"disable"}...`]
-}
-
-// DatabaseDsnSepMap 关系型数据库类型DSN 参数拼接
-var DatabaseDsnSepMap = map[DatabaseType]string{
-	DatabaseTypeSQLite:    "&",
-	DatabaseTypeDM:        "&",
-	DatabaseTypeOracle:    "&",
-	DatabaseTypeMySQL:     "&",
-	DatabaseTypePostgres:  " ",
-	DatabaseTypeSqlserver: ";",
-}
-
-// DatabaseDsnPrefixMap 关系型数据库类型DSN 参数拼接
-var DatabaseDsnPrefixMap = map[DatabaseType]string{
-	DatabaseTypeSQLite:    "?",
-	DatabaseTypeDM:        "&", // DM 模板已带 ?schema=，追加参数用 &
-	DatabaseTypeOracle:    "?",
-	DatabaseTypeMySQL:     "?",
-	DatabaseTypePostgres:  " ",
-	DatabaseTypeSqlserver: ";",
-}
-
-// DatabaseDsnEqualSignMap 关系型数据库类型DSN 参数拼接
-// var DatabaseDsnEqualSignMap = map[DatabaseType]string{
-//	DatabaseTypeSQLite:    "%s=%s",
-//	DatabaseTypeDM:        "%s=%s",
-//	DatabaseTypeOracle:    "%s=%s",
-//	DatabaseTypeMySQL:     "%s=%s",
-//	DatabaseTypePostgres:  "%s=%s",
-//	DatabaseTypeSqlserver: "%s=%s",
-// }
+// DSN 的形状（模板）、各位置的转义规则、参数拼接方式都集中在 dsn.go 的 dsnDialects 里，
+// 新增数据库类型只需在 dsnDialects 里加一条，无需改动 genDSN。

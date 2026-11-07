@@ -1,9 +1,6 @@
 package gormx
 
 import (
-	"fmt"
-	"strings"
-
 	gormLogger "gorm.io/gorm/logger"
 )
 
@@ -63,47 +60,6 @@ func (c *Config) GetLogMode() gormLogger.LogLevel {
 		return gormLogger.Silent
 	}
 	return gormLogger.Info
-}
-
-func (c *Connection) genDSN() (dsn string) {
-	if c.DSN != "" {
-		return c.DSN
-	}
-	switch c.DBType {
-	case DatabaseTypeSQLite:
-		if c.DSN == "" {
-			dsn = "file::memory:?cache=shared"
-		}
-	default:
-		dbName := c.Database
-		dsnTemplate, ok := DatabaseDsnMap[c.DBType]
-		if !ok || c.Host == "" || c.Port == 0 {
-			return ""
-		}
-		dsn = fmt.Sprintf(dsnTemplate, c.Username, c.Password, c.Host, c.Port, dbName)
-		if c.DBType == DatabaseTypePostgres && c.Schema != "" {
-			// 值加单引号并转义，支持 "app, public" 这类带空格的写法
-			dsn += " search_path='" + strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(c.Schema) + "'"
-		}
-		if len(c.Args) > 0 {
-			sep, ok := DatabaseDsnSepMap[c.DBType]
-			if !ok {
-				return
-			}
-			prefix, ok := DatabaseDsnPrefixMap[c.DBType]
-			if !ok {
-				return
-			}
-			var args []string
-			for _, arg := range c.Args {
-				args = append(args, fmt.Sprintf("%s=%s", arg.Name, arg.Value))
-			}
-			dsn += prefix
-			dsn += strings.Join(args, sep)
-		}
-	}
-	c.DSN = dsn
-	return dsn
 }
 
 func (c *Config) extractDSN() (dsn string, replicas [2][]string) {
