@@ -6,7 +6,7 @@ import (
 )
 
 func TestError_Error(t *testing.T) {
-	err := ErrReadFile.WithErr(ErrDALOperation.WithErr(ErrFileExist.WithErr(ErrFileSizeLimit)))
+	err := ErrUndefined.WithErr(ErrUndefined.WithErr(ErrUndefined))
 	fmt.Println(err.Error())
 	fmt.Println(err.Cause())
 	fmt.Println(err.Unwrap())

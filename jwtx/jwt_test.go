@@ -1,6 +1,7 @@
 package jwtx
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -9,7 +10,7 @@ import (
 )
 
 func TestName(t *testing.T) {
-	jwtToken, err := GenerateJWTToken(&User{
+	jwtToken, err := GenerateJWTToken(context.Background(), &User{
 		ID:       "1024",
 		Name:     "lucas",
 		Audience: "web",
@@ -18,7 +19,7 @@ func TestName(t *testing.T) {
 		},
 	}, 10*time.Second)
 	if err != nil {
-		log.GetLogger().Fatal(err.Error())
+		log.GetLogger().Fatal(context.Background(), err.Error())
 	}
 	user, err := ParseJWTToken(jwtToken)
 	fmt.Println(user)
