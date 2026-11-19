@@ -1115,7 +1115,9 @@ func (r *RabbitMQOperator) consumeCore(ctx context.Context, param *ConsumeBody, 
 	}
 
 	// 设置 QoS
-	err = (*channelWrap).channel.Qos(param.FetchCount, 0, true)
+	// Quorum queues reject global QoS. Keep the default scoped to this
+	// consumer; callers that need channel-wide QoS can opt in explicitly.
+	err = (*channelWrap).channel.Qos(param.FetchCount, 0, param.GlobalQos)
 	if err != nil {
 		r.l.Error(ctx, "open qos error", "err", err.Error())
 		return

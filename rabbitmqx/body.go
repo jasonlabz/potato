@@ -662,6 +662,7 @@ type ConsumeBody struct {
 	QueueArgs    amqp.Table
 	FetchCount   int
 	XPriority    uint8
+	GlobalQos    bool
 }
 
 func (c *ConsumeBody) SetPrefetchCount(fetchCount int) *ConsumeBody {
@@ -764,6 +765,14 @@ func (c *ConsumeBody) SetQueueName(queueName string) *ConsumeBody {
 
 func (c *ConsumeBody) SetAckMode(autoAck bool) *ConsumeBody {
 	c.AutoAck = autoAck
+	return c
+}
+
+// SetGlobalQos controls whether the prefetch limit applies to the whole
+// channel. Quorum queues only support per-consumer QoS, so the default is
+// false.
+func (c *ConsumeBody) SetGlobalQos(global bool) *ConsumeBody {
+	c.GlobalQos = global
 	return c
 }
 
