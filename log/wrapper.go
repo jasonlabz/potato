@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"go.uber.org/zap"
 
@@ -15,21 +16,42 @@ type LoggerWrapper struct {
 	logger   *zap.Logger
 }
 
-var defaultLogger *LoggerWrapper
-var once sync.Once
+// badKey 与 slog 保持一致：参数不成对或 key 不是字符串时使用该字段名，
+// 让调用错误在日志里可见，而不是被静默丢弃。
+const badKey = "!BADKEY"
+
+var defaultLogger atomic.Pointer[LoggerWrapper]
+
+var initOnce sync.Once
 
 func GetLogger(opts ...zap.Option) *LoggerWrapper {
-	once.Do(func() {
-		defaultLogger = NewLogger()
-	})
-	if defaultLogger == nil {
+	l := defaultLogger.Load()
+	if l == nil {
+		initOnce.Do(func() {
+			// 允许初始化前通过 SetLogger 预先注入实例
+			if defaultLogger.Load() == nil {
+				defaultLogger.Store(NewLogger())
+			}
+		})
+		l = defaultLogger.Load()
+	}
+	if l == nil {
 		panic("init logger fail!")
 	}
 
 	if len(opts) > 0 {
-		return defaultLogger.WithOptions(opts...)
+		return l.WithOptions(opts...)
 	}
-	return defaultLogger
+	return l
+}
+
+// SetLogger 替换全局 logger，通常用于启动阶段把 NewLogger 的结果安装为全局实例，
+// 避免框架内部包在 GetLogger 首次调用时就固定成默认配置。传 nil 时忽略。
+func SetLogger(l *LoggerWrapper) {
+	if l == nil {
+		return
+	}
+	defaultLogger.Store(l)
 }
 
 func (l *LoggerWrapper) clone() *LoggerWrapper {
@@ -130,45 +152,53 @@ func (l *LoggerWrapper) Sync() {
 
 func (l *LoggerWrapper) prepareFields(ctx context.Context, fields []any) (field []zap.Field) {
 	field = zapField(ctx, l.logField...)
-	checkFields := l.checkFields(fields)
-	if len(checkFields) > 0 {
+	if checkFields := l.checkFields(fields); len(checkFields) > 0 {
 		field = append(field, checkFields...)
 	}
 	return
 }
 
+// checkFields 把可变参数规范化为 zap.Field，支持三种写法并可任意混用：
+//   - zap.Field：log.String/log.Any 等辅助函数返回的字段
+//   - (string, any)：键值对
+//   - error：以 error 字段输出
+//
+// 值不做字符串化，保留原始类型，避免数字/布尔在日志系统中退化为字符串。
+// key 不是字符串、或字符串后面没有配对值、以及错把 zap.Field 当作值时，
+// 记为 !BADKEY，让调用错误可见。
 func (l *LoggerWrapper) checkFields(fields []any) (checked []zap.Field) {
-	checked = make([]zap.Field, 0, len(fields)/2+1)
-
 	if len(fields) == 0 {
-		return
+		return nil
 	}
 
-	_, isZapField := fields[0].(zap.Field)
-	if isZapField {
-		for _, field := range fields {
-			if f, ok := field.(zap.Field); ok {
-				checked = append(checked, f)
+	checked = make([]zap.Field, 0, len(fields))
+	for i := 0; i < len(fields); i++ {
+		switch v := fields[i].(type) {
+		case zap.Field:
+			checked = append(checked, v)
+		case error:
+			if v != nil {
+				checked = append(checked, zap.Error(v))
 			}
+		case string:
+			if i+1 >= len(fields) {
+				checked = append(checked, zap.String(badKey, v))
+				continue
+			}
+			val := fields[i+1]
+			i++
+			switch tv := val.(type) {
+			case zap.Field:
+				// 键被忽略，字段本身仍然有效，避免把它序列化成 Field 结构体
+				checked = append(checked, tv)
+			case error:
+				checked = append(checked, zap.NamedError(v, tv))
+			default:
+				checked = append(checked, zap.Any(v, val))
+			}
+		default:
+			checked = append(checked, zap.Any(badKey, v))
 		}
-		return
-	}
-
-	if len(fields) == 1 {
-		if err, ok := fields[0].(error); ok && err != nil {
-			checked = append(checked, zap.Error(err))
-			return
-		}
-		checked = append(checked, zap.Any("default", utils.StringValue(fields[0])))
-		return
-	}
-
-	for i := 0; i+1 < len(fields); i += 2 {
-		checked = append(checked, zap.Any(utils.StringValue(fields[i]), utils.StringValue(fields[i+1])))
-	}
-	// 奇数个字段时，最后一个字段作为孤立字段记录
-	if len(fields)%2 != 0 {
-		checked = append(checked, zap.Any("log_extra", utils.StringValue(fields[len(fields)-1])))
 	}
 
 	return
@@ -221,6 +251,9 @@ func Float32(key string, val float32) zap.Field {
 }
 
 func zapField(ctx context.Context, contextKey ...string) (fields []zap.Field) {
+	if ctx == nil || len(contextKey) == 0 {
+		return nil
+	}
 	fields = make([]zap.Field, 0, len(contextKey))
 	for _, key := range contextKey {
 		value := utils.StringValue(ctx.Value(key))

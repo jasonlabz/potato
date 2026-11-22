@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -55,7 +56,7 @@ type Options struct {
 	maxAge     int      // 日志文件保留天数
 	maxBackups int      // 最大保留日志文件数量
 	compress   bool     // Compress确定是否应该使用gzip压缩已旋转的日志文件。默认值是不执行压缩。
-	logType    string   // 日志类型 zap|slog
+	logType    string   // 日志类型，目前仅支持 zap
 }
 
 type Option func(o *Options)
@@ -146,6 +147,11 @@ func NewLogger(opts ...Option) *LoggerWrapper {
 	// 加载配置
 	loadConf(options)
 
+	// 目前只实现 zap 后端，配置成其他类型时明确告警，避免误以为已经切换
+	if !strings.EqualFold(options.logType, "zap") {
+		log.Printf("log: unsupported logger type %q, fallback to zap", options.logType)
+	}
+
 	// 默认使用 zap
 	return newZapLogger(options)
 }
@@ -171,7 +177,8 @@ func newZapLogger(options *Options) *LoggerWrapper {
 
 	// 日志级别
 	highPriority := zap.LevelEnablerFunc(func(lev zapcore.Level) bool {
-		return lev >= zap.WarnLevel
+		// 高级别文件只收 ERROR 及以上，避免 WARN 在主文件和 .wf 里各写一份
+		return lev >= zap.ErrorLevel
 	})
 	lowPriority := zap.LevelEnablerFunc(func(lev zapcore.Level) bool {
 		return lev >= logLevel
@@ -207,19 +214,13 @@ func newZapLogger(options *Options) *LoggerWrapper {
 	}
 
 	// 生成logger
-	zapLogger := zap.New(zapcore.NewTee(coreArr...), zap.AddCaller(), zap.AddCallerSkip(1))
+	zapLogger := zap.New(zapcore.NewTee(coreArr...),
+		zap.AddCaller(), zap.AddCallerSkip(1), zap.AddStacktrace(zapcore.ErrorLevel))
 
 	return &LoggerWrapper{
 		logger:   zapLogger,
 		logField: options.keyList,
 	}
-}
-
-// 初始化 slog logger (预留实现)
-func newSlogLogger(options *Options) *LoggerWrapper {
-	// TODO: 实现 slog 日志初始化
-	log.Print("slog logger is not implemented yet, using zap instead")
-	return newZapLogger(options)
 }
 
 // core 三个参数之  Encoder 获取编码器
@@ -269,10 +270,10 @@ func loadConf(options *Options) {
 		writeFile:  false,
 		logFormat:  "console",
 		configPath: "./conf/log/service.yaml",
-		keyList:    []string{consts.ContextLOGID, consts.ContextTraceID, consts.ContextUserID, consts.ContextClientAddr},
+		keyList:    []string{consts.ContextTraceID, consts.ContextUserID, consts.ContextClientAddr},
 		logLevel:   "info",
 		basePath:   "./log",
-		fileName:   "app.log",
+		fileName:   "service.log",
 		maxSize:    15,
 		maxAge:     7,
 		maxBackups: 30,
